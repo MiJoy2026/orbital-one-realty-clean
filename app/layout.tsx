@@ -21,6 +21,7 @@ export default function RootLayout({
 
           <div className="flex flex-wrap gap-4 text-sm font-bold uppercase tracking-wide">
             <a href="/">Home</a>
+            <a href="/explore">Explore</a>
             <a href="/pricing">Pricing</a>
             <a href="/faq">FAQ</a>
             <a href="/hoa">HOA</a>
