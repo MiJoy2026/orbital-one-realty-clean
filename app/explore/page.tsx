@@ -1,11 +1,4 @@
-const states = [
-  "Armstrong",
-  "Aldrin",
-  "Collins",
-  "Tranquility",
-  "Copernicus",
-  "Tycho",
-];
+import { lunarStates, sampleProperties } from "@/lib/moon-data";
 
 export default function ExplorePage() {
   return (
@@ -16,101 +9,118 @@ export default function ExplorePage() {
         </h1>
 
         <p className="mt-6 text-center text-xl text-gray-300">
-          Browse available novelty lunar properties throughout Orbital One
-          Realty's 57 lunar states.
+          Browse available novelty lunar properties across 57 lunar states,
+          171 cities, and 1,140 towns.
         </p>
 
-        <div className="mt-12 grid gap-6 md:grid-cols-3">
-          <div className="rounded-3xl border border-yellow-400 p-8">
-            <h2 className="text-3xl font-black text-yellow-400">
-              Rural Acreage
-            </h2>
-
-            <p className="mt-4 text-4xl font-black">$24.95</p>
-
-            <p className="mt-4 text-gray-300">
-              Choose novelty acreage in undeveloped lunar territory.
+        <section className="mt-12 grid gap-6 md:grid-cols-3">
+          <div className="rounded-3xl border border-yellow-400 p-6 text-center">
+            <p className="text-5xl font-black text-yellow-400">
+              {lunarStates.length}
             </p>
-
-            <button className="mt-8 rounded-xl bg-yellow-400 px-6 py-3 font-bold text-black">
-              Browse Rural Properties
-            </button>
+            <p className="mt-2 uppercase text-gray-300">Lunar States</p>
           </div>
 
-          <div className="rounded-3xl border border-yellow-400 p-8">
-            <h2 className="text-3xl font-black text-yellow-400">
-              Town Blocks
-            </h2>
-
-            <p className="mt-4 text-4xl font-black">$39.95</p>
-
-            <p className="mt-4 text-gray-300">
-              Located in one of 1,140 lunar towns.
+          <div className="rounded-3xl border border-yellow-400 p-6 text-center">
+            <p className="text-5xl font-black text-yellow-400">
+              {lunarStates.length * 3}
             </p>
-
-            <button className="mt-8 rounded-xl bg-yellow-400 px-6 py-3 font-bold text-black">
-              Browse Towns
-            </button>
+            <p className="mt-2 uppercase text-gray-300">Cities</p>
           </div>
 
-          <div className="rounded-3xl border border-yellow-400 p-8">
-            <h2 className="text-3xl font-black text-yellow-400">
-              City Blocks
-            </h2>
-
-            <p className="mt-4 text-4xl font-black">$54.95</p>
-
-            <p className="mt-4 text-gray-300">
-              Premium locations in one of 171 lunar cities.
+          <div className="rounded-3xl border border-yellow-400 p-6 text-center">
+            <p className="text-5xl font-black text-yellow-400">
+              {lunarStates.length * 20}
             </p>
-
-            <button className="mt-8 rounded-xl bg-yellow-400 px-6 py-3 font-bold text-black">
-              Browse Cities
-            </button>
-          </div>
-        </div>
-
-        <section className="mt-20">
-          <h2 className="text-4xl font-black uppercase">
-            Featured Lunar States
-          </h2>
-
-          <div className="mt-8 grid gap-6 md:grid-cols-3">
-            {states.map((state) => (
-              <div
-                key={state}
-                className="rounded-2xl border border-white/20 p-6"
-              >
-                <h3 className="text-2xl font-bold text-yellow-400">
-                  {state}
-                </h3>
-
-                <p className="mt-3 text-gray-300">
-                  3 Cities • 20 Towns • Rural Acreage Available
-                </p>
-
-                <div className="mt-4">
-                  <span className="rounded-full bg-green-600 px-3 py-1 text-sm font-bold">
-                    Properties Available
-                  </span>
-                </div>
-              </div>
-            ))}
+            <p className="mt-2 uppercase text-gray-300">Towns</p>
           </div>
         </section>
 
-        <section className="mt-20 rounded-3xl border border-white/20 p-8">
-          <h2 className="text-3xl font-black">
-            Coming Soon
+        <section className="mt-16">
+          <h2 className="text-4xl font-black uppercase">
+            Property Inventory Preview
           </h2>
 
-          <ul className="mt-6 space-y-3 text-gray-300">
-            <li>✓ Interactive Moon Map</li>
-            <li>✓ Available Property Search</li>
-            <li>✓ Sold Property Tracking</li>
-            <li>✓ State, City, and Town Selection</li>
-            <li>✓ Instant Property Reservation</li>
-          </ul>
+          <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+            {sampleProperties.map((property) => {
+              const isSold = property.status === "Sold";
+
+              return (
+                <div
+                  key={property.id}
+                  className={`rounded-3xl border p-6 ${
+                    isSold
+                      ? "border-red-500 bg-red-950/40 opacity-75"
+                      : "border-green-500 bg-green-950/30"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-4">
+                    <h3 className="text-2xl font-black">
+                      {property.id}
+                    </h3>
+
+                    <span
+                      className={`rounded-full px-3 py-1 text-sm font-bold ${
+                        isSold
+                          ? "bg-red-500 text-white"
+                          : "bg-green-500 text-black"
+                      }`}
+                    >
+                      {property.status}
+                    </span>
+                  </div>
+
+                  <p className="mt-4 text-yellow-400">
+                    {property.type}
+                  </p>
+
+                  <p className="mt-2 text-gray-300">
+                    {property.state}
+                  </p>
+
+                  {property.city && (
+                    <p className="text-gray-300">
+                      City: {property.city}
+                    </p>
+                  )}
+
+                  {property.town && (
+                    <p className="text-gray-300">
+                      Town: {property.town}
+                    </p>
+                  )}
+
+                  <p className="mt-4 text-xl font-bold">
+                    {property.size}
+                  </p>
+
+                  <p className="mt-2 text-3xl font-black text-yellow-400">
+                    ${property.price.toFixed(2)}
+                  </p>
+
+                  <div className="mt-5">
+                    <p className="font-bold">Nearby Attractions:</p>
+                    <ul className="mt-2 space-y-1 text-sm text-gray-300">
+                      {property.nearbyAttractions.map((attraction) => (
+                        <li key={attraction}>• {attraction}</li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  <button
+                    disabled={isSold}
+                    className={`mt-6 w-full rounded-xl px-5 py-3 font-black ${
+                      isSold
+                        ? "cursor-not-allowed bg-gray-700 text-gray-400"
+                        : "bg-yellow-400 text-black"
+                    }`}
+                  >
+                    {isSold ? "Sold / Unavailable" : "Select Property"}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         </section>
       </div>
     </main>
