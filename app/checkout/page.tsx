@@ -1,5 +1,5 @@
 import { sampleProperties } from "../../lib/moon-data";
-
+import StripeCheckoutButton from "../../components/StripeCheckoutButton";
 export default async function CheckoutPage({
   searchParams,
 }: {
@@ -78,12 +78,16 @@ export default async function CheckoutPage({
               </div>
             </div>
 
-            <button
-              disabled={!property}
-              className="mt-8 w-full rounded-xl bg-yellow-400 px-6 py-4 font-black text-black disabled:bg-gray-700 disabled:text-gray-400"
-            >
-              Continue to Payment
-            </button>
+            {property ? (
+  <StripeCheckoutButton propertyId={property.id} />
+) : (
+  <button
+    disabled
+    className="mt-8 w-full rounded-xl bg-gray-700 px-6 py-4 font-black text-gray-400"
+  >
+    Continue to Payment
+  </button>
+)}
           </aside>
         </div>
       </div>
