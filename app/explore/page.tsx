@@ -98,25 +98,34 @@ export default function ExplorePage() {
                     ${property.price.toFixed(2)}
                   </p>
 
-                  <div className="mt-5">
-                    <p className="font-bold">Nearby Attractions:</p>
-                    <ul className="mt-2 space-y-1 text-sm text-gray-300">
-                      {property.nearbyAttractions.map((attraction) => (
-                        <li key={attraction}>• {attraction}</li>
-                      ))}
-                    </ul>
-                  </div>
+                    <div className="mt-5">
+                        <p className="font-bold">Nearby Attractions:</p>
+                        <ul className="mt-2 space-y-1 text-sm text-gray-300">
+                        {property.nearbyAttractions.map((attraction) => (
+                            <li key={attraction}>• {attraction}</li>
+                        ))}
+                        </ul>
+                    </div>
 
-                  <button
-                    disabled={isSold}
-                    className={`mt-6 w-full rounded-xl px-5 py-3 font-black ${
-                      isSold
-                        ? "cursor-not-allowed bg-gray-700 text-gray-400"
-                        : "bg-yellow-400 text-black"
-                    }`}
-                  >
-                    {isSold ? "Sold / Unavailable" : "Select Property"}
-                  </button>
+                    <div className="mt-6 space-y-3">
+                    <a
+                        href={`/explore/${property.id}`}
+                        className="block w-full rounded-xl bg-yellow-400 px-5 py-3 text-center font-black text-black"
+                    >
+                        View Details
+                    </a>
+
+                    <button
+                        disabled={isSold}
+                        className={`w-full rounded-xl px-5 py-3 font-black ${
+                        isSold
+                            ? "cursor-not-allowed bg-gray-700 text-gray-400"
+                            : "bg-green-500 text-black"
+                        }`}
+                    >
+                        {isSold ? "Sold / Unavailable" : "Add To Cart"}
+                    </button>
+                </div>
                 </div>
               );
             })}
