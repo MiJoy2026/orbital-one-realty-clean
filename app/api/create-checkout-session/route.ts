@@ -7,7 +7,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 export async function POST(request: Request) {
   const body = await request.json();
   const propertyId = body.propertyId;
-
+  const deedName = body.deedName || "Deed Recipient";
   const property = sampleProperties.find((item) => item.id === propertyId);
 
   if (!property) {
@@ -58,10 +58,11 @@ export async function POST(request: Request) {
     success_url: `${appUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${appUrl}/cart?propertyId=${property.id}`,
     metadata: {
-      propertyId: property.id,
-      propertyType: property.type,
-      state: property.state,
-    },
+  propertyId: property.id,
+  propertyType: property.type,
+  state: property.state,
+  deedName,
+},
   });
 
   return NextResponse.json({ url: session.url });

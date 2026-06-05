@@ -16,7 +16,8 @@ function centerText(page: any, text: string, y: number, size: number, font: any,
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const propertyId = searchParams.get("propertyId");
-
+  const deedName =
+  searchParams.get("deedName") || "Deed Recipient";
   const property = sampleProperties.find((item) => item.id === propertyId);
 
   if (!property) {
@@ -69,24 +70,37 @@ export async function GET(request: Request) {
 
   const detailX = 150;
   const valueX = 300;
+  page.drawText("Certificate Holder:", {
+  x: detailX,
+  y: 485,
+  size: 14,
+  font: titleFont,
+});
 
-  page.drawText("Property ID:", { x: detailX, y: 465, size: 14, font: titleFont });
-  page.drawText(property.id, { x: valueX, y: 465, size: 14, font: bodyFont });
+page.drawText(deedName, {
+  x: valueX,
+  y: 485,
+  size: 18,
+  font: titleFont,
+  color: gold,
+});
+  page.drawText("Property ID:", { x: detailX, y: 430, size: 14, font: titleFont });
+  page.drawText(property.id, { x: valueX, y: 430, size: 14, font: bodyFont });
 
-  page.drawText("Property Type:", { x: detailX, y: 435, size: 14, font: titleFont });
-  page.drawText(property.type, { x: valueX, y: 435, size: 14, font: bodyFont });
+  page.drawText("Property Type:", { x: detailX, y: 400, size: 14, font: titleFont });
+  page.drawText(property.type, { x: valueX, y: 400, size: 14, font: bodyFont });
 
-  page.drawText("Lunar State:", { x: detailX, y: 405, size: 14, font: titleFont });
-  page.drawText(property.state, { x: valueX, y: 405, size: 14, font: bodyFont });
+  page.drawText("Lunar State:", { x: detailX, y: 370, size: 14, font: titleFont });
+  page.drawText(property.state, { x: valueX, y: 370, size: 14, font: bodyFont });
 
-  page.drawText("Property Size:", { x: detailX, y: 375, size: 14, font: titleFont });
-  page.drawText(property.size, { x: valueX, y: 375, size: 14, font: bodyFont });
+  page.drawText("Property Size:", { x: detailX, y: 340, size: 14, font: titleFont });
+  page.drawText(property.size, { x: valueX, y: 340, size: 14, font: bodyFont });
 
-  page.drawText("Issue Date:", { x: detailX, y: 345, size: 14, font: titleFont });
-  page.drawText(new Date().toLocaleDateString(), { x: valueX, y: 345, size: 14, font: bodyFont });
+  page.drawText("Issue Date:", { x: detailX, y: 310, size: 14, font: titleFont });
+  page.drawText(new Date().toLocaleDateString(), { x: valueX, y: 310, size: 14, font: bodyFont });
 
 page.drawEllipse({
-  x: 306,
+  x: 470,
   y: 265,
   xScale: 70,
   yScale: 70,
@@ -95,7 +109,7 @@ page.drawEllipse({
 });
 
 page.drawEllipse({
-  x: 306,
+  x: 470,
   y: 265,
   xScale: 58,
   yScale: 58,
@@ -104,7 +118,7 @@ page.drawEllipse({
 });
 
 page.drawEllipse({
-  x: 306,
+  x: 470,
   y: 265,
   xScale: 38,
   yScale: 38,
@@ -113,16 +127,43 @@ page.drawEllipse({
 });
 
 page.drawEllipse({
-  x: 306,
+  x: 470,
   y: 307,
   xScale: 10,
   yScale: 10,
   color: gold,
 });
-centerText(page, "ORBITAL ONE", 278, 11, titleFont, gold);
-centerText(page, "REALTY", 262, 10, titleFont, gold);
-centerText(page, "OFFICIAL", 246, 8, bodyFont, gold);
-centerText(page, "NOVELTY SEAL", 235, 8, bodyFont, gold);
+page.drawText("ORBITAL ONE", {
+  x: 430,
+  y: 278,
+  size: 11,
+  font: titleFont,
+  color: gold,
+});
+
+page.drawText("REALTY", {
+  x: 450,
+  y: 262,
+  size: 10,
+  font: titleFont,
+  color: gold,
+});
+
+page.drawText("OFFICIAL", {
+  x: 450,
+  y: 246,
+  size: 8,
+  font: bodyFont,
+  color: gold,
+});
+
+page.drawText("SEAL", {
+  x: 460,
+  y: 235,
+  size: 8,
+  font: bodyFont,
+  color: gold,
+});
 
   page.drawLine({
     start: { x: 95, y: 205 },
@@ -138,7 +179,13 @@ centerText(page, "NOVELTY SEAL", 235, 8, bodyFont, gold);
     color: dark,
   });
 
-  centerText(page, "Authorized Signature", 185, 10, bodyFont, dark);
+  page.drawText("Authorized Signature", {
+  x: 135,
+  y: 185,
+  size: 10,
+  font: bodyFont,
+  color: dark,
+});
   page.drawText("Certificate Holder", { x: 395, y: 185, size: 10, font: bodyFont });
 
   centerText(page, "It's fun. It's unique. It's out of this world!", 145, 13, italicFont, gold);
