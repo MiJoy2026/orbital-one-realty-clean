@@ -28,9 +28,10 @@ export default function StatesPage() {
             ).length;
 
             return (
-              <div
-                key={state.id}
-                className="rounded-3xl border border-white/20 bg-white/5 p-6"
+              <a
+                 key={state.id}
+                 href={`/states/${encodeURIComponent(state.name)}`}
+                 className="block rounded-3xl border border-white/20 bg-white/5 p-6 hover:border-yellow-400"
               >
                 <p className="text-sm font-bold uppercase tracking-[0.3em] text-yellow-400">
                   State {state.id}
@@ -62,7 +63,7 @@ export default function StatesPage() {
                 >
                   View Properties
                 </a>
-              </div>
+              </a>
             );
           })}
         </div>

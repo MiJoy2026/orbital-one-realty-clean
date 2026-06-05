@@ -28,6 +28,7 @@ export default function RootLayout({
             <a href="/hoa">HOA</a>
             <a href="/passports">Passports</a>
             <a href="/contact">Contact</a>
+            <a href="/cart">Cart</a>
           </div>
         </nav>
 
