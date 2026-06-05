@@ -54,16 +54,21 @@ export default async function PropertyDetailPage({
           ))}
         </ul>
 
-        <button
-          disabled={isSold}
-          className={`mt-8 rounded-xl px-6 py-3 font-black ${
-            isSold
-              ? "cursor-not-allowed bg-gray-700 text-gray-400"
-              : "bg-yellow-400 text-black"
-          }`}
-        >
-          {isSold ? "Sold / Unavailable" : "Add to Cart"}
-        </button>
+        {isSold ? (
+  <button
+    disabled
+    className="mt-8 rounded-xl bg-gray-700 px-6 py-3 font-black text-gray-400"
+  >
+    Sold / Unavailable
+  </button>
+) : (
+  <a
+    href={`/cart?propertyId=${property.id}`}
+    className="mt-8 inline-block rounded-xl bg-yellow-400 px-6 py-3 font-black text-black"
+  >
+    Add to Cart
+  </a>
+)}
 
         <br />
 
