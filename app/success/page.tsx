@@ -12,6 +12,7 @@ export default async function SuccessPage({
 
   let propertyId = "R-001";
   let deedName = "Deed Recipient";
+  let certificateNumber = "OOR-2026-000000";
 
   if (params.session_id) {
     const session = await stripe.checkout.sessions.retrieve(params.session_id);
@@ -21,7 +22,12 @@ export default async function SuccessPage({
 
     const propertyType = session.metadata?.propertyType || "Unknown";
     const lunarState = session.metadata?.state || "Unknown";
-    const certificateNumber = `OOR-2026-${propertyId}-${session.id.slice(-6)}`;
+    const orderCount = await prisma.order.count();
+
+    certificateNumber = `OOR-2026-${String(orderCount + 1).padStart(
+  6,
+  "0"
+)}`;
     const amountPaid = session.amount_total ? session.amount_total / 100 : 0;
     const paymentStatus = session.payment_status || "unknown";
     const email = session.customer_details?.email || null;
@@ -91,8 +97,8 @@ export default async function SuccessPage({
 
       <a
         href={`/api/generate-deed?propertyId=${propertyId}&deedName=${encodeURIComponent(
-          deedName
-        )}`}
+         deedName
+        )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
         className="mt-10 inline-block rounded-xl bg-yellow-400 px-8 py-4 font-black text-black"
       >
         Download Personalized Novelty Deed PDF

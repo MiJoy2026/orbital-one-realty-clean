@@ -18,8 +18,9 @@ export async function GET(request: Request) {
   const propertyId = searchParams.get("propertyId");
   const deedName =
   searchParams.get("deedName") || "Deed Recipient";
+  const certificateNumber =
+  searchParams.get("certificateNumber") || `OOR-2026-${propertyId || "UNKNOWN"}`;
   const property = sampleProperties.find((item) => item.id === propertyId);
-  const certificateNumber = `OOR-2026-${propertyId || "UNKNOWN"}`;
   if (!property) {
     return NextResponse.json({ error: "Property not found" }, { status: 404 });
   }
