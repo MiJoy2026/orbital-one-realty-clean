@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 import { prisma } from "../../lib/prisma";
-
+import { sendOrderEmail } from "../../lib/send-order-email";
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
 export default async function SuccessPage({
@@ -49,6 +49,16 @@ export default async function SuccessPage({
         email,
         premiumGoldSeal: true,
       },
+    });
+
+    await sendOrderEmail({
+      to: email || "",
+      deedName,
+      propertyId,
+      propertyType,
+      lunarState,
+      certificateNumber,
+      amountPaid,
     });
   }
 
