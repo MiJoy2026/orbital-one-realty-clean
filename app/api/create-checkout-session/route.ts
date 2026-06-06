@@ -38,9 +38,9 @@ export async function POST(request: Request) {
         quantity: 1,
         price_data: {
           currency: "usd",
-          unit_amount: 199,
+          unit_amount: 499,
           product_data: {
-            name: "Additional Name on Novelty Deed",
+            name: "Premium Gold Seal Upgrade",
           },
         },
       },
