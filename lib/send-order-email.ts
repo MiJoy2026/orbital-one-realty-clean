@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
-
+const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 type SendOrderEmailParams = {
   to: string;
   deedName: string;
@@ -61,9 +61,24 @@ export async function sendOrderEmail({
           <li>2026 Founding Member status</li>
         </ul>
 
-        <p>
-          You can download your documents from the success page after checkout.
-        </p>
+        <h2>Download Your Documents</h2>
+<ul>
+  <li><a href="${appUrl}/api/generate-deed?propertyId=${propertyId}&deedName=${encodeURIComponent(
+    deedName
+  )}&certificateNumber=${encodeURIComponent(certificateNumber)}">Download Your Lunar Property Deed</a></li>
+
+  <li><a href="${appUrl}/api/generate-welcome-letter?propertyId=${propertyId}&deedName=${encodeURIComponent(
+    deedName
+  )}&certificateNumber=${encodeURIComponent(certificateNumber)}">Download Your Welcome Letter</a></li>
+
+  <li><a href="${appUrl}/api/generate-passport?propertyId=${propertyId}&deedName=${encodeURIComponent(
+    deedName
+  )}&certificateNumber=${encodeURIComponent(certificateNumber)}">Download Your Lunar Passport</a></li>
+
+  <li><a href="${appUrl}/api/generate-hoa-certificate?propertyId=${propertyId}&deedName=${encodeURIComponent(
+    deedName
+  )}&certificateNumber=${encodeURIComponent(certificateNumber)}">Download Your HOA Membership Certificate</a></li>
+</ul>
 
         <p style="font-size: 12px; color: #555;">
           Orbital One Realty products are novelty and commemorative items only.
