@@ -1,4 +1,5 @@
 import Stripe from "stripe";
+import { prisma } from "../../lib/prisma";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
@@ -17,52 +18,76 @@ export default async function SuccessPage({
 
     propertyId = session.metadata?.propertyId || propertyId;
     deedName = session.metadata?.deedName || deedName;
+
+    const propertyType = session.metadata?.propertyType || "Unknown";
+    const lunarState = session.metadata?.state || "Unknown";
+    const certificateNumber = `OOR-2026-${propertyId}-${session.id.slice(-6)}`;
+    const amountPaid = session.amount_total ? session.amount_total / 100 : 0;
+    const paymentStatus = session.payment_status || "unknown";
+    const email = session.customer_details?.email || null;
+
+    await prisma.order.upsert({
+      where: {
+        stripeSessionId: session.id,
+      },
+      update: {},
+      create: {
+        stripeSessionId: session.id,
+        propertyId,
+        propertyType,
+        lunarState,
+        deedName,
+        certificateNumber,
+        amountPaid,
+        paymentStatus,
+        email,
+        premiumGoldSeal: true,
+      },
+    });
   }
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-center text-white">
-    <h1 className="text-5xl font-black uppercase text-yellow-400">
-  Welcome to Orbital One Realty
-</h1>
+      <h1 className="text-5xl font-black uppercase text-yellow-400">
+        Welcome to Orbital One Realty
+      </h1>
 
-<p className="mt-6 text-2xl text-white">
-  Congratulations,
-  <span className="ml-2 text-yellow-400 font-black">
-    {deedName}
-  </span>
-</p>
+      <p className="mt-6 text-2xl text-white">
+        Congratulations,
+        <span className="ml-2 font-black text-yellow-400">{deedName}</span>
+      </p>
 
-<p className="mx-auto mt-6 max-w-3xl text-lg text-gray-300">
-  Your purchase has been successfully recorded and your Lunar Welcome Package
-  is ready for download.
-</p>
-     <div className="mx-auto mt-10 max-w-3xl rounded-2xl border border-yellow-400/30 bg-white/5 p-8 text-left">
-  <h2 className="text-2xl font-black text-yellow-400">
-    Your Welcome Package Includes
-  </h2>
+      <p className="mx-auto mt-6 max-w-3xl text-lg text-gray-300">
+        Your purchase has been successfully recorded and your Lunar Welcome
+        Package is ready for download.
+      </p>
 
-  <div className="mt-6 space-y-3 text-lg">
-    <p>📜 Personalized Lunar Property Deed</p>
-    <p>✉️ Welcome Letter</p>
-    <p>🛂 Lunar Passport</p>
-    <p>🏛️ HOA Membership Certificate</p>
-  </div>
-</div>
+      <div className="mx-auto mt-10 max-w-3xl rounded-2xl border border-yellow-400/30 bg-white/5 p-8 text-left">
+        <h2 className="text-2xl font-black text-yellow-400">
+          Your Welcome Package Includes
+        </h2>
 
-<div className="mx-auto mt-8 max-w-3xl rounded-2xl border border-yellow-400/30 bg-white/5 p-8 text-left">
-  <h2 className="text-2xl font-black text-yellow-400">
-    Included HOA Member Benefits
-  </h2>
+        <div className="mt-6 space-y-3 text-lg">
+          <p>📜 Personalized Lunar Property Deed</p>
+          <p>✉️ Welcome Letter</p>
+          <p>🛂 Lunar Passport</p>
+          <p>🏛️ HOA Membership Certificate</p>
+        </div>
+      </div>
 
-  <div className="mt-6 space-y-3">
-    <p>🌕 Monthly Lunar Newsletters</p>
-    <p>🚀 Early Access to Future Orbital One Features</p>
-    <p>🏠 Future Virtual Home Building Opportunities</p>
-    <p>⭐ Member Discounts and Promotions</p>
-    <p>🏛️ 2026 Founding Member Status</p>
-  </div>
-</div>
+      <div className="mx-auto mt-8 max-w-3xl rounded-2xl border border-yellow-400/30 bg-white/5 p-8 text-left">
+        <h2 className="text-2xl font-black text-yellow-400">
+          Included HOA Member Benefits
+        </h2>
 
+        <div className="mt-6 space-y-3">
+          <p>🌕 Monthly Lunar Newsletters</p>
+          <p>🚀 Early Access to Future Orbital One Features</p>
+          <p>🏠 Future Virtual Home Building Opportunities</p>
+          <p>⭐ Member Discounts and Promotions</p>
+          <p>🏛️ 2026 Founding Member Status</p>
+        </div>
+      </div>
 
       <a
         href={`/api/generate-deed?propertyId=${propertyId}&deedName=${encodeURIComponent(
@@ -76,38 +101,42 @@ export default async function SuccessPage({
       <br />
       <br />
 
-<a
-  href={`/api/generate-welcome-letter?propertyId=${propertyId}&deedName=${encodeURIComponent(
-    deedName
-  )}`}
-  className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
->     
-  Download Welcome Letter PDF
-</a>
-<br />
-<br />
+      <a
+        href={`/api/generate-welcome-letter?propertyId=${propertyId}&deedName=${encodeURIComponent(
+          deedName
+        )}`}
+        className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
+      >
+        Download Welcome Letter PDF
+      </a>
 
-<a
-  href={`/api/generate-passport?propertyId=${propertyId}&deedName=${encodeURIComponent(
-    deedName
-  )}`}
-  className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
->
-  Download Lunar Passport PDF
-</a>
       <br />
-<br />
+      <br />
 
-<a
-  href={`/api/generate-hoa-certificate?propertyId=${propertyId}&deedName=${encodeURIComponent(
-    deedName
-  )}`}
-  className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
->
-  Download HOA Membership Certificate
-</a>
+      <a
+        href={`/api/generate-passport?propertyId=${propertyId}&deedName=${encodeURIComponent(
+          deedName
+        )}`}
+        className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
+      >
+        Download Lunar Passport PDF
+      </a>
+
       <br />
       <br />
+
+      <a
+        href={`/api/generate-hoa-certificate?propertyId=${propertyId}&deedName=${encodeURIComponent(
+          deedName
+        )}`}
+        className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
+      >
+        Download HOA Membership Certificate
+      </a>
+
+      <br />
+      <br />
+
       <a
         href="/explore"
         className="mt-6 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"

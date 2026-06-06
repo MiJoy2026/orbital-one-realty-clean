@@ -1,0 +1,29 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Order {
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+
+  stripeSessionId   String   @unique
+  propertyId        String
+  propertyType      String
+  lunarState        String
+
+  deedName          String
+
+  certificateNumber String   @unique
+
+  amountPaid        Float
+
+  paymentStatus     String
+
+  email             String?
+
+  premiumGoldSeal   Boolean  @default(false)
+}

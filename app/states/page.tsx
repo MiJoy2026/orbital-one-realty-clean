@@ -57,12 +57,9 @@ export default function StatesPage() {
                   </span>
                 </div>
 
-                <a
-                  href="/explore"
-                  className="mt-6 block rounded-xl bg-yellow-400 px-5 py-3 text-center font-black text-black"
-                >
-                  View Properties
-                </a>
+                <div className="mt-6 rounded-xl bg-yellow-400 px-5 py-3 text-center font-black text-black">
+                  View State
+                </div>
               </a>
             );
           })}
