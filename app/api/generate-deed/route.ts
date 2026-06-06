@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   const deedName =
   searchParams.get("deedName") || "Deed Recipient";
   const property = sampleProperties.find((item) => item.id === propertyId);
-
+  const certificateNumber = `OOR-2026-${propertyId || "UNKNOWN"}`;
   if (!property) {
     return NextResponse.json({ error: "Property not found" }, { status: 404 });
   }
@@ -65,11 +65,24 @@ export async function GET(request: Request) {
     color: gold,
   });
 
-  centerText(page, "This certifies that the following lunar property", 535, 14, bodyFont);
-  centerText(page, "has been recorded in the Orbital One Realty catalog:", 515, 14, bodyFont);
+  centerText(page, "This certifies that the following lunar property", 555, 14, bodyFont);
+  centerText(page, "has been recorded in the Orbital One Realty catalog:", 535, 14, bodyFont);
 
   const detailX = 150;
   const valueX = 300;
+  page.drawText("Certificate No:", {
+  x: detailX,
+  y: 515,
+  size: 14,
+  font: titleFont,
+});
+
+page.drawText(certificateNumber, {
+  x: valueX,
+  y: 515,
+  size: 14,
+  font: bodyFont,
+});
   page.drawText("Certificate Holder:", {
   x: detailX,
   y: 485,
