@@ -24,7 +24,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const propertyId = searchParams.get("propertyId");
   const deedName = searchParams.get("deedName") || "Orbital One Explorer";
-
+  const certificateNumber =
+  searchParams.get("certificateNumber") || `OOR-2026-${propertyId || "UNKNOWN"}`;
   const property = sampleProperties.find((item) => item.id === propertyId);
 
   if (!property) {
@@ -67,7 +68,13 @@ export async function GET(request: Request) {
     font: bodyFont,
     color: dark,
   });
-
+  page.drawText(`Certificate Number: ${certificateNumber}`, {
+  x: 80,
+  y: 565,
+  size: 12,
+  font: titleFont,
+  color: gold,
+});
   const paragraphs = [
     "Congratulations and welcome to Orbital One Realty. Your novelty lunar property package has been prepared as a fun, memorable, and out-of-this-world keepsake.",
     `Your selected property is ${property.id}, a ${property.size} ${property.type} located in the lunar state of ${property.state}.`,
@@ -76,7 +83,7 @@ export async function GET(request: Request) {
     "Thank you for joining the Orbital One community. It's fun. It's unique. It's out of this world!",
   ];
 
-  let y = 550;
+  let y = 525;
 
   for (const paragraph of paragraphs) {
     page.drawText(paragraph, {

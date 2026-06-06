@@ -109,10 +109,11 @@ export default async function SuccessPage({
 
       <a
         href={`/api/generate-welcome-letter?propertyId=${propertyId}&deedName=${encodeURIComponent(
-          deedName
-        )}`}
-        className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
-      >
+         deedName
+        )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
+         className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
+       >
+
         Download Welcome Letter PDF
       </a>
 
@@ -121,8 +122,8 @@ export default async function SuccessPage({
 
       <a
         href={`/api/generate-passport?propertyId=${propertyId}&deedName=${encodeURIComponent(
-          deedName
-        )}`}
+         deedName
+        )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
         className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
       >
         Download Lunar Passport PDF
@@ -133,8 +134,8 @@ export default async function SuccessPage({
 
       <a
         href={`/api/generate-hoa-certificate?propertyId=${propertyId}&deedName=${encodeURIComponent(
-          deedName
-        )}`}
+         deedName
+        )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
         className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
       >
         Download HOA Membership Certificate

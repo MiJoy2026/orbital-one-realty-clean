@@ -24,7 +24,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const propertyId = searchParams.get("propertyId");
   const deedName = searchParams.get("deedName") || "Orbital One Explorer";
-
+  const certificateNumber =
+  searchParams.get("certificateNumber") || `OOR-2026-${propertyId || "UNKNOWN"}`;
   const property = sampleProperties.find((item) => item.id === propertyId);
 
   if (!property) {
@@ -174,7 +175,7 @@ export async function GET(request: Request) {
     color: gray,
   });
 
-  page.drawText(`LP-2026-${property.id}`, {
+  page.drawText(certificateNumber, {
     x: 260,
     y: 220,
     size: 13,
