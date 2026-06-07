@@ -1,3 +1,4 @@
+import AdminNav from "../../../components/AdminNav";
 import PropertyStatusButton from "../../../components/PropertyStatusButton";
 import { prisma } from "../../../lib/prisma";
 
@@ -22,7 +23,7 @@ export default async function AdminPropertiesPage() {
         <h1 className="text-5xl font-black uppercase text-yellow-400">
           Admin Properties
         </h1>
-
+        <AdminNav />
         <p className="mt-4 text-gray-300">
           Manage Orbital One Realty property inventory.
         </p>

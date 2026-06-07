@@ -1,3 +1,4 @@
+import AdminNav from "../../../components/AdminNav";
 import { prisma } from "../../../lib/prisma";
 
 export default async function AdminOrdersPage() {
@@ -13,7 +14,7 @@ export default async function AdminOrdersPage() {
         <h1 className="text-5xl font-black uppercase text-yellow-400">
           Admin Orders
         </h1>
-
+        <AdminNav />
         <p className="mt-4 text-gray-300">
           View recorded Orbital One Realty purchases.
         </p>
