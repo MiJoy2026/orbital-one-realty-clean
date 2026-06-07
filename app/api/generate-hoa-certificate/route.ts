@@ -26,6 +26,10 @@ export async function GET(request: Request) {
   const deedName = searchParams.get("deedName") || "Orbital One Member";
   const certificateNumber =
   searchParams.get("certificateNumber") || `OOR-2026-${propertyId || "UNKNOWN"}`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  const verificationUrl =
+  `${appUrl}/verify/${certificateNumber}`;
   const property = sampleProperties.find((item) => item.id === propertyId);
 
   if (!property) {
@@ -155,9 +159,10 @@ export async function GET(request: Request) {
     });
     y -= 22;
   }
-
-  centerText(page, "Membership included free with paid property purchase.", 115, 11, italicFont, green);
-  centerText(page, "Future features and benefits may be released over time.", 95, 9, bodyFont, dark);
+  centerText(page, "Verify this membership certificate online:", 145, 9, bodyFont, dark);
+  centerText(page, verificationUrl, 132, 9, bodyFont, gold);
+  centerText(page, "Membership included free with paid property purchase.", 105, 11, italicFont, green);
+  centerText(page, "Future features and benefits may be released over time.", 85, 9, bodyFont, dark);
 
   const pdfBytes = await pdfDoc.save();
 

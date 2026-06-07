@@ -60,7 +60,17 @@ export async function sendOrderEmail({
           <li>Member discounts and promotions</li>
           <li>2026 Founding Member status</li>
         </ul>
+        <h2>Verify Your Certificate</h2>
 
+        <p>
+          Verify your certificate in the official Orbital One Realty Registry:
+        </p>
+
+         <p>
+          <a href="${appUrl}/verify/${certificateNumber}">
+           ${appUrl}/verify/${certificateNumber}
+        </a>
+        </p>
         <h2>Download Your Documents</h2>
 <ul>
   <li><a href="${appUrl}/api/generate-deed?propertyId=${propertyId}&deedName=${encodeURIComponent(

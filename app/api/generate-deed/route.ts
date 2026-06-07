@@ -20,6 +20,10 @@ export async function GET(request: Request) {
   searchParams.get("deedName") || "Deed Recipient";
   const certificateNumber =
   searchParams.get("certificateNumber") || `OOR-2026-${propertyId || "UNKNOWN"}`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  const verificationUrl =
+  `${appUrl}/verify/${certificateNumber}`;
   const property = sampleProperties.find((item) => item.id === propertyId);
   if (!property) {
     return NextResponse.json({ error: "Property not found" }, { status: 404 });
@@ -204,15 +208,19 @@ page.drawText("SEAL", {
 
   centerText(page, "It's fun. It's unique. It's out of this world!", 145, 13, italicFont, gold);
 
-  centerText(page, "NOVELTY ITEM ONLY", 95, 12, titleFont, red);
-  centerText(
-    page,
-    "This deed is commemorative only and does not convey legal ownership of lunar real estate.",
-    72,
-    9,
-    bodyFont,
-    dark
-  );
+centerText(page, "NOVELTY ITEM ONLY", 105, 12, titleFont, red);
+
+centerText(page, "Verify this certificate at:", 88, 9, bodyFont, dark);
+centerText(page, verificationUrl, 76, 9, bodyFont, gold);
+
+centerText(
+  page,
+  "This deed is commemorative only and does not convey legal ownership of lunar real estate.",
+  58,
+  9,
+  bodyFont,
+  dark
+);
 
   const pdfBytes = await pdfDoc.save();
 

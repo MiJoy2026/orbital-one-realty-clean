@@ -26,6 +26,10 @@ export async function GET(request: Request) {
   const deedName = searchParams.get("deedName") || "Orbital One Explorer";
   const certificateNumber =
   searchParams.get("certificateNumber") || `OOR-2026-${propertyId || "UNKNOWN"}`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  const verificationUrl =
+  `${appUrl}/verify/${certificateNumber}`;
   const property = sampleProperties.find((item) => item.id === propertyId);
 
   if (!property) {
@@ -182,7 +186,23 @@ export async function GET(request: Request) {
     font: titleFont,
     color: white,
   });
+centerText(
+  page,
+  "Verify this passport and certificate online:",
+  205,
+  10,
+  italicFont,
+  gray
+);
 
+centerText(
+  page,
+  verificationUrl,
+  188,
+  9,
+  bodyFont,
+  gold
+);
   centerText(
     page,
     "This novelty passport is a commemorative keepsake only.",

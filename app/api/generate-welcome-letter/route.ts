@@ -26,6 +26,10 @@ export async function GET(request: Request) {
   const deedName = searchParams.get("deedName") || "Orbital One Explorer";
   const certificateNumber =
   searchParams.get("certificateNumber") || `OOR-2026-${propertyId || "UNKNOWN"}`;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+  const verificationUrl =
+  `${appUrl}/verify/${certificateNumber}`;
   const property = sampleProperties.find((item) => item.id === propertyId);
 
   if (!property) {
@@ -114,8 +118,22 @@ export async function GET(request: Request) {
     font: titleFont,
     color: gold,
   });
+page.drawText("Verify your certificate online:", {
+  x: 80,
+  y: 115,
+  size: 11,
+  font: bodyFont,
+  color: dark,
+});
 
-  centerText(page, "It's fun. It's unique. It's out of this world!", 95, 12, italicFont, gold);
+page.drawText(verificationUrl, {
+  x: 80,
+  y: 98,
+  size: 10,
+  font: bodyFont,
+  color: gold,
+});
+  centerText(page, "It's fun. It's unique. It's out of this world!", 70, 12, italicFont, gold);
 
   const pdfBytes = await pdfDoc.save();
 
