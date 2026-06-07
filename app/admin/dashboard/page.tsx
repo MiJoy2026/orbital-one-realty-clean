@@ -1,5 +1,6 @@
 import AdminNav from "../../../components/AdminNav";
 import { prisma } from "../../../lib/prisma";
+import RevenueChart from "../../../components/RevenueChart";
 
 export default async function AdminDashboardPage() {
   const orders = await prisma.order.findMany({
@@ -27,7 +28,23 @@ export default async function AdminDashboardPage() {
 
   const averageSale =
     allOrders.length > 0 ? totalRevenue / allOrders.length : 0;
+  const revenueByDay = new Map<string, number>();
 
+for (const order of allOrders) {
+  const date = order.createdAt.toLocaleDateString();
+
+  revenueByDay.set(
+    date,
+    (revenueByDay.get(date) || 0) + order.amountPaid
+  );
+}
+
+const chartData = Array.from(revenueByDay.entries()).map(
+  ([date, revenue]) => ({
+    date,
+    revenue,
+  })
+);
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <div className="mx-auto max-w-7xl">
@@ -78,7 +95,7 @@ export default async function AdminDashboardPage() {
             </p>
           </div>
         </div>
-
+         <RevenueChart data={chartData} />
         <div className="mt-12 rounded-2xl border border-white/20 bg-white/5 p-6">
           <h2 className="text-2xl font-black text-yellow-400">
             Recent Orders
