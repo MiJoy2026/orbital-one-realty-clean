@@ -1,6 +1,18 @@
+import { prisma } from "@/lib/prisma";
 import { lunarStates, sampleProperties } from "@/lib/moon-data";
 
-export default function ExplorePage() {
+export default async function ExplorePage() {
+  const dbProperties = await prisma.property.findMany();
+
+  const soldPropertyIds = new Set(
+    dbProperties
+      .filter((property) => property.status === "Sold")
+      .map((property) => property.id)
+  );
+
+  const visibleProperties = sampleProperties.filter(
+    (property) => !soldPropertyIds.has(property.id)
+  );
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <div className="mx-auto max-w-7xl">
@@ -42,8 +54,8 @@ export default function ExplorePage() {
           </h2>
 
           <div className="mt-8 grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {sampleProperties.map((property) => {
-              const isSold = property.status === "Sold";
+            {visibleProperties.map((property) => {
+              const isSold = false;
 
               return (
                 <div

@@ -29,9 +29,9 @@ export default function StripeCheckoutButton({
     const data = await response.json();
 
     if (data.url) {
-      window.location.href = data.url;
+     window.location.href = data.url;
     } else {
-      alert("Unable to start checkout.");
+     alert(data.error || "Unable to start checkout.");
     }
   }
 

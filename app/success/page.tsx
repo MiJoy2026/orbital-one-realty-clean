@@ -50,7 +50,14 @@ export default async function SuccessPage({
         premiumGoldSeal: true,
       },
     });
-
+    await prisma.property.update({
+      where: {
+        id: propertyId,
+    },
+      data: {
+       status: "Sold",
+     },
+    });
     await sendOrderEmail({
       to: email || "",
       deedName,

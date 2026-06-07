@@ -1,3 +1,4 @@
+import { prisma } from "../../../lib/prisma";
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
 import { sampleProperties } from "../../../lib/moon-data";
@@ -16,7 +17,18 @@ export async function POST(request: Request) {
       { status: 404 }
     );
   }
+   const dbProperty = await prisma.property.findUnique({
+  where: {
+    id: property.id,
+  },
+});
 
+if (dbProperty?.status === "Sold") {
+  return NextResponse.json(
+    { error: "This property has already been sold." },
+    { status: 409 }
+  );
+}
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
   const session = await stripe.checkout.sessions.create({

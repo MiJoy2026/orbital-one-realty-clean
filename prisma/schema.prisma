@@ -27,3 +27,14 @@ model Order {
 
   premiumGoldSeal   Boolean  @default(false)
 }
+model Property {
+  id          String   @id
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  state       String
+  type        String
+  size        String
+  price       Float
+  status      String   @default("Available")
+}
