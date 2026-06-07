@@ -1,12 +1,29 @@
+import AdminOrderSearch from "../../../components/AdminOrderSearch";
 import AdminNav from "../../../components/AdminNav";
 import { prisma } from "../../../lib/prisma";
 
-export default async function AdminOrdersPage() {
+export default async function AdminOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ search?: string }>;
+}) {
+  const params = await searchParams;
+  const search = params.search || "";
   const orders = await prisma.order.findMany({
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
+  where: search
+    ? {
+        OR: [
+          { certificateNumber: { contains: search, mode: "insensitive" } },
+          { deedName: { contains: search, mode: "insensitive" } },
+          { propertyId: { contains: search, mode: "insensitive" } },
+          { email: { contains: search, mode: "insensitive" } },
+        ],
+      }
+    : undefined,
+  orderBy: {
+    createdAt: "desc",
+  },
+});
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -18,6 +35,8 @@ export default async function AdminOrdersPage() {
         <p className="mt-4 text-gray-300">
           View recorded Orbital One Realty purchases.
         </p>
+        
+        <AdminOrderSearch />
 
         <div className="mt-10 overflow-x-auto rounded-2xl border border-white/20">
           <table className="w-full border-collapse text-left">
