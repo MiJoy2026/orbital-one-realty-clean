@@ -1,3 +1,4 @@
+import { prisma } from "../../../lib/prisma";
 import { sampleProperties } from "../../../lib/moon-data";
 
 export default async function PropertyExplorerPage({
@@ -21,6 +22,16 @@ export default async function PropertyExplorerPage({
       </main>
     );
   }
+
+  const dbProperty = await prisma.property.findUnique({
+    where: {
+      id: property.id,
+    },
+  });
+
+  const liveStatus = dbProperty?.status || property.status;
+  const isSold = liveStatus === "Sold";
+      
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -54,13 +65,16 @@ export default async function PropertyExplorerPage({
             <p className="text-sm uppercase text-gray-400">Status</p>
             <p
               className={`mt-2 text-2xl font-black ${
-                property.status === "Sold"
+                isSold
                   ? "text-red-400"
                   : "text-green-400"
               }`}
             >
-              {property.status}
+              {liveStatus}
             </p>
+             <p className="mt-2 text-xs text-gray-500">
+                Status synced from live inventory database.
+             </p>
           </div>
         </div>
           <div className="mt-10 rounded-3xl border border-white/20 bg-white/5 p-8">
