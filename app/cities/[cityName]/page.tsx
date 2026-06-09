@@ -1,3 +1,4 @@
+import { prisma } from "../../../lib/prisma";
 import { lunarStates, sampleProperties } from "../../../lib/moon-data";
 
 export default async function CityDetailPage({
@@ -30,7 +31,16 @@ export default async function CityDetailPage({
   const cityProperties = sampleProperties.filter(
     (property) => property.city === decodedCityName
   );
+   const dbProperties = await prisma.property.findMany();
 
+const cityPropertiesWithLiveStatus = cityProperties.map((property) => {
+  const dbProperty = dbProperties.find((item) => item.id === property.id);
+
+  return {
+    ...property,
+    status: dbProperty?.status || property.status,
+  };
+});
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <div className="mx-auto max-w-7xl">
@@ -75,7 +85,7 @@ export default async function CityDetailPage({
           <div className="rounded-2xl border border-green-500 p-6">
             <p className="text-4xl font-black text-green-400">
               {
-                cityProperties.filter(
+                cityPropertiesWithLiveStatus.filter(
                   (property) => property.status === "Available"
                 ).length
               }
@@ -86,7 +96,7 @@ export default async function CityDetailPage({
           <div className="rounded-2xl border border-red-500 p-6">
             <p className="text-4xl font-black text-red-400">
               {
-                cityProperties.filter(
+                cityPropertiesWithLiveStatus.filter(
                   (property) => property.status === "Sold"
                 ).length
               }
@@ -101,8 +111,8 @@ export default async function CityDetailPage({
           </h2>
 
           <div className="mt-8 grid gap-6 md:grid-cols-2">
-            {cityProperties.length > 0 ? (
-              cityProperties.map((property) => (
+            {cityPropertiesWithLiveStatus.length > 0 ? (
+              cityPropertiesWithLiveStatus.map((property) => (
                 <a
                   key={property.id}
                   href={`/explore/${property.id}`}

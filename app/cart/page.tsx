@@ -1,3 +1,4 @@
+import StripeCheckoutButton from "../../components/StripeCheckoutButton";
 import { sampleProperties } from "../../lib/moon-data";
 
 export default async function CartPage({
@@ -109,20 +110,15 @@ export default async function CartPage({
             </div>
 
             {property ? (
-  <a
-    href={`/checkout?propertyId=${property.id}`}
-    className="mt-8 block w-full rounded-xl bg-yellow-400 px-6 py-4 text-center font-black text-black"
-  >
-    Checkout
-  </a>
-) : (
-  <button
-    disabled
-    className="mt-8 w-full rounded-xl bg-gray-700 px-6 py-4 font-black text-gray-400"
-  >
-    Checkout
-  </button>
-)}
+            <StripeCheckoutButton propertyId={property.id} />
+            ) : (
+               <button
+               disabled
+               className="mt-8 w-full rounded-xl bg-gray-700 px-6 py-4 font-black text-gray-400"
+            >
+              Checkout
+             </button>
+            )}
 
             <p className="mt-4 text-xs text-gray-400">
               Orbital One Realty sells novelty products only. No legal ownership

@@ -1,3 +1,4 @@
+import { prisma } from "../../../lib/prisma";
 import { lunarStates, sampleProperties } from "../../../lib/moon-data";
 
 export default async function TownDetailPage({
@@ -27,12 +28,23 @@ export default async function TownDetailPage({
   const townProperties = sampleProperties.filter(
     (property) => property.town === decodedTownName
   );
+   const dbProperties = await prisma.property.findMany();
 
-  const available = townProperties.filter(
-    (property) => property.status === "Available"
-  );
+const townPropertiesWithLiveStatus = townProperties.map((property) => {
+  const dbProperty = dbProperties.find((item) => item.id === property.id);
 
-  const sold = townProperties.filter((property) => property.status === "Sold");
+  return {
+    ...property,
+    status: dbProperty?.status || property.status,
+  };
+});
+  const available = townPropertiesWithLiveStatus.filter(
+  (property) => property.status === "Available"
+);
+
+const sold = townPropertiesWithLiveStatus.filter(
+  (property) => property.status === "Sold"
+);
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -70,7 +82,7 @@ export default async function TownDetailPage({
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           <div className="rounded-2xl border border-yellow-400 p-6">
             <p className="text-4xl font-black text-yellow-400">
-              {townProperties.length}
+              {townPropertiesWithLiveStatus.length}
             </p>
             <p className="mt-2">Town Blocks Listed</p>
           </div>
@@ -94,8 +106,8 @@ export default async function TownDetailPage({
           </h2>
 
           <div className="mt-8 grid gap-6 md:grid-cols-2">
-            {townProperties.length > 0 ? (
-              townProperties.map((property) => (
+            {townPropertiesWithLiveStatus.length > 0 ? (
+              townPropertiesWithLiveStatus.map((property) => (
                 <a
                   key={property.id}
                   href={`/explore/${property.id}`}
