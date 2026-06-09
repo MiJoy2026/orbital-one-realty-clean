@@ -63,7 +63,19 @@ export default async function PropertyExplorerPage({
             </p>
           </div>
         </div>
+          <div className="mt-10 rounded-3xl border border-white/20 bg-white/5 p-8">
+           <h2 className="text-3xl font-black text-yellow-400">
+             Property Overview
+           </h2>
 
+            <p className="mt-6 text-lg leading-8 text-gray-300">
+              This {property.size} {property.type} in the lunar state of{" "}
+              {property.state} is a novelty keepsake property designed for gifts,
+              collectors, space enthusiasts, and anyone who wants a fun connection to
+              the Moon. Each purchase includes personalized digital documents and entry
+              into the Orbital One Realty registry.
+            </p>
+        </div>
         <div className="mt-10 rounded-3xl border border-white/20 bg-white/5 p-8">
           <h2 className="text-3xl font-black text-yellow-400">
             Property Location
@@ -106,6 +118,67 @@ export default async function PropertyExplorerPage({
               </span>
             ))}
           </div>
+        </div>
+          <div className="mt-10 rounded-3xl border border-yellow-400/30 bg-yellow-400/10 p-8">
+            <h2 className="text-3xl font-black text-yellow-400">
+               Included With This Property
+            </h2>
+
+          <div className="mt-6 grid gap-4 md:grid-cols-2">
+              <p>📜 Personalized Novelty Lunar Deed</p>
+              <p>🛂 Lunar Passport Eligibility</p>
+              <p>🏛️ Free HOA Membership</p>
+              <p>⭐ 2026 Founding Member Status</p>
+              <p>✉️ Welcome Letter PDF</p>
+              <p>🌕 Certificate Verification</p>
+          </div>
+          <div className="mt-10 rounded-3xl border-2 border-yellow-400 bg-black p-8 text-center">
+  <p className="text-sm uppercase tracking-[0.3em] text-yellow-400">
+    Certificate Preview
+  </p>
+
+  <h2 className="mt-4 text-3xl font-black text-yellow-400">
+    Orbital One Realty
+  </h2>
+
+  <p className="mt-6 text-lg">
+    Novelty Lunar Property Certificate
+  </p>
+
+  <div className="mt-8 space-y-3">
+    <p>
+      <span className="font-bold text-yellow-400">
+        Certificate Number:
+      </span>{" "}
+      PREVIEW-{property.id}
+    </p>
+
+    <p>
+      <span className="font-bold text-yellow-400">
+        Property:
+      </span>{" "}
+      {property.id}
+    </p>
+
+    <p>
+      <span className="font-bold text-yellow-400">
+        State:
+      </span>{" "}
+      {property.state}
+    </p>
+
+    <p>
+      <span className="font-bold text-yellow-400">
+        Size:
+      </span>{" "}
+      {property.size}
+    </p>
+  </div>
+
+  <p className="mt-8 text-sm text-gray-400">
+    Preview Only • Final certificate generated after purchase
+  </p>
+</div>
         </div>
 
         <div className="mt-10 flex flex-wrap gap-4">
