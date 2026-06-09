@@ -125,13 +125,14 @@ export default async function StateDetailPage({
 
           <div className="mt-6 grid gap-4 md:grid-cols-4">
             {state.towns.slice(0, 8).map((town) => (
-              <div
-                key={town}
-                className="rounded-2xl border border-white/20 p-4"
-              >
-                {town}
-              </div>
-            ))}
+          <a
+            key={town}
+            href={`/towns/${encodeURIComponent(town)}`}
+            className="rounded-2xl border border-white/20 p-4 transition hover:border-yellow-400 hover:bg-yellow-400/10"
+          >
+           {town}
+          </a>
+        ))}
           </div>
         </section>
 
