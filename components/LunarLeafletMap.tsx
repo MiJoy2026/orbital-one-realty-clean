@@ -2,8 +2,15 @@
 
 import "leaflet/dist/leaflet.css";
 
-import { MapContainer, ImageOverlay, Rectangle, Popup } from "react-leaflet";
-import { CRS } from "leaflet";
+import {
+  MapContainer,
+  ImageOverlay,
+  Polygon,
+  Popup,
+  Marker,
+} from "react-leaflet";
+import { CRS, divIcon } from "leaflet";
+import { lunarMapRegions } from "@/lib/lunar-map-regions";
 
 export default function LunarLeafletMap() {
   const bounds = [
@@ -26,49 +33,68 @@ export default function LunarLeafletMap() {
           background: "#000",
         }}
       >
-        <ImageOverlay
-          url="/atlas/moon-atlas-v2.jpg"
-          bounds={bounds}
-        />
-        <Rectangle
-          bounds={[
-           [555, 470],
-           [690, 615],
-        ]}
-          pathOptions={{
-           color: "#facc15",
-           weight: 2,
-           fillOpacity: 0.15,
-        }}
-      >
-          <Popup>
-         <div>
-         <strong>Mare Serenitatis</strong>
-         <br />
-         <a href="/states/Mare%20Serenitatis">View State Properties</a>
-        </div>
-        </Popup>
-        </Rectangle>
+        <ImageOverlay url="/atlas/moon-atlas-v2.jpg" bounds={bounds} />
 
-        <Rectangle
-         bounds={[
-         [520, 610],
-         [665, 760],
-        ]}
-          pathOptions={{
-         color: "#facc15",
-         weight: 2,
-         fillOpacity: 0.15,
-        }}
->
-         <Popup>
-        <div>
-        <strong>Mare Tranquillitatis</strong>
-        <br />
-         <a href="/states/Mare%20Tranquillitatis">View State Properties</a>
-       </div>
-       </Popup>
-       </Rectangle>
+        {lunarMapRegions.map((region) => (
+        <div key={region.name}>
+            <Polygon
+              key={`${region.name}-polygon`}
+              positions={region.positions}
+              pathOptions={{
+                color: "#facc15",
+                weight: 1,
+                opacity: 0,
+                fillOpacity: 0,
+              }}
+              eventHandlers={{
+                mouseover: (event) => {
+                  event.target.setStyle({
+                    opacity: 1,
+                    weight: 2,
+                    fillOpacity: 0.25,
+                  });
+                },
+                mouseout: (event) => {
+                  event.target.setStyle({
+                    opacity: 0,
+                    weight: 1,
+                    fillOpacity: 0,
+                  });
+                },
+              }}
+            >
+              <Popup>
+                <div>
+                  <strong>{region.name}</strong>
+                  <br />
+                  <a href={`/states/${encodeURIComponent(region.name)}`}>
+                    View State Properties
+                  </a>
+                </div>
+              </Popup>
+            </Polygon>
+
+            <Marker
+              key={`${region.name}-label`}
+              position={region.labelPosition}
+              icon={divIcon({
+                className: "",
+                
+                html: `<div style="
+              color:#facc15;
+              font-weight:800;
+              font-size:10px;
+              letter-spacing:0.04em;
+              text-transform:uppercase;
+              text-shadow:0 2px 8px #000;
+              text-align:center;
+              white-space:nowrap;
+              opacity:0.85;
+            ">${region.name}</div>`,
+              })}
+            />
+        </div>
+        ))}
       </MapContainer>
     </div>
   );

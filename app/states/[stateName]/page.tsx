@@ -1,3 +1,4 @@
+import { lunarStateDetails } from "../../../lib/lunar-state-details";
 import { lunarStates, sampleProperties } from "../../../lib/moon-data";
 
 export default async function StateDetailPage({
@@ -12,18 +13,18 @@ export default async function StateDetailPage({
   const state = lunarStates.find(
     (s) => s.name.toLowerCase() === decodedName.toLowerCase()
   );
-
+  const details = lunarStateDetails[state?.name ?? ""];
   if (!state) {
     return (
       <main className="min-h-screen bg-black px-6 py-20 text-white">
         <h1 className="text-5xl font-black">State Not Found</h1>
 
-        <a
-          href="/states"
-          className="mt-8 inline-block text-yellow-400"
-        >
-          Back to States
-        </a>
+      <a
+       href="/moon-map"
+       className="mt-6 inline-block rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400 hover:bg-yellow-400 hover:text-black"
+       >
+        Back to Lunar Atlas
+      </a>
       </main>
     );
   }
@@ -47,10 +48,32 @@ export default async function StateDetailPage({
           {state.name}
         </h1>
 
-        <p className="mt-4 text-xl text-gray-300">
-          One of Orbital One Realty&apos;s 57 lunar states.
-        </p>
+        <p className="mt-4 text-2xl font-bold text-yellow-400">
+      {details?.nickname ?? "Lunar State"}
+      </p>
 
+       <p className="mt-6 max-w-4xl text-lg text-gray-300">
+        {details?.description ??
+        "One of Orbital One Realty's 57 lunar states."}
+      </p>
+          {details && (
+      <div className="mt-8 flex flex-wrap gap-3">
+        {details.highlights.map((highlight) => (
+          <span
+            key={highlight}
+            className="rounded-full border border-yellow-400 px-4 py-2 text-sm font-bold text-yellow-400"
+          >
+         {highlight}
+      </span>
+    ))}
+  </div>
+)}
+        <a
+         href="/moon-map"
+         className="mt-6 inline-block rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
+        >
+          Back to Lunar Atlas
+        </a>
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           <div className="rounded-2xl border border-yellow-400 p-6">
             <p className="text-4xl font-black text-yellow-400">
