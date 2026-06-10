@@ -83,13 +83,14 @@ export default function LunarLeafletMap() {
                 html: `<div style="
               color:#facc15;
               font-weight:800;
-              font-size:10px;
+              font-size:12px;
               letter-spacing:0.04em;
               text-transform:uppercase;
               text-shadow:0 2px 8px #000;
               text-align:center;
               white-space:nowrap;
-              opacity:0.85;
+              opacity:0.65;
+              pointer-events:none;
             ">${region.name}</div>`,
               })}
             />
