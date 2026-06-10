@@ -68,105 +68,124 @@ export default async function SuccessPage({
       amountPaid,
     });
   }
-
+    const verificationUrl = `/verify/${certificateNumber}`;
   return (
-    <main className="min-h-screen bg-black px-6 py-20 text-center text-white">
-      <h1 className="text-5xl font-black uppercase text-yellow-400">
+  <main className="min-h-screen bg-black px-6 py-20 text-white">
+    <div className="mx-auto max-w-6xl text-center">
+      <p className="text-sm font-bold uppercase tracking-[0.35em] text-yellow-400">
+        Purchase Complete
+      </p>
+
+      <h1 className="mt-4 text-5xl font-black uppercase text-yellow-400">
         Welcome to Orbital One Realty
       </h1>
 
-      <p className="mt-6 text-2xl text-white">
-        Congratulations,
-        <span className="ml-2 font-black text-yellow-400">{deedName}</span>
+      <p className="mt-6 text-2xl">
+        Congratulations,{" "}
+        <span className="font-black text-yellow-400">{deedName}</span>
       </p>
 
-      <p className="mx-auto mt-6 max-w-3xl text-lg text-gray-300">
-        Your purchase has been successfully recorded and your Lunar Welcome
-        Package is ready for download.
-      </p>
+      <div className="mx-auto mt-10 grid max-w-4xl gap-6 md:grid-cols-3">
+        <div className="rounded-2xl border border-yellow-400 p-6">
+          <p className="text-sm uppercase text-gray-400">Property ID</p>
+          <p className="mt-2 text-3xl font-black text-yellow-400">
+            {propertyId}
+          </p>
+        </div>
 
-      <div className="mx-auto mt-10 max-w-3xl rounded-2xl border border-yellow-400/30 bg-white/5 p-8 text-left">
-        <h2 className="text-2xl font-black text-yellow-400">
-          Your Welcome Package Includes
-        </h2>
-
-        <div className="mt-6 space-y-3 text-lg">
-          <p>📜 Personalized Lunar Property Deed</p>
-          <p>✉️ Welcome Letter</p>
-          <p>🛂 Lunar Passport</p>
-          <p>🏛️ HOA Membership Certificate</p>
+        <div className="rounded-2xl border border-yellow-400 p-6 md:col-span-2">
+          <p className="text-sm uppercase text-gray-400">
+            Certificate Number
+          </p>
+          <p className="mt-2 text-3xl font-black text-yellow-400">
+            {certificateNumber}
+          </p>
         </div>
       </div>
 
-      <div className="mx-auto mt-8 max-w-3xl rounded-2xl border border-yellow-400/30 bg-white/5 p-8 text-left">
-        <h2 className="text-2xl font-black text-yellow-400">
-          Included HOA Member Benefits
+      <div className="mx-auto mt-10 max-w-4xl rounded-3xl border border-yellow-400/40 bg-white/5 p-8">
+        <h2 className="text-3xl font-black text-yellow-400">
+          Your Lunar Welcome Package Is Ready
         </h2>
 
-        <div className="mt-6 space-y-3">
-          <p>🌕 Monthly Lunar Newsletters</p>
-          <p>🚀 Early Access to Future Orbital One Features</p>
-          <p>🏠 Future Virtual Home Building Opportunities</p>
-          <p>⭐ Member Discounts and Promotions</p>
-          <p>🏛️ 2026 Founding Member Status</p>
+        <p className="mt-4 text-gray-300">
+          Download your personalized documents below. A copy has also been sent
+          to the email address used during checkout.
+        </p>
+
+        <div className="mt-8 grid gap-4 md:grid-cols-2">
+          <a
+            href={`/api/generate-deed?propertyId=${propertyId}&deedName=${encodeURIComponent(
+              deedName
+            )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
+            className="rounded-xl bg-yellow-400 px-6 py-4 font-black text-black"
+          >
+            Download Lunar Deed
+          </a>
+
+          <a
+            href={`/api/generate-welcome-letter?propertyId=${propertyId}&deedName=${encodeURIComponent(
+              deedName
+            )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
+            className="rounded-xl border border-yellow-400 px-6 py-4 font-black text-yellow-400"
+          >
+            Download Welcome Letter
+          </a>
+
+          <a
+            href={`/api/generate-passport?propertyId=${propertyId}&deedName=${encodeURIComponent(
+              deedName
+            )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
+            className="rounded-xl border border-yellow-400 px-6 py-4 font-black text-yellow-400"
+          >
+            Download Lunar Passport
+          </a>
+
+          <a
+            href={`/api/generate-hoa-certificate?propertyId=${propertyId}&deedName=${encodeURIComponent(
+              deedName
+            )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
+            className="rounded-xl border border-yellow-400 px-6 py-4 font-black text-yellow-400"
+          >
+            Download HOA Certificate
+          </a>
         </div>
       </div>
 
-      <a
-        href={`/api/generate-deed?propertyId=${propertyId}&deedName=${encodeURIComponent(
-         deedName
-        )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
-        className="mt-10 inline-block rounded-xl bg-yellow-400 px-8 py-4 font-black text-black"
-      >
-        Download Personalized Novelty Deed PDF
-      </a>
+      <div className="mx-auto mt-8 max-w-4xl rounded-3xl border border-white/20 bg-white/5 p-8">
+        <h2 className="text-2xl font-black text-yellow-400">
+          Verify Your Certificate
+        </h2>
 
-      <br />
-      <br />
+        <p className="mt-4 text-gray-300">
+          Your certificate can be verified in the official Orbital One Realty
+          registry.
+        </p>
 
-      <a
-        href={`/api/generate-welcome-letter?propertyId=${propertyId}&deedName=${encodeURIComponent(
-         deedName
-        )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
-         className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
-       >
+        <a
+          href={verificationUrl}
+          className="mt-6 inline-block rounded-xl border border-yellow-400 px-6 py-4 font-black text-yellow-400"
+        >
+          Verify Certificate
+        </a>
+      </div>
 
-        Download Welcome Letter PDF
-      </a>
+      <div className="mt-10 flex flex-wrap justify-center gap-4">
+        <a
+          href="/moon-map"
+          className="rounded-xl bg-yellow-400 px-8 py-4 font-black text-black"
+        >
+          Return to Lunar Atlas
+        </a>
 
-      <br />
-      <br />
-
-      <a
-        href={`/api/generate-passport?propertyId=${propertyId}&deedName=${encodeURIComponent(
-         deedName
-        )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
-        className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
-      >
-        Download Lunar Passport PDF
-      </a>
-
-      <br />
-      <br />
-
-      <a
-        href={`/api/generate-hoa-certificate?propertyId=${propertyId}&deedName=${encodeURIComponent(
-         deedName
-        )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
-        className="mt-4 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
-      >
-        Download HOA Membership Certificate
-      </a>
-
-      <br />
-      <br />
-
-      <a
-        href="/explore"
-        className="mt-6 inline-block rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
-      >
-        Explore More Properties
-      </a>
-    </main>
-  );
+        <a
+          href="/explore"
+          className="rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
+        >
+          Explore More Properties
+        </a>
+      </div>
+    </div>
+  </main>
+);
 }
