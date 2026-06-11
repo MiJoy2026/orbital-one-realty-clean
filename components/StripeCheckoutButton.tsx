@@ -4,8 +4,10 @@ import { useState } from "react";
 
 export default function StripeCheckoutButton({
   propertyId,
+  acres,
 }: {
   propertyId: string;
+  acres?: number;
 }) {
   const [deedName, setdeedName] = useState("");
 
@@ -23,6 +25,7 @@ export default function StripeCheckoutButton({
       body: JSON.stringify({
         propertyId,
         deedName,
+        acres,
       }),
     });
 

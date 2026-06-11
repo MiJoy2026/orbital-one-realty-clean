@@ -9,6 +9,8 @@ export async function POST(request: Request) {
   const body = await request.json();
   const propertyId = body.propertyId;
   const deedName = body.deedName || "Deed Recipient";
+  const acres = Number(body.acres || 1);
+  
   const property = sampleProperties.find((item) => item.id === propertyId);
 
   if (!property) {
@@ -17,6 +19,17 @@ export async function POST(request: Request) {
       { status: 404 }
     );
   }
+   const propertyPrice =
+  property.type === "Rural Acre"
+    ? acres === 0.5
+      ? 16.95
+      : 24.95 + Math.max(acres - 1, 0) * 7.95
+    : property.price;
+
+   const propertySize =
+  property.type === "Rural Acre"
+    ? `${acres} Acre${acres === 1 ? "" : "s"}`
+    : property.size;
    const dbProperty = await prisma.property.findUnique({
   where: {
     id: property.id,
@@ -39,10 +52,10 @@ if (dbProperty?.status === "Sold") {
         quantity: 1,
         price_data: {
           currency: "usd",
-          unit_amount: Math.round(property.price * 100),
+          unit_amount: Math.round(propertyPrice * 100),
           product_data: {
             name: `${property.id} - ${property.type}`,
-            description: `${property.state} • ${property.size}`,
+            description: `${property.state} • ${propertySize}`,
           },
         },
       },
@@ -74,6 +87,7 @@ if (dbProperty?.status === "Sold") {
   propertyType: property.type,
   state: property.state,
   deedName,
+  acres: String(acres),
 },
   });
 

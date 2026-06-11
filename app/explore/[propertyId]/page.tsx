@@ -31,7 +31,7 @@ export default async function PropertyExplorerPage({
 
   const liveStatus = dbProperty?.status || property.status;
   const isSold = liveStatus === "Sold";
-      
+  const isRuralAcre = property.type === "Rural Acre";  
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -194,7 +194,39 @@ export default async function PropertyExplorerPage({
   </p>
 </div>
         </div>
+        {isRuralAcre && (
+  <div className="mt-8 rounded-2xl border border-yellow-400/30 p-6">
+    <h3 className="text-xl font-black text-yellow-400">
+      Available Acreage Options
+    </h3>
 
+    <div className="mt-4 grid gap-3 md:grid-cols-2">
+      <div className="rounded-xl border border-white/20 p-3">
+        1/2 Acre — $16.95
+      </div>
+
+      <div className="rounded-xl border border-white/20 p-3">
+        1 Acre — $24.95
+      </div>
+
+      <div className="rounded-xl border border-white/20 p-3">
+        2 Acres — $32.90
+      </div>
+
+      <div className="rounded-xl border border-white/20 p-3">
+        3 Acres — $40.85
+      </div>
+
+      <div className="rounded-xl border border-white/20 p-3">
+        5 Acres — $56.75
+      </div>
+
+      <div className="rounded-xl border border-white/20 p-3">
+        10 Acres — $96.50
+      </div>
+    </div>
+  </div>
+)}
         <div className="mt-10 flex flex-wrap gap-4">
           {property.status === "Available" ? (
             <a

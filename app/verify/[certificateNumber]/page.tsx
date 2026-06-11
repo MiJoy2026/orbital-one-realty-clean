@@ -64,6 +64,20 @@ export default async function VerifyCertificatePage({
               <p className="text-sm uppercase text-gray-400">Property ID</p>
               <p className="mt-2 text-xl font-bold">{order.propertyId}</p>
             </div>
+            <div>
+              <p className="text-sm uppercase text-gray-400">Property Type</p>
+              <p className="mt-2 text-xl font-bold">{order.propertyType}</p>
+            </div>
+
+               {order.acreagePurchased && (
+            <div>
+              <p className="text-sm uppercase text-gray-400">Acreage Purchased</p>
+              <p className="mt-2 text-xl font-bold">
+               {order.acreagePurchased} Acre
+               {order.acreagePurchased === 1 ? "" : "s"}
+            </p>
+            </div>
+)}
 
             <div>
               <p className="text-sm uppercase text-gray-400">Lunar State</p>

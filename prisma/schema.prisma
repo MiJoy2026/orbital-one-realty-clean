@@ -13,6 +13,7 @@ model Order {
   stripeSessionId   String   @unique
   propertyId        String
   propertyType      String
+  acreagePurchased  Float?
   lunarState        String
 
   deedName          String
@@ -27,6 +28,7 @@ model Order {
 
   premiumGoldSeal   Boolean  @default(false)
 }
+
 model Property {
   id          String   @id
   createdAt   DateTime @default(now())
@@ -37,4 +39,14 @@ model Property {
   size        String
   price       Float
   status      String   @default("Available")
+}
+
+model StateInventory {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stateName   String   @unique
+  totalAcres  Float    @default(50000)
+  soldAcres   Float    @default(0)
 }

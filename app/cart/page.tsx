@@ -4,14 +4,22 @@ import { sampleProperties } from "../../lib/moon-data";
 export default async function CartPage({
   searchParams,
 }: {
-  searchParams: Promise<{ propertyId?: string }>;
+  searchParams: Promise<{ propertyId?: string; acres?: string }>;
 }) {
   const params = await searchParams;
+  const acres = Number(params.acres || "1");
   const property = sampleProperties.find(
     (item) => item.id === params.propertyId
   );
 
-  const propertyPrice = property ? property.price : 0;
+  const propertyPrice =
+  property?.type === "Rural Acre"
+    ? acres === 0.5
+      ? 16.95
+      : 24.95 + Math.max(acres - 1, 0) * 7.95
+    : property
+      ? property.price
+      : 0;
   const deedNamePrice = 1.99;
   const passportPrice = 4.99;
   const total = propertyPrice + deedNamePrice + passportPrice;
@@ -36,7 +44,8 @@ export default async function CartPage({
                 <p className="text-2xl font-bold">{property.id}</p>
 
                 <p className="mt-2 text-gray-300">
-                  {property.type} • {property.state} • {property.size}
+                  {property.type} • {property.state} •{" "}
+                  {property.type === "Rural Acre" ? `${acres} Acre${acres === 1 ? "" : "s"}` : property.size}
                 </p>
 
                 <p className="mt-4 text-3xl font-black text-yellow-400">
@@ -110,7 +119,7 @@ export default async function CartPage({
             </div>
 
             {property ? (
-            <StripeCheckoutButton propertyId={property.id} />
+            <StripeCheckoutButton propertyId={property.id} acres={acres} />
             ) : (
                <button
                disabled
