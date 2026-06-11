@@ -50,6 +50,7 @@ export default async function AdminOrdersPage({
                 <th className="p-4">Status</th>
                 <th className="p-4">Email</th>
                 <th className="p-4">Date</th>
+                <th className="p-4">Actions</th>
               </tr>
             </thead>
 
@@ -69,6 +70,15 @@ export default async function AdminOrdersPage({
                   <td className="p-4">{order.email || "N/A"}</td>
                   <td className="p-4">
                     {order.createdAt.toLocaleDateString()}
+                  </td>
+
+                  <td className="p-4">
+                   <a
+                      href={`/admin/orders/${order.id}`}
+                      className="rounded-xl bg-yellow-400 px-4 py-2 font-black text-black"
+                     >
+                      View
+                   </a>
                   </td>
                 </tr>
               ))}

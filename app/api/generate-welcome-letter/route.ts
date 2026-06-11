@@ -1,3 +1,4 @@
+import { prisma } from "../../../lib/prisma";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { NextResponse } from "next/server";
 import { sampleProperties } from "../../../lib/moon-data";
@@ -31,7 +32,17 @@ export async function GET(request: Request) {
   const verificationUrl =
   `${appUrl}/verify/${certificateNumber}`;
   const property = sampleProperties.find((item) => item.id === propertyId);
+  const allocation = await prisma.acreageAllocation.findFirst({
+  where: {
+    certificateNumber,
+  },
+});
 
+const assignedAcreRange = allocation
+  ? allocation.startingAcre === allocation.endingAcre
+    ? `Acre ${allocation.startingAcre.toLocaleString()}`
+    : `Acres ${allocation.startingAcre.toLocaleString()} through ${allocation.endingAcre.toLocaleString()}`
+  : "";
   if (!property) {
     return NextResponse.json({ error: "Property not found" }, { status: 404 });
   }
@@ -81,7 +92,7 @@ export async function GET(request: Request) {
 });
   const paragraphs = [
     "Congratulations and welcome to Orbital One Realty. Your novelty lunar property package has been prepared as a fun, memorable, and out-of-this-world keepsake.",
-    `Your selected property is ${property.id}, a ${property.size} ${property.type} located in the lunar state of ${property.state}.`,
+    `Your selected property is ${property.id}, a ${property.size} ${property.type} located in the lunar state of ${property.state}.${assignedAcreRange ? ` Assigned acreage: ${assignedAcreRange}.` : ""}`,`Your selected property is ${property.id}, a ${property.size} ${property.type} located in the lunar state of ${property.state}.`,
     "Inside your Orbital One welcome package, you will find your novelty deed, property information, nearby lunar attractions, HOA membership materials, and optional add-ons such as novelty lunar passports.",
     "Please remember that Orbital One Realty products are novelty and commemorative items only. They do not convey legal ownership, mineral rights, territorial rights, or any enforceable property interest in lunar real estate.",
     "Thank you for joining the Orbital One community. It's fun. It's unique. It's out of this world!",

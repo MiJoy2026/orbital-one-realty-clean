@@ -1,3 +1,4 @@
+import { prisma } from "../../../lib/prisma";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { NextResponse } from "next/server";
 import { sampleProperties } from "../../../lib/moon-data";
@@ -25,6 +26,17 @@ export async function GET(request: Request) {
   const verificationUrl =
   `${appUrl}/verify/${certificateNumber}`;
   const property = sampleProperties.find((item) => item.id === propertyId);
+  const allocation = await prisma.acreageAllocation.findFirst({
+  where: {
+    certificateNumber,
+  },
+});
+
+const assignedAcreRange = allocation
+  ? allocation.startingAcre === allocation.endingAcre
+    ? `Acre ${allocation.startingAcre.toLocaleString()}`
+    : `Acres ${allocation.startingAcre.toLocaleString()} through ${allocation.endingAcre.toLocaleString()}`
+  : property?.size || "";
   if (!property) {
     return NextResponse.json({ error: "Property not found" }, { status: 404 });
   }
@@ -111,11 +123,49 @@ page.drawText(deedName, {
   page.drawText("Lunar State:", { x: detailX, y: 370, size: 14, font: titleFont });
   page.drawText(property.state, { x: valueX, y: 370, size: 14, font: bodyFont });
 
-  page.drawText("Property Size:", { x: detailX, y: 340, size: 14, font: titleFont });
-  page.drawText(property.size, { x: valueX, y: 340, size: 14, font: bodyFont });
+  page.drawText("Property Size:", {
+  x: detailX,
+  y: 340,
+  size: 14,
+  font: titleFont,
+});
 
-  page.drawText("Issue Date:", { x: detailX, y: 310, size: 14, font: titleFont });
-  page.drawText(new Date().toLocaleDateString(), { x: valueX, y: 310, size: 14, font: bodyFont });
+page.drawText(property.size, {
+  x: valueX,
+  y: 340,
+  size: 14,
+  font: bodyFont,
+});
+
+if (allocation) {
+  page.drawText("Assigned Acreage:", {
+    x: detailX,
+    y: 310,
+    size: 14,
+    font: titleFont,
+  });
+
+  page.drawText(assignedAcreRange, {
+    x: valueX,
+    y: 310,
+    size: 14,
+    font: bodyFont,
+  });
+}
+
+  page.drawText("Issue Date:", {
+  x: detailX,
+  y: allocation ? 280 : 310,
+  size: 14,
+  font: titleFont,
+});
+
+page.drawText(new Date().toLocaleDateString(), {
+  x: valueX,
+  y: allocation ? 280 : 310,
+  size: 14,
+  font: bodyFont,
+});
 
 page.drawEllipse({
   x: 470,

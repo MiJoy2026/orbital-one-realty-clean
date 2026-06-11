@@ -1,0 +1,197 @@
+import AdminNav from "../../../../components/AdminNav";
+import { prisma } from "../../../../lib/prisma";
+
+export default async function AdminOrderDetailPage({
+  params,
+}: {
+  params: Promise<{ orderId: string }>;
+}) {
+  const { orderId } = await params;
+
+  const order = await prisma.order.findUnique({
+    where: {
+      id: orderId,
+    },
+  });
+
+  if (!order) {
+    return (
+      <main className="min-h-screen bg-black px-6 py-20 text-white">
+        <div className="mx-auto max-w-5xl">
+          <h1 className="text-5xl font-black uppercase text-red-500">
+            Order Not Found
+          </h1>
+
+          <a
+            href="/admin/orders"
+            className="mt-8 inline-block rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
+          >
+            Back to Orders
+          </a>
+        </div>
+      </main>
+    );
+  }
+
+  const allocation = await prisma.acreageAllocation.findFirst({
+    where: {
+      certificateNumber: order.certificateNumber,
+    },
+  });
+
+  return (
+    <main className="min-h-screen bg-black px-6 py-20 text-white">
+      <div className="mx-auto max-w-7xl">
+        <h1 className="text-5xl font-black uppercase text-yellow-400">
+          Order Detail
+        </h1>
+
+        <AdminNav />
+
+        <a
+          href="/admin/orders"
+          className="mt-6 inline-block rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
+        >
+          Back to Orders
+        </a>
+
+        <div className="mt-10 grid gap-6 md:grid-cols-3">
+          <div className="rounded-2xl border border-yellow-400 p-6">
+            <p className="text-sm uppercase text-gray-400">Certificate</p>
+            <p className="mt-2 text-xl font-black text-yellow-400">
+              {order.certificateNumber}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-white/20 p-6">
+            <p className="text-sm uppercase text-gray-400">Property ID</p>
+            <p className="mt-2 text-xl font-black">{order.propertyId}</p>
+          </div>
+
+          <div className="rounded-2xl border border-white/20 p-6">
+            <p className="text-sm uppercase text-gray-400">Payment Status</p>
+            <p className="mt-2 text-xl font-black text-green-400">
+              {order.paymentStatus}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-10 grid gap-6 md:grid-cols-2">
+          <section className="rounded-3xl border border-white/20 bg-white/5 p-8">
+            <h2 className="text-3xl font-black text-yellow-400">
+              Customer
+            </h2>
+
+            <div className="mt-6 space-y-4">
+              <p>
+                <span className="font-bold text-gray-400">Deed Name:</span>{" "}
+                {order.deedName}
+              </p>
+
+              <p>
+                <span className="font-bold text-gray-400">Email:</span>{" "}
+                {order.email || "No email recorded"}
+              </p>
+
+              <p>
+                <span className="font-bold text-gray-400">Purchased:</span>{" "}
+                {order.createdAt.toLocaleString()}
+              </p>
+            </div>
+          </section>
+
+          <section className="rounded-3xl border border-white/20 bg-white/5 p-8">
+            <h2 className="text-3xl font-black text-yellow-400">
+              Property
+            </h2>
+
+            <div className="mt-6 space-y-4">
+              <p>
+                <span className="font-bold text-gray-400">Type:</span>{" "}
+                {order.propertyType}
+              </p>
+
+              <p>
+                <span className="font-bold text-gray-400">State:</span>{" "}
+                {order.lunarState}
+              </p>
+
+              {order.acreagePurchased && (
+                <p>
+                  <span className="font-bold text-gray-400">
+                    Acreage Purchased:
+                  </span>{" "}
+                  {order.acreagePurchased} Acre
+                  {order.acreagePurchased === 1 ? "" : "s"}
+                </p>
+              )}
+
+              {allocation && (
+                <p>
+                  <span className="font-bold text-gray-400">
+                    Assigned Acre Range:
+                  </span>{" "}
+                  Acre {allocation.startingAcre.toLocaleString()}
+                  {allocation.startingAcre !== allocation.endingAcre
+                    ? ` through ${allocation.endingAcre.toLocaleString()}`
+                    : ""}
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <section className="mt-10 rounded-3xl border border-yellow-400/30 bg-yellow-400/10 p-8">
+          <h2 className="text-3xl font-black text-yellow-400">
+            Financial
+          </h2>
+
+          <div className="mt-6 grid gap-6 md:grid-cols-3">
+            <div>
+              <p className="text-sm uppercase text-gray-400">Amount Paid</p>
+              <p className="mt-2 text-3xl font-black">
+                ${order.amountPaid.toFixed(2)}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm uppercase text-gray-400">
+                Stripe Session
+              </p>
+              <p className="mt-2 break-all text-sm">
+                {order.stripeSessionId}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm uppercase text-gray-400">
+                Gold Seal Upgrade
+              </p>
+              <p className="mt-2 text-xl font-black">
+                {order.premiumGoldSeal ? "Yes" : "No"}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <div className="mt-10 flex flex-wrap gap-4">
+          <a
+            href={`/verify/${order.certificateNumber}`}
+            className="rounded-xl bg-yellow-400 px-6 py-3 font-black text-black"
+          >
+            View Verification
+          </a>
+
+          <a
+            href={`/api/generate-deed?propertyId=${order.propertyId}&deedName=${encodeURIComponent(
+              order.deedName
+            )}&certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
+            className="rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
+          >
+            Download Deed
+          </a>
+        </div>
+      </div>
+    </main>
+  );
+}

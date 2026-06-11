@@ -50,3 +50,17 @@ model StateInventory {
   totalAcres  Float    @default(50000)
   soldAcres   Float    @default(0)
 }
+model AcreageAllocation {
+  id                String   @id @default(cuid())
+  createdAt         DateTime @default(now())
+
+  orderId           String
+  certificateNumber String
+
+  stateName         String
+  propertyId        String
+
+  startingAcre      Int
+  endingAcre        Int
+  acresAssigned     Float
+}

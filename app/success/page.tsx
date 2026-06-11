@@ -14,6 +14,7 @@ export default async function SuccessPage({
   let propertyId = "R-001";
   let deedName = "Deed Recipient";
   let certificateNumber = "OOR-2026-000000";
+  let assignedAcreRange = "";
 
   if (params.session_id) {
     const session = await stripe.checkout.sessions.retrieve(params.session_id);
@@ -69,21 +70,49 @@ export default async function SuccessPage({
         },
       });
 
-            await prisma.stateInventory.upsert({
-        where: {
-          stateName: lunarState,
-        },
-        update: {
-          soldAcres: {
-            increment: acres,
-          },
-        },
-        create: {
-          stateName: lunarState,
-          totalAcres: 50000,
-          soldAcres: acres,
-        },
-      });
+            if (propertyType === "Rural Acre") {
+  const currentInventory = await prisma.stateInventory.upsert({
+    where: {
+      stateName: lunarState,
+    },
+    update: {},
+    create: {
+      stateName: lunarState,
+      totalAcres: 50000,
+      soldAcres: 0,
+    },
+  });
+
+  const startingAcre = Math.floor(currentInventory.soldAcres) + 1;
+  const endingAcre = Math.floor(currentInventory.soldAcres + acres);
+
+  await prisma.stateInventory.update({
+    where: {
+      stateName: lunarState,
+    },
+    data: {
+      soldAcres: {
+        increment: acres,
+      },
+    },
+  });
+
+  const allocation = await prisma.acreageAllocation.create({
+  data: {
+      orderId: propertyId,
+      certificateNumber,
+      stateName: lunarState,
+      propertyId,
+      startingAcre,
+      endingAcre,
+      acresAssigned: acres,
+    },
+  });
+     assignedAcreRange =
+  allocation.startingAcre === allocation.endingAcre
+    ? `Acre ${allocation.startingAcre.toLocaleString()}`
+    : `Acres ${allocation.startingAcre.toLocaleString()} through ${allocation.endingAcre.toLocaleString()}`;
+}
 
       await sendOrderEmail({
         to: email || "",
@@ -94,6 +123,14 @@ export default async function SuccessPage({
         certificateNumber,
         amountPaid,
       });
+       {assignedAcreRange && (
+  <div className="mx-auto mt-6 max-w-4xl rounded-2xl border border-yellow-400 p-6">
+    <p className="text-sm uppercase text-gray-400">Assigned Acre Range</p>
+    <p className="mt-2 text-3xl font-black text-yellow-400">
+      {assignedAcreRange}
+    </p>
+  </div>
+)}
     }
   }
 

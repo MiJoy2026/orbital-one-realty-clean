@@ -12,7 +12,11 @@ export default async function VerifyCertificatePage({
       certificateNumber: resolvedParams.certificateNumber,
     },
   });
-
+  const allocation = await prisma.acreageAllocation.findFirst({
+  where: {
+    certificateNumber: resolvedParams.certificateNumber,
+  },
+});
   if (!order) {
     return (
       <main className="min-h-screen bg-black px-6 py-20 text-center text-white">
@@ -78,7 +82,17 @@ export default async function VerifyCertificatePage({
             </p>
             </div>
 )}
-
+              {allocation && (
+            <div>
+              <p className="text-sm uppercase text-gray-400">Assigned Acre Range</p>
+              <p className="mt-2 text-xl font-bold">
+              Acre {allocation.startingAcre.toLocaleString()}
+              {allocation.startingAcre !== allocation.endingAcre
+              ? ` through ${allocation.endingAcre.toLocaleString()}`
+              : ""}
+            </p>
+          </div>
+              )}
             <div>
               <p className="text-sm uppercase text-gray-400">Lunar State</p>
               <p className="mt-2 text-xl font-bold">{order.lunarState}</p>
