@@ -53,6 +53,14 @@ const allocations = await prisma.acreageAllocation.findMany({
             <h2 className="text-3xl font-black text-yellow-400">
               Orders for {email}
             </h2>
+            <div className="mt-4">
+            <a
+               href={`/account/hoa?email=${encodeURIComponent(email)}`}
+               className="rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
+            >
+                View HOA Membership
+            </a>
+          </div>
 
             {orders.length === 0 ? (
               <p className="mt-6 text-gray-400">
