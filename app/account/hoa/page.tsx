@@ -88,7 +88,41 @@ export default async function AccountHoaPage({
                 </div>
               </div>
             </div>
+             <section className="mt-10 rounded-3xl border border-yellow-400/40 bg-white/5 p-8">
+  <h2 className="text-3xl font-black text-yellow-400">
+    HOA Member Card Preview
+  </h2>
 
+  <div className="mt-6 max-w-xl rounded-3xl border-2 border-yellow-400 bg-black p-8 shadow-2xl">
+    <p className="text-2xl font-black text-yellow-400">
+      ORBITAL ONE REALTY
+    </p>
+
+    <p className="mt-2 text-sm font-bold uppercase tracking-[0.25em] text-white">
+      2026 Founding HOA Member
+    </p>
+
+    <p className="mt-10 text-3xl font-black text-white">
+      {firstOrder.deedName}
+    </p>
+
+    <p className="mt-6 text-yellow-400">
+      Membership No: HOA-{firstOrder.certificateNumber}
+    </p>
+
+    <p className="mt-2 text-gray-300">
+      Member Since: {firstOrder.createdAt.toLocaleDateString()}
+    </p>
+
+    <p className="mt-2 text-gray-300">
+      Properties Owned: {orders.length}
+    </p>
+
+    <p className="mt-8 text-sm text-yellow-400">
+      Free HOA Membership • Lunar Newsletters • Future Member Benefits
+    </p>
+  </div>
+</section>
             <section className="mt-10 rounded-3xl border border-white/20 bg-white/5 p-8">
               <h2 className="text-3xl font-black text-yellow-400">
                 HOA Member Benefits
