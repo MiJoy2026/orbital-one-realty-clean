@@ -1,24 +1,33 @@
+import { redirect } from "next/navigation";
+import { getSessionUserId } from "../../../lib/session";
 import { prisma } from "../../../lib/prisma";
 
-export default async function AccountHoaPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ email?: string }>;
-}) {
-  const params = await searchParams;
-  const email = params.email || "";
+export default async function AccountHoaPage() {
+  const userId = await getSessionUserId();
 
-  const orders = email
-    ? await prisma.order.findMany({
-        where: {
-          email,
-        },
+  if (!userId) {
+    redirect("/login");
+  }
+
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+    include: {
+      orders: {
         orderBy: {
           createdAt: "asc",
         },
-      })
-    : [];
+      },
+    },
+  });
 
+  if (!user) {
+    redirect("/login");
+  }
+
+  const email = user.email;
+  const orders = user.orders;
   const firstOrder = orders[0];
 
   return (
@@ -144,6 +153,12 @@ export default async function AccountHoaPage({
                 className="rounded-xl bg-yellow-400 px-6 py-3 font-black text-black"
               >
                 Back to My Account
+              </a>
+              <a
+                href="/logout"
+                className="rounded-xl border border-white/30 px-6 py-3 font-black text-white"
+              >
+                Logout
               </a>
 
               <a

@@ -1,3 +1,4 @@
+import { createSession } from "../../../lib/session";
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "../../../lib/prisma";
@@ -29,9 +30,9 @@ export async function POST(request: Request) {
       return new NextResponse("Invalid email or password.", { status: 401 });
     }
 
-    return NextResponse.redirect(
-      new URL(`/account?email=${encodeURIComponent(user.email)}`, request.url)
-    );
+    await createSession(user.id);
+
+    return NextResponse.redirect(new URL("/account", request.url));
   } catch (error) {
     console.error(error);
 

@@ -1,31 +1,41 @@
+import { redirect } from "next/navigation";
+import { getSessionUserId } from "../../lib/session";
 import { prisma } from "../../lib/prisma";
 
-export default async function AccountPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ email?: string }>;
-}) {
-  const params = await searchParams;
-  const email = params.email || "";
+export default async function AccountPage() {
+  const userId = await getSessionUserId();
 
-  const orders = email
-  ? await prisma.order.findMany({
-      where: {
-        email,
-      },
-      orderBy: {
-        createdAt: "desc",
-      },
-    })
-  : [];
+  if (!userId) {
+    redirect("/login");
+  }
 
-const allocations = await prisma.acreageAllocation.findMany({
-  where: {
-    certificateNumber: {
-      in: orders.map((order) => order.certificateNumber),
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId,
     },
-  },
-});
+    include: {
+      orders: {
+        orderBy: {
+          createdAt: "desc",
+        },
+      },
+    },
+  });
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const email = user.email;
+  const orders = user.orders;
+
+  const allocations = await prisma.acreageAllocation.findMany({
+    where: {
+      certificateNumber: {
+        in: orders.map((order) => order.certificateNumber),
+      },
+    },
+  });
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -59,6 +69,12 @@ const allocations = await prisma.acreageAllocation.findMany({
                className="rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
             >
                 View HOA Membership
+            </a>
+            <a
+               href="/logout"
+               className="ml-3 rounded-xl border border-white/30 px-5 py-3 font-black text-white"
+            >
+                Logout
             </a>
           </div>
 
