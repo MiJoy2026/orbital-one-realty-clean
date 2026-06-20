@@ -235,7 +235,63 @@ const hoaStatus =
                 })}
               </div>
             )}
+              <section className="mt-16">
+  <h2 className="text-3xl font-black uppercase text-yellow-400">
+    My Lunar Properties
+  </h2>
+
+  <div className="mt-8 grid gap-6 md:grid-cols-2">
+    {orders.map((order) => {
+      const allocation = allocations.find(
+        (item) =>
+          item.certificateNumber === order.certificateNumber
+      );
+
+      return (
+        <div
+          key={`property-${order.id}`}
+          className="rounded-3xl border border-white/20 bg-white/5 p-6"
+        >
+          <p className="text-2xl font-black text-yellow-400">
+            {order.propertyId}
+          </p>
+
+          <p className="mt-2 text-gray-300">
+            {order.propertyType}
+          </p>
+
+          <p className="mt-2">
+            Lunar State: {order.lunarState}
+          </p>
+
+          {order.acreagePurchased && (
+            <p className="mt-2">
+              Acres Owned: {order.acreagePurchased}
+            </p>
+          )}
+
+          {allocation && (
+            <p className="mt-2 font-bold text-yellow-400">
+              Assigned Acre Range: Acre{" "}
+              {allocation.startingAcre}
+              {allocation.startingAcre !== allocation.endingAcre
+                ? ` - ${allocation.endingAcre}`
+                : ""}
+            </p>
+          )}
+
+          <a
+            href={`/explore/${order.propertyId}`}
+            className="mt-6 inline-block rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
+          >
+            View Property
+          </a>
           </div>
+             );
+            })}
+            </div>
+          </section>
+        </div>
         )}
       </div>
     </main>
