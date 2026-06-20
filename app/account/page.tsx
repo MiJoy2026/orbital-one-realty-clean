@@ -36,13 +36,60 @@ export default async function AccountPage() {
       },
     },
   });
+   const totalProperties = orders.length;
 
+const totalAcres = orders.reduce(
+  (sum, order) => sum + (order.acreagePurchased || 0),
+  0
+);
+
+const totalCertificates = orders.length;
+
+const hoaStatus =
+  orders.length > 0 ? "2026 Founding Member" : "Inactive";
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <div className="mx-auto max-w-6xl">
         <h1 className="text-5xl font-black uppercase text-yellow-400">
           My Orbital One Account
         </h1>
+          <div className="mt-10 grid gap-6 md:grid-cols-4">
+  <div className="rounded-2xl border border-yellow-400 bg-white/5 p-6">
+    <p className="text-sm uppercase text-gray-400">
+      Properties Owned
+    </p>
+    <p className="mt-2 text-4xl font-black text-yellow-400">
+      {totalProperties}
+    </p>
+  </div>
+
+  <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
+    <p className="text-sm uppercase text-gray-400">
+      Certificates
+    </p>
+    <p className="mt-2 text-4xl font-black">
+      {totalCertificates}
+    </p>
+  </div>
+
+  <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
+    <p className="text-sm uppercase text-gray-400">
+      Acres Owned
+    </p>
+    <p className="mt-2 text-4xl font-black">
+      {totalAcres}
+    </p>
+  </div>
+
+  <div className="rounded-2xl border border-green-500 bg-green-950/30 p-6">
+    <p className="text-sm uppercase text-gray-400">
+      HOA Status
+    </p>
+    <p className="mt-2 text-xl font-black text-green-400">
+      {hoaStatus}
+    </p>
+  </div>
+</div>
 
         <p className="mt-4 text-xl text-gray-300">
           View your purchased lunar properties and certificates.
@@ -62,6 +109,9 @@ export default async function AccountPage() {
           <div className="mt-10">
             <h2 className="text-3xl font-black text-yellow-400">
               Orders for {email}
+            </h2>
+            <h2 className="mt-12 text-3xl font-black uppercase text-yellow-400">
+              My Documents
             </h2>
             <div className="mt-4">
             <a
