@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { redirect } from "next/navigation";
 import { getSessionUserId } from "../../lib/session";
 import { prisma } from "../../lib/prisma";
@@ -58,8 +59,16 @@ const portfolioValue = orders.reduce(
   0
 );
   return (
-    <main className="min-h-screen bg-black px-6 py-20 text-white">
-      <div className="mx-auto max-w-6xl">
+    <main
+      className="min-h-screen px-6 py-20 text-white"
+      style={{
+        backgroundImage: "url('/backgrounds/account-bg.jpg')",
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed",
+      }}
+    >
+      <div className="mx-auto max-w-6xl rounded-3xl bg-black/75 p-8 backdrop-blur-sm">
         <h1 className="text-5xl font-black uppercase text-yellow-400">
           My Orbital One Account
         </h1>
@@ -153,40 +162,79 @@ const portfolioValue = orders.reduce(
                   return (
                     <div
                       key={`property-${order.id}`}
-                      className="rounded-3xl border border-white/20 bg-white/5 p-6"
+                      className="overflow-hidden rounded-3xl border border-white/20 bg-white/5 p-6 transition hover:border-yellow-400 hover:bg-yellow-400/5"
                     >
-                      <p className="text-2xl font-black text-yellow-400">
-                        {order.propertyId}
+                      <Image
+                       src={
+                       order.propertyType === "City Block"
+                       ? "/property-images/city-block.jpg"
+                       : order.propertyType === "Town Block"
+                       ? "/property-images/town-block.jpg"
+                       : "/property-images/rural-acre.jpg"
+                       }
+                       alt={order.propertyType}
+                       width={800}
+                       height={500}
+                       className="mb-5 h-64 w-full rounded-2xl object-cover"
+                      />
+                      <div className="mb-3 inline-block rounded-full bg-yellow-400 px-4 py-1 text-sm font-black text-black">
+                      {order.propertyType}
+                      </div>
+                      <div className="flex items-center justify-between">
+                      <p className="text-3xl font-black text-yellow-400">
+    {order.propertyId}
                       </p>
+
+                      <span className="rounded-full border border-yellow-400 px-3 py-1 text-xs font-black uppercase text-yellow-400">
+                        Owned
+                      </span>
+                      </div>
 
                       <p className="mt-2 text-gray-300">
                         {order.propertyType}
                       </p>
 
-                      <p className="mt-2">Lunar State: {order.lunarState}</p>
+                      <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-black/30 p-4">
+                      <p>
+                      <span className="font-bold text-gray-400">Lunar State:</span>{" "}
+                        {order.lunarState}
+                      </p>
 
-                      {order.acreagePurchased && (
-                        <p className="mt-2">
-                          Acres Owned: {order.acreagePurchased}
-                        </p>
+                        {order.acreagePurchased && (
+                      <p>
+                      <span className="font-bold text-gray-400">Acres Owned:</span>{" "}
+                        {order.acreagePurchased}
+                      </p>
                       )}
+                      </div>
 
                       {allocation && (
-                        <p className="mt-2 font-bold text-yellow-400">
-                          Assigned Acre Range: Acre{" "}
-                          {allocation.startingAcre.toLocaleString()}
-                          {allocation.startingAcre !== allocation.endingAcre
+                       <div className="mt-4 rounded-2xl border border-yellow-400/40 bg-yellow-400/10 p-4">
+                        <p className="text-sm font-bold uppercase text-yellow-400">
+                          Assigned Acre Range
+                        </p>
+
+                        <p className="mt-2 text-2xl font-black text-yellow-400">
+                          Acre {allocation.startingAcre.toLocaleString()}
+                           {allocation.startingAcre !== allocation.endingAcre
                             ? ` - ${allocation.endingAcre.toLocaleString()}`
                             : ""}
                         </p>
+                       </div>
                       )}
 
-                      <a
+                      <div className="mt-6 flex items-center justify-between">
+                       <span className="text-sm uppercase tracking-wider text-gray-500">
+                         Orbital One Realty
+                       </span>
+
+                       <a
                         href={`/explore/${order.propertyId}`}
-                        className="mt-6 inline-block rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
-                      >
-                        View Property
-                      </a>
+                        className="rounded-xl bg-yellow-400 px-6 py-3 font-black text-black transition hover:scale-105"
+                       >
+                         View Property →
+                       </a>
+                      </div>
                     </div>
                   );
                 })}
