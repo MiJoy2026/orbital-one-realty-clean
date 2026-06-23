@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import "leaflet/dist/leaflet.css";
 
 import {
@@ -19,6 +21,7 @@ export default function LunarLeafletMap() {
     [0, 0],
     [1000, 1000],
   ] as [[number, number], [number, number]];
+  const [selectedState, setSelectedState] = useState<string | null>(null);
 
   return (
     <div className="mx-auto mt-10 w-full max-w-7xl">
@@ -45,7 +48,8 @@ export default function LunarLeafletMap() {
         </div>
       </div>
 
-      <div className="h-[850px] w-full overflow-hidden rounded-3xl border border-yellow-400/40 bg-black shadow-2xl">
+      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="h-[850px] overflow-hidden rounded-3xl border border-yellow-400/40 bg-black shadow-2xl">
         <MapContainer
           key="orbital-one-lunar-map"
           crs={CRS.Simple}
@@ -80,6 +84,9 @@ export default function LunarLeafletMap() {
                   fillOpacity: 0.03,
                 }}
                 eventHandlers={{
+                   click: () => {
+                   setSelectedState(region.name);
+                   },
                   mouseover: (event) => {
                     event.target.setStyle({
                       opacity: 1,
@@ -132,6 +139,42 @@ export default function LunarLeafletMap() {
             </div>
           ))}
         </MapContainer>
+        </div>
+
+        <div className="rounded-3xl border border-yellow-400/30 bg-black/70 p-6">
+          <p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-400">
+            State Information
+          </p>
+
+          {selectedState ? (
+            <>
+              <h2 className="mt-4 text-3xl font-black text-yellow-400">
+                {selectedState}
+              </h2>
+
+              <p className="mt-4 text-gray-300">
+                Orbital One Lunar State
+              </p>
+
+              <div className="mt-6 space-y-3">
+                <p>🌕 3 Cities</p>
+                <p>🏘 20 Towns</p>
+                <p>🚀 Rural Acreage Available</p>
+              </div>
+
+              <a
+                href={`/states/${encodeURIComponent(selectedState)}`}
+                className="mt-8 inline-block rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
+              >
+                Browse Properties
+              </a>
+            </>
+          ) : (
+            <div className="mt-6 text-gray-400">
+              Click a lunar state on the map to view information.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

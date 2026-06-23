@@ -34,6 +34,24 @@ export default function MoonMapPage() {
           states. Select a state to view cities, towns, rural acreage, and
           available property opportunities.
         </p>
+        <form
+           action="/atlas-search"
+           className="mx-auto mt-8 flex max-w-2xl flex-col gap-3 rounded-2xl border border-yellow-400/30 bg-black/60 p-4 md:flex-row"
+        >
+        <input
+           name="q"
+           className="flex-1 rounded-xl border border-white/20 bg-black px-4 py-3 text-white"
+           placeholder="Search state, city, town, or property ID..."
+           required
+        />
+
+        <button
+           type="submit"
+           className="rounded-xl bg-yellow-400 px-6 py-3 font-black text-black"
+        >
+            Search Atlas
+        </button>
+        </form>
 
         <div className="mt-10 grid gap-6 md:grid-cols-4">
           <div className="rounded-2xl border border-yellow-400 bg-white/5 p-6 text-center">

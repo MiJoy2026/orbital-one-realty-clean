@@ -10,6 +10,10 @@ export type LunarProperty = {
   size: string;
   price: number;
   status: PropertyStatus;
+
+    mapX?: number;
+    mapY?: number;
+    
   nearbyAttractions: string[];
 };
 
@@ -95,6 +99,10 @@ export const sampleProperties: LunarProperty[] = [
     size: "1 Acre",
     price: 24.95,
     status: "Available",
+
+    mapX: 500,
+    mapY: 500,
+
     nearbyAttractions: ["Apollo 11 Landing Site", "Sea of Tranquility"],
   },
   {
@@ -104,6 +112,10 @@ export const sampleProperties: LunarProperty[] = [
     size: "1/2 Acre",
     price: 16.95,
     status: "Available",
+
+    mapX: 500,
+    mapY: 500,
+
     nearbyAttractions: ["Famous Lunar Craters", "Historic Moon Plains"],
   },
   {
@@ -113,6 +125,10 @@ export const sampleProperties: LunarProperty[] = [
     size: "1 Acre",
     price: 24.95,
     status: "Sold",
+
+    mapX: 500,
+    mapY: 500,
+
     nearbyAttractions: ["Tycho Crater", "Southern Highlands"],
   },
   {
@@ -123,6 +139,10 @@ export const sampleProperties: LunarProperty[] = [
     size: "Town Block",
     price: 39.95,
     status: "Available",
+
+    mapX: 500,
+    mapY: 500,
+
     nearbyAttractions: ["Copernicus Crater", "Lunar Ridge Trail"],
   },
   {
@@ -133,6 +153,10 @@ export const sampleProperties: LunarProperty[] = [
     size: "Town Block",
     price: 39.95,
     status: "Sold",
+
+    mapX: 500,
+    mapY: 500,
+
     nearbyAttractions: ["Mare Imbrium", "Lunar Overlook"],
   },
   {
@@ -143,6 +167,10 @@ export const sampleProperties: LunarProperty[] = [
     size: "City Block",
     price: 54.95,
     status: "Available",
+
+    mapX: 500,
+    mapY: 500,
+
     nearbyAttractions: ["Aristarchus Plateau", "Bright Crater Field"],
   },
   {
@@ -153,6 +181,10 @@ export const sampleProperties: LunarProperty[] = [
     size: "City Block",
     price: 54.95,
     status: "Sold",
+
+    mapX: 500,
+    mapY: 500,
+
     nearbyAttractions: ["Lunar North Vista", "Highland Ridge"],
   },
 ];
