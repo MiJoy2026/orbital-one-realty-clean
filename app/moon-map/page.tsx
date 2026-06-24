@@ -1,6 +1,7 @@
 "use client";
-
+import { sampleProperties } from "../../lib/moon-data";
 import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
 
 const LunarLeafletMap = dynamic(
   () => import("@/components/LunarLeafletMap"),
@@ -10,6 +11,15 @@ const LunarLeafletMap = dynamic(
 );
 
 export default function MoonMapPage() {
+  const searchParams = useSearchParams();
+
+  const selectedProperty = searchParams.get("property");
+  const selectedPropertyDetails = selectedProperty
+  ? sampleProperties.find(
+      (property) =>
+        property.id.toLowerCase() === selectedProperty.toLowerCase()
+    )
+  : null;
   return (
     <main
       className="min-h-screen px-6 py-20 text-white"
@@ -83,9 +93,53 @@ export default function MoonMapPage() {
           </div>
         </div>
 
-        <div className="mt-10 rounded-3xl border border-yellow-400/30 bg-black/60 p-4">
-          <LunarLeafletMap />
-        </div>
+      <div className="mt-10 rounded-3xl border border-yellow-400/30 bg-black/60 p-4">
+        {selectedPropertyDetails && (
+  <div className="mb-4 rounded-2xl border border-yellow-400 bg-yellow-400/10 p-4">
+    <p className="text-sm uppercase tracking-[0.2em] text-yellow-400">
+      Selected Property
+    </p>
+
+    <p className="mt-2 text-3xl font-black text-yellow-400">
+      {selectedPropertyDetails.id}
+    </p>
+
+    <div className="mt-4 grid gap-3 md:grid-cols-4">
+      <p>
+        <span className="text-gray-400">Type:</span>{" "}
+        {selectedPropertyDetails.type}
+      </p>
+
+      <p>
+        <span className="text-gray-400">State:</span>{" "}
+        {selectedPropertyDetails.state}
+      </p>
+
+      <p>
+        <span className="text-gray-400">Status:</span>{" "}
+        {selectedPropertyDetails.status}
+      </p>
+
+      <p>
+        <span className="text-gray-400">Coordinates:</span>{" "}
+        X: {selectedPropertyDetails.mapX ?? "Pending"} · Y:{" "}
+        {selectedPropertyDetails.mapY ?? "Pending"}
+      </p>
+    </div>
+
+    <a
+      href={`/explore/${selectedPropertyDetails.id}`}
+      className="mt-4 inline-block rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
+    >
+      View Property Details
+    </a>
+  </div>
+)}
+
+      <LunarLeafletMap
+        selectedProperty={selectedPropertyDetails}
+/>
+      </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           <div className="rounded-2xl border border-white/20 bg-white/5 p-6">

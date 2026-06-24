@@ -229,13 +229,22 @@ export default async function PropertyExplorerPage({
                </div>
               )}
             </div>
+               <div className="mt-6 rounded-2xl border border-white/20 bg-black/40 p-4">
+                <p className="text-sm uppercase text-gray-400">
+                  Atlas Coordinates
+                </p>
+                
+                <p className="mt-2 text-xl font-black text-yellow-400">
+                 X: {property.mapX ?? "Pending"} · Y: {property.mapY ?? "Pending"}
+                </p>
+               </div>
 
             <div className="mt-8">
               <a
-                href="/moon-map"
-                className="rounded-xl bg-yellow-400 px-6 py-3 font-black text-black"
+                 href={`/moon-map?property=${encodeURIComponent(property.id)}`}
+                 className="rounded-xl bg-yellow-400 px-6 py-3 font-black text-black"
               >
-                View on Moon Atlas
+                  View on Moon Atlas
               </a>
             </div>
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import "leaflet/dist/leaflet.css";
 
@@ -12,17 +12,59 @@ import {
   Marker,
   ZoomControl,
   ScaleControl,
+  useMap,
 } from "react-leaflet";
 import { CRS, divIcon } from "leaflet";
 import { lunarMapRegions } from "@/lib/lunar-map-regions";
 
-export default function LunarLeafletMap() {
+type SelectedProperty = {
+  id: string;
+  type: string;
+  state: string;
+  status: string;
+  mapX?: number;
+  mapY?: number;
+};
+function FlyToSelectedProperty({
+  selectedProperty,
+}: {
+  selectedProperty?: SelectedProperty | null;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (selectedProperty?.mapX && selectedProperty?.mapY) {
+      map.flyTo([selectedProperty.mapY, selectedProperty.mapX], 2, {
+        duration: 1.2,
+      });
+    }
+  }, [map, selectedProperty]);
+
+  return null;
+}
+export default function LunarLeafletMap({
+  selectedProperty,
+}: {
+  selectedProperty?: SelectedProperty | null;
+}) {
   const bounds = [
     [0, 0],
     [1000, 1000],
   ] as [[number, number], [number, number]];
   const [selectedState, setSelectedState] = useState<string | null>(null);
-
+  const selectedPropertyIcon = divIcon({
+  className: "",
+  html: `<div style="
+    background:#facc15;
+    color:#000;
+    font-weight:900;
+    padding:6px 10px;
+    border-radius:999px;
+    border:2px solid #000;
+    box-shadow:0 0 18px rgba(250,204,21,0.9);
+    white-space:nowrap;
+  ">📍 ${selectedProperty?.id || "Property"}</div>`,
+});
   return (
     <div className="mx-auto mt-10 w-full max-w-7xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-yellow-400/30 bg-black/70 px-5 py-4">
@@ -69,7 +111,7 @@ export default function LunarLeafletMap() {
         >
           <ZoomControl position="topright" />
           <ScaleControl position="bottomleft" />
-
+          <FlyToSelectedProperty selectedProperty={selectedProperty} />
           <ImageOverlay url="/atlas/moon-atlas-v2.jpg" bounds={bounds} />
 
           {lunarMapRegions.map((region) => (
@@ -138,6 +180,29 @@ export default function LunarLeafletMap() {
               />
             </div>
           ))}
+          {selectedProperty?.mapX && selectedProperty?.mapY && (
+  <Marker
+    position={[selectedProperty.mapY, selectedProperty.mapX]}
+    icon={selectedPropertyIcon}
+  >
+    <Popup>
+      <div style={{ minWidth: "180px" }}>
+        <strong>{selectedProperty.id}</strong>
+        <br />
+        {selectedProperty.type}
+        <br />
+        {selectedProperty.state}
+        <br />
+        Status: {selectedProperty.status}
+        <br />
+        <br />
+        <a href={`/explore/${selectedProperty.id}`}>
+          View Property Details
+        </a>
+      </div>
+    </Popup>
+  </Marker>
+)}
         </MapContainer>
         </div>
 
