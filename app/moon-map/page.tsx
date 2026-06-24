@@ -20,6 +20,15 @@ export default function MoonMapPage() {
         property.id.toLowerCase() === selectedProperty.toLowerCase()
     )
   : null;
+  const nearbyProperties = selectedPropertyDetails
+  ? sampleProperties
+      .filter(
+        (property) =>
+          property.id !== selectedPropertyDetails.id &&
+          property.state === selectedPropertyDetails.state
+      )
+      .slice(0, 5)
+  : [];
   return (
     <main
       className="min-h-screen px-6 py-20 text-white"
@@ -133,12 +142,35 @@ export default function MoonMapPage() {
     >
       View Property Details
     </a>
+              {nearbyProperties.length > 0 && (
+    <div className="mt-6 border-t border-yellow-400/20 pt-6">
+    <p className="text-sm uppercase tracking-[0.2em] text-yellow-400">
+      Nearby Properties
+    </p>
+
+      <div className="mt-4 grid gap-3 md:grid-cols-5">
+       {nearbyProperties.map((property) => (
+        <a
+          key={property.id}
+          href={`/explore/${property.id}`}
+          className="rounded-xl border border-white/20 bg-black/40 p-3 text-center transition hover:border-yellow-400"
+        >
+          <p className="font-black text-yellow-400">
+            {property.id}
+          </p>
+
+          <p className="mt-1 text-xs text-gray-400">
+            {property.type}
+          </p>
+        </a>
+       ))}
+      </div>
+    </div>
+   )}
   </div>
 )}
-
-      <LunarLeafletMap
-        selectedProperty={selectedPropertyDetails}
-/>
+      <LunarLeafletMap selectedProperty={selectedPropertyDetails} />
+      
       </div>
 
         <div className="mt-10 grid gap-6 md:grid-cols-3">
