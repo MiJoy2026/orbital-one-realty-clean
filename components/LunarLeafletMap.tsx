@@ -1,9 +1,11 @@
 "use client";
-
+import {
+  getCitiesByState,
+  getLocationCoordinates,
+} from "@/lib/lunar-location-service";
+import { getPropertyCountsByState } from "@/lib/property-service";
 import { useEffect, useState } from "react";
-
 import "leaflet/dist/leaflet.css";
-
 import {
   MapContainer,
   ImageOverlay,
@@ -44,14 +46,27 @@ function FlyToSelectedProperty({
 }
 export default function LunarLeafletMap({
   selectedProperty,
+  nearbyProperties = [],
 }: {
   selectedProperty?: SelectedProperty | null;
+  nearbyProperties?: SelectedProperty[];
 }) {
   const bounds = [
     [0, 0],
     [1000, 1000],
   ] as [[number, number], [number, number]];
   const [selectedState, setSelectedState] = useState<string | null>(null);
+  const propertyCounts = getPropertyCountsByState();
+
+  const selectedStateStats = selectedState
+    ? propertyCounts[selectedState]
+    : null;
+    const visibleCities = selectedState
+  ? getCitiesByState(selectedState).map((city) => ({
+      name: city,
+      ...getLocationCoordinates(selectedState, city, "city"),
+    }))
+  : [];
   const selectedPropertyIcon = divIcon({
   className: "",
   html: `<div style="
@@ -87,6 +102,17 @@ export default function LunarLeafletMap({
           <span className="rounded-full border border-yellow-400/50 px-3 py-1 text-yellow-400">
             Click State
           </span>
+          <span className="rounded-full border border-green-500 px-3 py-1 text-green-400">
+            Available
+          </span>
+
+          <span className="rounded-full border border-red-500 px-3 py-1 text-red-400">
+            Sold
+          </span>
+
+          <span className="rounded-full border border-yellow-400 px-3 py-1 text-yellow-400">
+            Selected
+          </span>
         </div>
       </div>
 
@@ -119,12 +145,30 @@ export default function LunarLeafletMap({
               <Polygon
                 key={`${region.name}-polygon`}
                 positions={region.positions}
-                pathOptions={{
-                  color: "#facc15",
-                  weight: 1,
-                  opacity: 0.35,
-                  fillOpacity: 0.03,
-                }}
+                  pathOptions={{
+                  color: (() => {
+                  const stats = propertyCounts[region.name];
+
+                   if (!stats || stats.total === 0) {
+                   return "#facc15";
+                  }
+
+                  const availableRatio = stats.available / stats.total;
+
+                   if (availableRatio >= 0.7) {
+                   return "#22c55e";
+                  }
+
+                   if (availableRatio >= 0.3) {
+                   return "#facc15";
+                  }
+
+                   return "#dc2626";
+                  })(),
+                    weight: 2,
+                    opacity: 0.65,
+                    fillOpacity: 0.06,
+                  }}
                 eventHandlers={{
                    click: () => {
                    setSelectedState(region.name);
@@ -132,8 +176,8 @@ export default function LunarLeafletMap({
                   mouseover: (event) => {
                     event.target.setStyle({
                       opacity: 1,
-                      weight: 3,
-                      fillOpacity: 0.28,
+                      weight: 4,
+                      fillOpacity: 0.3,
                     });
                   },
                   mouseout: (event) => {
@@ -180,6 +224,68 @@ export default function LunarLeafletMap({
               />
             </div>
           ))}
+          {visibleCities.map((city) => (
+  <Marker
+    key={`city-${city.name}`}
+    position={[city.y, city.x]}
+    icon={divIcon({
+      className: "",
+      html: `<div style="
+        color:#7dd3fc;
+        font-weight:800;
+        font-size:13px;
+        text-transform:uppercase;
+        text-shadow:0 0 8px #000;
+        white-space:nowrap;
+      ">🏙 ${city.name}</div>`,
+    })}
+  >
+    <Popup>
+      <div>
+        <strong>{city.name}</strong>
+        <br />
+        Lunar City
+      </div>
+    </Popup>
+  </Marker>
+))}
+        {nearbyProperties.map((property) =>
+  property.mapX && property.mapY ? (
+    <Marker
+      key={`nearby-${property.id}`}
+      position={[property.mapY, property.mapX]}
+      icon={divIcon({
+        className: "",
+        html: `<div style="
+          background:${property.status === "Sold" ? "#dc2626" : "#22c55e"};
+          color:${property.status === "Sold" ? "#fff" : "#000"};
+          font-weight:900;
+          padding:5px 9px;
+          border-radius:999px;
+          border:2px solid #000;
+          box-shadow:0 0 12px rgba(255,255,255,0.45);
+          white-space:nowrap;
+          font-size:11px;
+        ">${property.id}</div>`,
+      })}
+    >
+      <Popup>
+        <div style={{ minWidth: "180px" }}>
+          <strong>{property.id}</strong>
+          <br />
+          {property.type}
+          <br />
+          {property.state}
+          <br />
+          Status: {property.status}
+          <br />
+          <br />
+          <a href={`/explore/${property.id}`}>View Property</a>
+        </div>
+      </Popup>
+    </Marker>
+  ) : null
+)}
           {selectedProperty?.mapX && selectedProperty?.mapY && (
   <Marker
     position={[selectedProperty.mapY, selectedProperty.mapX]}
@@ -224,8 +330,21 @@ export default function LunarLeafletMap({
               <div className="mt-6 space-y-3">
                 <p>🌕 3 Cities</p>
                 <p>🏘 20 Towns</p>
-                <p>🚀 Rural Acreage Available</p>
-              </div>
+
+                {selectedStateStats ? (
+                <>
+                <p>📍 {selectedStateStats.total} Properties</p>
+                <p className="text-green-400">
+                  🟢 {selectedStateStats.available} Available
+                </p>
+                <p className="text-red-400">
+                  🔴 {selectedStateStats.sold} Sold
+                </p>
+                </>
+                ) : (
+                <p>🚀 Select a state to view inventory.</p>
+                )}
+                </div>
 
               <a
                 href={`/states/${encodeURIComponent(selectedState)}`}
