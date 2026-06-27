@@ -1,4 +1,5 @@
 "use client";
+import { getNearbyPropertiesForAttraction } from "@/lib/attraction-service";
 import { lunarAttractions } from "@/lib/lunar-attractions";
 import {
   getCitiesByState,
@@ -162,6 +163,14 @@ export default function LunarLeafletMap({
     white-space:nowrap;
   ">📍 ${selectedProperty?.id || "Property"}</div>`,
 });
+
+  const attractionNearbyMap = Object.fromEntries(
+  lunarAttractions.map((attraction) => [
+    attraction.id,
+    getNearbyPropertiesForAttraction(attraction.id),
+  ])
+);
+
   return (
     <div className="mx-auto mt-10 w-full max-w-7xl">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-yellow-400/30 bg-black/70 px-5 py-4">
@@ -440,15 +449,35 @@ export default function LunarLeafletMap({
       })}
     >
       <Popup>
-        <div style={{ minWidth: "220px" }}>
+        <div style={{ minWidth: "240px" }}>
           <strong>{attraction.name}</strong>
           <br />
-          {attraction.type}
+            {attraction.type}
           <br />
-          State: {attraction.state}
+             State: {attraction.state}
           <br />
           <br />
-          {attraction.description}
+            {attraction.description}
+
+          <br />
+          <br />
+            <a href={`/attractions/${attraction.id}`}>
+              View Attraction
+            </a>
+
+          <br />
+          <br />
+          <strong>Nearby Properties</strong>
+
+          <div>
+           {attractionNearbyMap[attraction.id]?.map((property) => (
+            <div key={property.id}>
+              <a href={`/explore/${property.id}`}>
+                {property.id} — {property.type}
+              </a>
+            </div>
+          ))}
+          </div>
         </div>
       </Popup>
     </Marker>
