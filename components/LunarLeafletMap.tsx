@@ -1,8 +1,10 @@
 "use client";
 import {
   getCitiesByState,
+  getTownsByState,
   getLocationCoordinates,
 } from "@/lib/lunar-location-service";
+import { stateCenters } from "@/lib/property-coordinates";
 import { getPropertyCountsByState } from "@/lib/property-service";
 import { useEffect, useState } from "react";
 import "leaflet/dist/leaflet.css";
@@ -27,6 +29,29 @@ type SelectedProperty = {
   mapX?: number;
   mapY?: number;
 };
+function TrackZoomLevel({
+  onZoomChange,
+}: {
+  onZoomChange: (zoom: number) => void;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    onZoomChange(map.getZoom());
+
+    const handleZoom = () => {
+      onZoomChange(map.getZoom());
+    };
+
+    map.on("zoomend", handleZoom);
+
+    return () => {
+      map.off("zoomend", handleZoom);
+    };
+  }, [map, onZoomChange]);
+
+  return null;
+}
 function FlyToSelectedProperty({
   selectedProperty,
 }: {
@@ -41,8 +66,52 @@ function FlyToSelectedProperty({
       });
     }
   }, [map, selectedProperty]);
+  
 
   return null;
+}
+function FlyToSelectedState({
+  selectedState,
+}: {
+  selectedState: string | null;
+}) {
+    const map = useMap();
+  useEffect(() => {
+    if (!selectedState) {
+      return;
+    }
+
+    const center = stateCenters[selectedState] ?? stateCenters.Default;
+
+    map.flyTo([center.y, center.x], 1, {
+      duration: 1.2,
+    });
+  }, [map, selectedState]);
+
+  return null;
+}
+function MapHomeButton({
+  onReset,
+}: {
+  onReset: () => void;
+}) {
+  const map = useMap();
+
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        map.flyTo([500, 500], 0, {
+          duration: 1.2,
+        });
+
+        onReset();
+      }}
+      className="absolute left-4 top-4 z-[1000] rounded-xl bg-yellow-400 px-4 py-2 font-black text-black shadow-lg"
+    >
+      🌕 Full Moon
+    </button>
+  );
 }
 export default function LunarLeafletMap({
   selectedProperty,
@@ -56,6 +125,11 @@ export default function LunarLeafletMap({
     [1000, 1000],
   ] as [[number, number], [number, number]];
   const [selectedState, setSelectedState] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState(0);
+  const [showStates, setShowStates] = useState(true);
+  const [showCities, setShowCities] = useState(true);
+  const [showTowns, setShowTowns] = useState(false);
+  const [showProperties, setShowProperties] = useState(true);
   const propertyCounts = getPropertyCountsByState();
 
   const selectedStateStats = selectedState
@@ -65,6 +139,12 @@ export default function LunarLeafletMap({
   ? getCitiesByState(selectedState).map((city) => ({
       name: city,
       ...getLocationCoordinates(selectedState, city, "city"),
+    }))
+  : [];
+  const visibleTowns = selectedState
+  ? getTownsByState(selectedState).map((town) => ({
+      name: town,
+      ...getLocationCoordinates(selectedState, town, "town"),
     }))
   : [];
   const selectedPropertyIcon = divIcon({
@@ -88,7 +168,7 @@ export default function LunarLeafletMap({
             Lunar Atlas Viewer
           </p>
           <p className="mt-1 text-sm text-gray-400">
-            Zoom, drag, and select highlighted lunar states.
+            Zoom, drag, and select highlighted lunar states. Current zoom: {zoomLevel}
           </p>
         </div>
 
@@ -113,6 +193,41 @@ export default function LunarLeafletMap({
           <span className="rounded-full border border-yellow-400 px-3 py-1 text-yellow-400">
             Selected
           </span>
+          <label className="flex items-center gap-1 rounded-full border border-white/20 px-3 py-1">
+           <input
+             type="checkbox"
+             checked={showStates}
+             onChange={() => setShowStates(!showStates)}
+           />
+           States
+          </label>
+
+          <label className="flex items-center gap-1 rounded-full border border-white/20 px-3 py-1">
+           <input
+             type="checkbox"
+             checked={showCities}
+             onChange={() => setShowCities(!showCities)}
+           />
+           Cities
+          </label>
+
+          <label className="flex items-center gap-1 rounded-full border border-white/20 px-3 py-1">
+           <input
+             type="checkbox"
+             checked={showTowns}
+             onChange={() => setShowTowns(!showTowns)}
+           />
+           Towns
+          </label>
+
+         <label className="flex items-center gap-1 rounded-full border border-white/20 px-3 py-1">
+           <input
+             type="checkbox"
+             checked={showProperties}
+             onChange={() => setShowProperties(!showProperties)}
+           />
+           Properties
+         </label>
         </div>
       </div>
 
@@ -138,9 +253,17 @@ export default function LunarLeafletMap({
           <ZoomControl position="topright" />
           <ScaleControl position="bottomleft" />
           <FlyToSelectedProperty selectedProperty={selectedProperty} />
+          <FlyToSelectedState selectedState={selectedState} />
+          <TrackZoomLevel onZoomChange={setZoomLevel} />
+          <MapHomeButton
+             onReset={() => {
+               setSelectedState(null);
+               setShowTowns(false);
+            }}
+          />
           <ImageOverlay url="/atlas/moon-atlas-v2.jpg" bounds={bounds} />
 
-          {lunarMapRegions.map((region) => (
+          {showStates && lunarMapRegions.map((region) => (
             <div key={region.name}>
               <Polygon
                 key={`${region.name}-polygon`}
@@ -224,7 +347,7 @@ export default function LunarLeafletMap({
               />
             </div>
           ))}
-          {visibleCities.map((city) => (
+          {showCities && zoomLevel >= 0 && visibleCities.map((city) => (
   <Marker
     key={`city-${city.name}`}
     position={[city.y, city.x]}
@@ -240,16 +363,53 @@ export default function LunarLeafletMap({
       ">🏙 ${city.name}</div>`,
     })}
   >
-    <Popup>
-      <div>
-        <strong>{city.name}</strong>
-        <br />
-        Lunar City
+        <Popup>
+      <div style={{ minWidth: "160px" }}>
+         <strong>{city.name}</strong>
+         <br />
+         Lunar City
+         <br />
+         <br />
+         <a href={`/cities/${encodeURIComponent(city.name)}`}>
+           View City
+         </a>
       </div>
-    </Popup>
+        </Popup>
   </Marker>
 ))}
-        {nearbyProperties.map((property) =>
+         {showTowns &&
+  zoomLevel >= 0 &&
+  visibleTowns.map((town) => (
+    <Marker
+      key={`town-${town.name}`}
+      position={[town.y, town.x]}
+      icon={divIcon({
+        className: "",
+        html: `<div style="
+          color:#fde68a;
+          font-weight:800;
+          font-size:11px;
+          text-transform:uppercase;
+          text-shadow:0 0 8px #000;
+          white-space:nowrap;
+        ">🏘 ${town.name}</div>`,
+      })}
+    >
+      <Popup>
+        <div style={{ minWidth: "160px" }}>
+          <strong>{town.name}</strong>
+          <br />
+          Lunar Town
+          <br />
+          <br />
+          <a href={`/towns/${encodeURIComponent(town.name)}`}>
+            View Town
+          </a>
+        </div>
+      </Popup>
+    </Marker>
+  ))}
+        {showProperties && zoomLevel >= 0 && nearbyProperties.map((property) =>
   property.mapX && property.mapY ? (
     <Marker
       key={`nearby-${property.id}`}
@@ -286,7 +446,7 @@ export default function LunarLeafletMap({
     </Marker>
   ) : null
 )}
-          {selectedProperty?.mapX && selectedProperty?.mapY && (
+          {showProperties && selectedProperty?.mapX && selectedProperty?.mapY && (
   <Marker
     position={[selectedProperty.mapY, selectedProperty.mapX]}
     icon={selectedPropertyIcon}
