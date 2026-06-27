@@ -1,4 +1,5 @@
 "use client";
+import { lunarAttractions } from "@/lib/lunar-attractions";
 import {
   getCitiesByState,
   getTownsByState,
@@ -130,6 +131,7 @@ export default function LunarLeafletMap({
   const [showCities, setShowCities] = useState(true);
   const [showTowns, setShowTowns] = useState(false);
   const [showProperties, setShowProperties] = useState(true);
+  const [showAttractions, setShowAttractions] = useState(false);;
   const propertyCounts = getPropertyCountsByState();
 
   const selectedStateStats = selectedState
@@ -228,6 +230,14 @@ export default function LunarLeafletMap({
            />
            Properties
          </label>
+          <label className="flex items-center gap-1 rounded-full border border-white/20 px-3 py-1">
+           <input
+             type="checkbox"
+             checked={showAttractions}
+             onChange={() => setShowAttractions(!showAttractions)}
+           />
+             Attractions
+          </label>
         </div>
       </div>
 
@@ -405,6 +415,40 @@ export default function LunarLeafletMap({
           <a href={`/towns/${encodeURIComponent(town.name)}`}>
             View Town
           </a>
+        </div>
+      </Popup>
+    </Marker>
+  ))}
+       {showAttractions &&
+  lunarAttractions.map((attraction) => (
+    <Marker
+      key={`attraction-${attraction.id}`}
+      position={[attraction.y, attraction.x]}
+      icon={divIcon({
+        className: "",
+        html: `<div style="
+          background:#38bdf8;
+          color:#000;
+          font-weight:900;
+          padding:6px 10px;
+          border-radius:999px;
+          border:2px solid #000;
+          box-shadow:0 0 14px rgba(56,189,248,0.8);
+          white-space:nowrap;
+          font-size:11px;
+        ">🛰 ${attraction.name}</div>`,
+      })}
+    >
+      <Popup>
+        <div style={{ minWidth: "220px" }}>
+          <strong>{attraction.name}</strong>
+          <br />
+          {attraction.type}
+          <br />
+          State: {attraction.state}
+          <br />
+          <br />
+          {attraction.description}
         </div>
       </Popup>
     </Marker>
