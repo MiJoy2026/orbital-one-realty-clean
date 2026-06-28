@@ -6,6 +6,7 @@ export type LunarAttraction = {
   x: number;
   y: number;
   description: string;
+  image: string;
 };
 
 export const lunarAttractions: LunarAttraction[] = [
@@ -18,6 +19,7 @@ export const lunarAttractions: LunarAttraction[] = [
     y: 500,
     description:
       "The first human landing site on the Moon during the Apollo 11 mission.",
+      image: "/attractions/apollo11.jpg",
   },
 
   {
@@ -29,6 +31,7 @@ export const lunarAttractions: LunarAttraction[] = [
     y: 575,
     description:
       "One of the Moon's youngest and brightest impact craters.",
+      image: "/attractions/tycho.jpg",
   },
 
   {
@@ -40,6 +43,7 @@ export const lunarAttractions: LunarAttraction[] = [
     y: 290,
     description:
       "A spectacular impact crater with extensive ejecta rays.",
+      image: "/attractions/copernicus.jpg",
   },
 
   {
@@ -51,6 +55,7 @@ export const lunarAttractions: LunarAttraction[] = [
     y: 165,
     description:
       "A large lava-filled crater famous among lunar observers.",
+      image: "/attractions/plato.jpg",
   },
 
   {
@@ -62,6 +67,7 @@ export const lunarAttractions: LunarAttraction[] = [
     y: 460,
     description:
       "The Sea of Tranquility, where Apollo 11 landed.",
+      image: "/attractions/maretranquillitatis.jpg",
   },
 
   {
@@ -73,5 +79,6 @@ export const lunarAttractions: LunarAttraction[] = [
     y: 235,
     description:
       "One of the Moon's most impressive mountain ranges.",
+      image: "/attractions/montesapenninus.jpg",
   },
 ];

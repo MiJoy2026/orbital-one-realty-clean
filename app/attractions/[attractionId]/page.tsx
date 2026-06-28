@@ -1,3 +1,4 @@
+import Image from "next/image";
 import { lunarAttractions } from "../../../lib/lunar-attractions";
 import { getNearbyPropertiesForAttraction } from "../../../lib/attraction-service";
 
@@ -25,6 +26,13 @@ export default async function AttractionDetailPage({
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <div className="mx-auto max-w-6xl">
+        <Image
+          src={attraction.image}
+          alt={attraction.name}
+          width={1200}
+          height={650}
+          className="mb-10 h-[420px] w-full rounded-3xl border border-yellow-400/30 object-cover"
+        />
         <p className="text-sm font-black uppercase tracking-[0.35em] text-yellow-400">
           Lunar Attraction
         </p>
