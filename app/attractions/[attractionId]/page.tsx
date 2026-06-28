@@ -42,10 +42,57 @@ export default async function AttractionDetailPage({
         </h1>
 
         <p className="mt-4 text-2xl font-bold">{attraction.type}</p>
+        {attraction.featured && (
+        <p className="mt-4 inline-block rounded-full border border-yellow-400 px-4 py-2 text-sm font-black uppercase text-yellow-400">
+          Featured Lunar Landmark
+        </p>
+      )}
+
+      {attraction.tagline && (
+        <p className="mt-6 text-2xl font-bold text-gray-200">
+          “{attraction.tagline}”
+        </p>
+      )}
 
         <p className="mt-6 max-w-4xl text-lg text-gray-300">
           {attraction.description}
         </p>
+
+        {attraction.quickFacts && (
+  <div className="mt-10 rounded-3xl border border-yellow-400/30 bg-white/5 p-8">
+    <h2 className="text-2xl font-black uppercase text-yellow-400">
+      Quick Facts
+    </h2>
+
+    <div className="mt-6 grid gap-6 md:grid-cols-2">
+      {attraction.quickFacts.map((fact) => (
+        <div
+          key={fact.label}
+          className="rounded-2xl border border-white/10 bg-black/30 p-4"
+        >
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-gray-400">
+            {fact.label}
+          </p>
+
+          <p className="mt-2 text-xl font-black text-white">
+            {fact.value}
+          </p>
+        </div>
+      ))}
+        {attraction.history && (
+          <section className="mt-12 rounded-3xl border border-yellow-400/30 bg-white/5 p-8">
+          <h2 className="text-3xl font-black uppercase text-yellow-400">
+            Historical Overview
+          </h2>
+
+          <p className="mt-6 text-lg leading-8 text-gray-300">
+            {attraction.history}
+          </p>
+          </section>
+        )}
+    </div>
+  </div>
+)}
 
         <div className="mt-8 flex flex-wrap gap-4">
           <a

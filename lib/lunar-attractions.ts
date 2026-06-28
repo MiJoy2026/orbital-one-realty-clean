@@ -7,6 +7,13 @@ export type LunarAttraction = {
   y: number;
   description: string;
   image: string;
+  featured?: boolean;
+  tagline?: string;
+ quickFacts?: {
+  label: string;
+  value: string;
+ }[];
+ history?: string;
 };
 
 export const lunarAttractions: LunarAttraction[] = [
@@ -20,6 +27,16 @@ export const lunarAttractions: LunarAttraction[] = [
     description:
       "The first human landing site on the Moon during the Apollo 11 mission.",
       image: "/attractions/apollo11.jpg",
+      featured: true,
+      tagline: "The first place humans walked on another world.",
+      quickFacts: [
+       { label: "Mission", value: "Apollo 11" },
+       { label: "Landing Date", value: "July 20, 1969" },
+       { label: "Location", value: "Mare Tranquillitatis" },
+       { label: "Type", value: "Historic Landing Site" },
+],
+     history:
+  "Apollo 11 marked the first time humans set foot on another world. On July 20, 1969, the lunar module Eagle landed in Mare Tranquillitatis, the Sea of Tranquility, while millions watched from Earth. Neil Armstrong and Buzz Aldrin walked on the lunar surface, collected samples, deployed scientific instruments, and left behind one of humanity's most famous footprints. Today, the Apollo 11 landing site remains one of the most historic locations beyond Earth.",
   },
 
   {
