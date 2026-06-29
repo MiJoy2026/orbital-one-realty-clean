@@ -132,7 +132,7 @@ export default function LunarLeafletMap({
   const [showCities, setShowCities] = useState(true);
   const [showTowns, setShowTowns] = useState(false);
   const [showProperties, setShowProperties] = useState(true);
-  const [showAttractions, setShowAttractions] = useState(false);;
+  const [showAttractions, setShowAttractions] = useState(true);;
   const propertyCounts = getPropertyCountsByState();
 
   const selectedStateStats = selectedState
@@ -179,7 +179,7 @@ export default function LunarLeafletMap({
             Lunar Atlas Viewer
           </p>
           <p className="mt-1 text-sm text-gray-400">
-            Zoom, drag, and select highlighted lunar states. Current zoom: {zoomLevel}
+            Zoom, drag, and select highlighted lunar states.
           </p>
         </div>
 

@@ -1,3 +1,4 @@
+import AttractionGallery from "@/components/AttractionGallery";
 import Image from "next/image";
 import { lunarAttractions } from "../../../lib/lunar-attractions";
 import { getNearbyPropertiesForAttraction } from "../../../lib/attraction-service";
@@ -89,6 +90,12 @@ export default async function AttractionDetailPage({
             {attraction.history}
           </p>
           </section>
+        )}
+        {attraction.gallery && (
+        <AttractionGallery
+           images={attraction.gallery}
+           title={attraction.name}
+        />
         )}
     </div>
   </div>
