@@ -19,7 +19,6 @@ export default function PricingPage() {
             <ul className="mt-6 space-y-3">
               <li>½ Acre — $16.95</li>
               <li>1 Acre — $24.95</li>
-              <li>Additional Acres — $7.95 each</li>
             </ul>
           </div>
 
@@ -54,7 +53,6 @@ export default function PricingPage() {
           </h2>
 
           <ul className="mt-6 space-y-3">
-            <li>Additional Name on Deed — $1.99 each</li>
             <li>Novelty Lunar Passport — $4.99 each</li>
           </ul>
         </div>

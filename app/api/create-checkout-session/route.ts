@@ -10,6 +10,8 @@ export async function POST(request: Request) {
   const propertyId = body.propertyId;
   const deedName = body.deedName || "Deed Recipient";
   const acres = Number(body.acres || 1);
+  const passportSelected = Boolean(body.passportSelected);
+  const isGift = Boolean(body.isGift);
   
   const property = sampleProperties.find((item) => item.id === propertyId);
 
@@ -48,38 +50,33 @@ if (dbProperty?.status === "Sold") {
     mode: "payment",
     payment_method_types: ["card"],
     line_items: [
-      {
-        quantity: 1,
-        price_data: {
-          currency: "usd",
-          unit_amount: Math.round(propertyPrice * 100),
-          product_data: {
-            name: `${property.id} - ${property.type}`,
-            description: `${property.state} • ${propertySize}`,
+  {
+    quantity: 1,
+    price_data: {
+      currency: "usd",
+      unit_amount: Math.round(propertyPrice * 100),
+      product_data: {
+        name: `${property.id} - ${property.type}`,
+        description: `${property.state} • ${propertySize}`,
+      },
+    },
+  },
+
+  ...(passportSelected
+    ? [
+        {
+          quantity: 1,
+          price_data: {
+            currency: "usd",
+            unit_amount: 499,
+            product_data: {
+              name: "Novelty Lunar Passport",
+            },
           },
         },
-      },
-      {
-        quantity: 1,
-        price_data: {
-          currency: "usd",
-          unit_amount: 499,
-          product_data: {
-            name: "Premium Gold Seal Upgrade",
-          },
-        },
-      },
-      {
-        quantity: 1,
-        price_data: {
-          currency: "usd",
-          unit_amount: 499,
-          product_data: {
-            name: "Novelty Lunar Passport",
-          },
-        },
-      },
-    ],
+      ]
+    : []),
+],
     success_url: `${appUrl}/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${appUrl}/cart?propertyId=${property.id}`,
     metadata: {
@@ -88,6 +85,8 @@ if (dbProperty?.status === "Sold") {
   state: property.state,
   deedName,
   acres: String(acres),
+  isGift: String(isGift),
+  passportSelected: String(passportSelected),
 },
   });
 

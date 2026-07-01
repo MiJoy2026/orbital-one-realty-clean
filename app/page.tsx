@@ -5,7 +5,7 @@ const propertyTypes = [
     title: "Rural Acres",
     price: "From $16.95",
     image: "/property-images/rural-acre.jpg",
-    details: ["½ Acre — $16.95", "1 Acre — $24.95", "Additional Acres — $7.95 each"],
+    details: ["½ Acre — $16.95", "1 Acre — $24.95"],
   },
   {
     title: "Town Blocks",
@@ -70,7 +70,7 @@ export default function Home() {
             <p className="mx-auto mt-6 max-w-3xl text-gray-300">
               Choose novelty lunar acreage, town blocks, or city blocks and
               receive a personalized digital property package with certificate
-              verification, HOA membership, and your own customer portfolio.
+              verification, HOA membership, and your own customer portfolio. PLUS receive access to our future Virtual Lunar App where you will be able to manage, build and explore your purchased properties.
             </p>
 
             <div className="mt-10 flex flex-wrap justify-center gap-4">

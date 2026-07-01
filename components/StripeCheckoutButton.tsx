@@ -5,15 +5,22 @@ import { useState } from "react";
 export default function StripeCheckoutButton({
   propertyId,
   acres,
+  passportSelected,
 }: {
   propertyId: string;
   acres?: number;
+  passportSelected?: boolean;
 }) {
-  const [deedName, setdeedName] = useState("");
+  const [isGift, setIsGift] = useState(false);
+  const [deedName, setDeedName] = useState("");
 
   async function handleCheckout() {
     if (!deedName.trim()) {
-      alert("Please enter the name you want printed on the deed.");
+      alert(
+        isGift
+          ? "Please enter the gift recipient name for the deed."
+          : "Please enter the name you want printed on the deed."
+      );
       return;
     }
 
@@ -26,34 +33,49 @@ export default function StripeCheckoutButton({
         propertyId,
         deedName,
         acres,
+        isGift,
+        passportSelected,
       }),
     });
 
     const data = await response.json();
 
     if (data.url) {
-     window.location.href = data.url;
+      window.location.href = data.url;
     } else {
-     alert(data.error || "Unable to start checkout.");
+      alert(data.error || "Unable to start checkout.");
     }
   }
 
   return (
-    <div className="mt-8">
-      <label className="block text-left text-sm font-bold text-gray-300">
-        Recipient Name for Deed
+    <div className="mt-8 rounded-2xl border border-white/20 bg-white/5 p-5">
+      <label className="flex items-center gap-3 font-bold text-gray-300">
+        <input
+          type="checkbox"
+          checked={isGift}
+          onChange={() => setIsGift(!isGift)}
+        />
+        Is this a gift?
+      </label>
+
+      <label className="mt-5 block text-left text-sm font-bold text-gray-300">
+        {isGift ? "Gift Recipient Name for Deed" : "Name for Deed"}
       </label>
 
       <input
         value={deedName}
-        onChange={(event) => setdeedName(event.target.value)}
+        onChange={(event) => setDeedName(event.target.value)}
         className="mt-2 w-full rounded-xl border border-white/20 bg-black px-4 py-3 text-white"
-        placeholder="Example: Michael Murphy, Emily & Jacob, The Smith Family"
+        placeholder={
+          isGift
+            ? "Example: Emily Murphy"
+            : "Example: Michael Murphy, Emily & Jacob, The Smith Family"
+        }
       />
 
       <button
         onClick={handleCheckout}
-        className="mt-4 w-full rounded-xl bg-yellow-400 px-6 py-4 font-black text-black"
+        className="mt-6 w-full rounded-xl bg-yellow-400 px-6 py-4 font-black text-black"
       >
         Continue to Payment
       </button>

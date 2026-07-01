@@ -29,6 +29,9 @@ model Order {
   user   User? @relation(fields: [userId], references: [id])
 
   premiumGoldSeal   Boolean  @default(false)
+
+  passportPurchased Boolean  @default(false)
+  isGift            Boolean  @default(false)
 }
 
 model Property {

@@ -7,12 +7,12 @@ const faqs = [
   {
     question: "What comes with my purchase?",
     answer:
-      "Each paid property purchase includes a novelty deed, property picture, nearby attractions list, novelty lunar currency, HOA membership, Terms & Conditions, and Privacy Policy.",
+      "Each paid property purchase includes a novelty deed, property picture, nearby attractions list, HOA membership, Future access to our Virtual Lunar app where you can build your property, Terms & Conditions, and Privacy Policy.",
   },
   {
     question: "Can I add names to the deed?",
     answer:
-      "Yes. Additional names can be added to the novelty deed for $1.99 per name.",
+      "Yes. Recipient names can be added to the novelty deed.",
   },
   {
     question: "What is a Novelty Lunar Passport?",
@@ -24,6 +24,10 @@ const faqs = [
     answer:
       "No. Sold properties will be marked as sold and unavailable for purchase.",
   },
+  { question: "What is included with my HOA Membership?",
+    answer:
+      "You will become a member of our Lunar Community.  Your HOA membership will give you access to our Virtual Lunar App, where you will be able to build and explore your purchased properties.  The Virtual Lunar App will be coming soon!",
+  }
 ];
 
 export default function FAQPage() {

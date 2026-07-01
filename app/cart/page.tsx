@@ -1,4 +1,4 @@
-import StripeCheckoutButton from "../../components/StripeCheckoutButton";
+import CartCheckoutPanel from "../../components/CartCheckoutPanel";
 import { sampleProperties } from "../../lib/moon-data";
 
 export default async function CartPage({
@@ -20,9 +20,7 @@ export default async function CartPage({
     : property
       ? property.price
       : 0;
-  const deedNamePrice = 1.99;
-  const passportPrice = 4.99;
-  const total = propertyPrice + deedNamePrice + passportPrice;
+  const total = propertyPrice;
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -69,57 +67,17 @@ export default async function CartPage({
               </div>
             )}
 
-            <div className="mt-6 rounded-2xl border border-white/20 p-6">
-              <h3 className="text-xl font-bold">Add Names to Deed</h3>
-
-              <p className="mt-2 text-gray-300">$1.99 per name</p>
-
-              <input
-                className="mt-4 w-full rounded-xl border border-white/20 bg-black px-4 py-3 text-white"
-                placeholder="Enter name for deed"
-              />
-            </div>
-
-            <div className="mt-6 rounded-2xl border border-white/20 p-6">
-              <h3 className="text-xl font-bold">Novelty Lunar Passport</h3>
-
-              <p className="mt-2 text-gray-300">$4.99 each</p>
-
-              <button className="mt-4 rounded-xl bg-yellow-400 px-5 py-3 font-black text-black">
-                Add Passport
-              </button>
-            </div>
           </section>
 
           <aside className="rounded-3xl border border-yellow-400 p-8">
             <h2 className="text-3xl font-black">Order Summary</h2>
 
-            <div className="mt-6 space-y-3 text-gray-300">
-              <div className="flex justify-between">
-                <span>Property</span>
-                <span>${propertyPrice.toFixed(2)}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span>Deed Name</span>
-                <span>${deedNamePrice.toFixed(2)}</span>
-              </div>
-
-              <div className="flex justify-between">
-                <span>Passport</span>
-                <span>${passportPrice.toFixed(2)}</span>
-              </div>
-
-              <div className="border-t border-white/20 pt-4 text-xl font-black text-white">
-                <div className="flex justify-between">
-                  <span>Total</span>
-                  <span>${total.toFixed(2)}</span>
-                </div>
-              </div>
-            </div>
-
             {property ? (
-            <StripeCheckoutButton propertyId={property.id} acres={acres} />
+          <CartCheckoutPanel
+             propertyId={property.id}
+             acres={acres}
+             propertyPrice={propertyPrice}
+          />
             ) : (
                <button
                disabled
