@@ -13,6 +13,8 @@ export default function StripeCheckoutButton({
 }) {
   const [isGift, setIsGift] = useState(false);
   const [deedName, setDeedName] = useState("");
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [giftMessage, setGiftMessage] = useState("");
 
   async function handleCheckout() {
     if (!deedName.trim()) {
@@ -22,6 +24,10 @@ export default function StripeCheckoutButton({
           : "Please enter the name you want printed on the deed."
       );
       return;
+        if (isGift && !recipientEmail.trim()) {
+        alert("Please enter the gift recipient email address.");
+        return;
+      }
     }
 
     const response = await fetch("/api/create-checkout-session", {
@@ -34,6 +40,8 @@ export default function StripeCheckoutButton({
         deedName,
         acres,
         isGift,
+        recipientEmail,
+        giftMessage,
         passportSelected,
       }),
     });
@@ -72,6 +80,31 @@ export default function StripeCheckoutButton({
             : "Example: Michael Murphy, Emily & Jacob, The Smith Family"
         }
       />
+      {isGift && (
+  <>
+    <label className="mt-5 block text-left text-sm font-bold text-gray-300">
+      Gift Recipient Email
+    </label>
+
+    <input
+      value={recipientEmail}
+      onChange={(event) => setRecipientEmail(event.target.value)}
+      className="mt-2 w-full rounded-xl border border-white/20 bg-black px-4 py-3 text-white"
+      placeholder="recipient@example.com"
+    />
+
+    <label className="mt-5 block text-left text-sm font-bold text-gray-300">
+      Gift Message Optional
+    </label>
+
+    <textarea
+      value={giftMessage}
+      onChange={(event) => setGiftMessage(event.target.value)}
+      className="mt-2 min-h-28 w-full rounded-xl border border-white/20 bg-black px-4 py-3 text-white"
+      placeholder="Write a short gift message..."
+    />
+  </>
+)}
 
       <button
         onClick={handleCheckout}

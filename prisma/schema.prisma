@@ -32,6 +32,9 @@ model Order {
 
   passportPurchased Boolean  @default(false)
   isGift            Boolean  @default(false)
+  recipientEmail String?
+  giftMessage    String?
+  hoaClaimed     Boolean @default(false)
 }
 
 model Property {

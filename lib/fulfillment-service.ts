@@ -26,6 +26,8 @@ export async function fulfillStripeCheckoutSession(
   const acres = Number(session.metadata?.acres || "1");
   const isGift = session.metadata?.isGift === "true";
   const passportPurchased = session.metadata?.passportSelected === "true";
+  const recipientEmail = session.metadata?.recipientEmail || null;
+  const giftMessage = session.metadata?.giftMessage || null;
 
   const amountPaid = session.amount_total
     ? session.amount_total / 100
@@ -68,6 +70,9 @@ export async function fulfillStripeCheckoutSession(
       email: session.customer_details?.email || null,
       passportPurchased,
       isGift,
+      recipientEmail,
+      giftMessage,
+      hoaClaimed: false,
     },
   });
 

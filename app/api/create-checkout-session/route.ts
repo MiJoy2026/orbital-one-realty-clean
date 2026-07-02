@@ -12,6 +12,8 @@ export async function POST(request: Request) {
   const acres = Number(body.acres || 1);
   const passportSelected = Boolean(body.passportSelected);
   const isGift = Boolean(body.isGift);
+  const recipientEmail = body.recipientEmail || "";
+  const giftMessage = body.giftMessage || "";
   
   const property = sampleProperties.find((item) => item.id === propertyId);
 
@@ -87,6 +89,8 @@ if (dbProperty?.status === "Sold") {
   acres: String(acres),
   isGift: String(isGift),
   passportSelected: String(passportSelected),
+  recipientEmail,
+  giftMessage,
 },
   });
 
