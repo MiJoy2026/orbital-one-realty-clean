@@ -1,3 +1,4 @@
+import ClaimHoaForm from "@/components/ClaimHoaForm";
 export default function ClaimHoaPage() {
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -80,35 +81,7 @@ export default function ClaimHoaPage() {
     purchase. There are no annual dues or recurring fees.
   </p>
 </div>
-
-        <form className="mt-8 grid gap-4">
-          <input
-            name="certificateNumber"
-            required
-            className="rounded-xl border border-white/20 bg-black px-4 py-3 text-white"
-            placeholder="Certificate Number"
-          />
-          <input
-            name="deedName"
-            required
-            className="rounded-xl border border-white/20 bg-black px-4 py-3 text-white"
-            placeholder="Name Printed on Deed"
-          />
-          <input
-            name="email"
-            type="email"
-            required
-            className="rounded-xl border border-white/20 bg-black px-4 py-3 text-white"
-            placeholder="Email address"
-          />
-
-          <button
-            type="submit"
-            className="rounded-xl bg-yellow-400 px-6 py-4 font-black text-black"
-          >
-            Continue
-          </button>
-        </form>
+    <ClaimHoaForm />
       </div>
     </main>
   );
