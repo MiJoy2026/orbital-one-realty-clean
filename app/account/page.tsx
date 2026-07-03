@@ -11,20 +11,33 @@ export default async function AccountPage() {
   }
 
   const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      orders: {
-        orderBy: { createdAt: "desc" },
-      },
-    },
-  });
+  where: { id: userId },
+});
 
-  if (!user) {
-    redirect("/login");
-  }
+if (!user) {
+  redirect("/login");
+}
+
+const member = await prisma.member.findUnique({
+  where: {
+    email: user.email,
+  },
+});
+
+const orders = await prisma.order.findMany({
+  where: {
+    OR: [
+      { userId: user.id },
+      { email: user.email },
+      { recipientEmail: user.email },
+    ],
+  },
+  orderBy: {
+    createdAt: "desc",
+  },
+});
 
   const email = user.email;
-  const orders = user.orders;
 
   const allocations = await prisma.acreageAllocation.findMany({
     where: {
@@ -40,7 +53,12 @@ export default async function AccountPage() {
     0
   );
   const totalCertificates = orders.length;
-  const hoaStatus = orders.length > 0 ? "2026 Founding Member" : "Inactive";
+  const hoaStatus =
+  member || orders.some((order) => order.hoaClaimed)
+    ? "2026 Charter HOA Member"
+    : orders.length > 0
+    ? "Pending Activation"
+    : "Inactive";
   const ruralAcresOwned = orders.reduce(
   (sum, order) => sum + (order.acreagePurchased || 0),
   0

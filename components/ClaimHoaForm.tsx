@@ -27,9 +27,7 @@ export default function ClaimHoaForm() {
       return;
     }
 
-    setMessage(
-      `Membership activated! Property ${data.propertyId} is now linked to this HOA claim.`
-    );
+    window.location.href = "/claim-hoa/success";
   }
 
   return (
