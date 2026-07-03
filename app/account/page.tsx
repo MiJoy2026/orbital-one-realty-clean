@@ -153,6 +153,17 @@ const portfolioValue = orders.reduce(
             View HOA Membership
           </a>
 
+           {orders.length > 0 && (
+          <a
+            href={`/moon-map?property=${orders[0].propertyId}&owned=${orders
+            .map((order) => order.propertyId)
+            .join(",")}`}
+            className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
+          >
+            Explore My Properties
+          </a>
+          )}
+
           <a
             href="/logout"
             className="rounded-xl border border-white/30 px-5 py-3 font-black text-white"
