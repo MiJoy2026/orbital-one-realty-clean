@@ -7,6 +7,11 @@ function createCertificateNumber(propertyId: string) {
   return `OOR-${propertyId}-${timestamp}`;
 }
 
+function createHoaNumber() {
+  const timestamp = Date.now();
+  return `HOA-${timestamp}`;
+}
+
 export async function fulfillStripeCheckoutSession(
   session: Stripe.Checkout.Session
 ) {
@@ -22,6 +27,7 @@ export async function fulfillStripeCheckoutSession(
     throw new Error(`Property not found: ${propertyId}`);
   }
 
+  const purchaserEmail = session.customer_details?.email || null;
   const deedName = session.metadata?.deedName || "Deed Recipient";
   const acres = Number(session.metadata?.acres || "1");
   const isGift = session.metadata?.isGift === "true";
@@ -29,11 +35,30 @@ export async function fulfillStripeCheckoutSession(
   const recipientEmail = session.metadata?.recipientEmail || null;
   const giftMessage = session.metadata?.giftMessage || null;
 
-  const amountPaid = session.amount_total
-    ? session.amount_total / 100
-    : 0;
+  const memberEmail = isGift && recipientEmail ? recipientEmail : purchaserEmail;
+
+  if (!memberEmail) {
+    throw new Error("Missing member email for fulfillment.");
+  }
+
+  const amountPaid = session.amount_total ? session.amount_total / 100 : 0;
 
   const certificateNumber = createCertificateNumber(propertyId);
+
+  const member = await prisma.member.upsert({
+    where: {
+      email: memberEmail,
+    },
+    update: {
+      name: deedName,
+    },
+    create: {
+      name: deedName,
+      email: memberEmail,
+      hoaNumber: createHoaNumber(),
+      charterMember: true,
+    },
+  });
 
   await prisma.property.upsert({
     where: { id: propertyId },
@@ -67,7 +92,7 @@ export async function fulfillStripeCheckoutSession(
       certificateNumber,
       amountPaid,
       paymentStatus: "Paid",
-      email: session.customer_details?.email || null,
+      email: purchaserEmail,
       passportPurchased,
       isGift,
       recipientEmail,
@@ -78,6 +103,7 @@ export async function fulfillStripeCheckoutSession(
 
   return {
     propertyId,
+    memberId: member.id,
     fulfilled: true,
   };
 }
