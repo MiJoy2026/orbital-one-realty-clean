@@ -19,13 +19,23 @@ function MoonMapContent() {
   const searchParams = useSearchParams();
 
   const selectedProperty = searchParams.get("property");
-  const selectedPropertyWithCoordinates = selectedProperty
+const ownedParam = searchParams.get("owned");
+
+const ownedPropertyIds = ownedParam
+  ? Array.from(new Set(ownedParam.split(",").filter(Boolean)))
+  : [];
+
+const selectedPropertyWithCoordinates = selectedProperty
   ? getPropertyById(selectedProperty)
   : null;
 
 const nearbyProperties = selectedProperty
   ? getNearbyProperties(selectedProperty)
   : [];
+
+const ownedProperties = ownedPropertyIds
+  .map((propertyId) => getPropertyById(propertyId))
+  .filter((property) => property !== undefined);
 
   return (
     <main
@@ -168,8 +178,9 @@ const nearbyProperties = selectedProperty
   </div>
 )}
       <LunarLeafletMap
-         selectedProperty={selectedPropertyWithCoordinates}
-         nearbyProperties={nearbyProperties}
+        selectedProperty={selectedPropertyWithCoordinates}
+        nearbyProperties={nearbyProperties}
+        ownedProperties={ownedProperties}
       />
       </div>
 

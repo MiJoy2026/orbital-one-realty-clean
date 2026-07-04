@@ -118,9 +118,11 @@ function MapHomeButton({
 export default function LunarLeafletMap({
   selectedProperty,
   nearbyProperties = [],
+  ownedProperties = [],
 }: {
   selectedProperty?: SelectedProperty | null;
   nearbyProperties?: SelectedProperty[];
+  ownedProperties?: SelectedProperty[];
 }) {
   const bounds = [
     [0, 0],
@@ -467,6 +469,44 @@ export default function LunarLeafletMap({
 
           <br />
           <br />
+          {showProperties &&
+          ownedProperties.map((property) =>
+          property.mapX && property.mapY ? (
+      <Marker
+        key={`owned-${property.id}`}
+        position={[property.mapY, property.mapX]}
+        icon={divIcon({
+          className: "",
+          html: `<div style="
+            background:#facc15;
+            color:#000;
+            font-weight:900;
+            padding:7px 11px;
+            border-radius:999px;
+            border:2px solid #fff;
+            box-shadow:0 0 22px rgba(250,204,21,1);
+            white-space:nowrap;
+            font-size:12px;
+          ">⭐ ${property.id}</div>`,
+        })}
+      >
+        <Popup>
+          <div style={{ minWidth: "190px" }}>
+            <strong>{property.id}</strong>
+            <br />
+            Owned by You
+            <br />
+            {property.type}
+            <br />
+            {property.state}
+            <br />
+            <br />
+            <a href={`/explore/${property.id}`}>View Property</a>
+          </div>
+        </Popup>
+      </Marker>
+    ) : null
+  )}
           <strong>Nearby Properties</strong>
 
           <div>
