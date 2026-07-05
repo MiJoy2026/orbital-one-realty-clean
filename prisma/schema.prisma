@@ -37,6 +37,43 @@ model Order {
   hoaClaimed     Boolean @default(false)
 }
 
+model LunarState {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  name        String   @unique
+  theme       String?
+  description String?
+
+  cities      LunarCity[]
+  towns       LunarTown[]
+}
+
+model LunarCity {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  name      String
+  stateName String
+
+  state     LunarState @relation(fields: [stateName], references: [name])
+
+  @@unique([name, stateName])
+}
+
+model LunarTown {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  name      String
+  stateName String
+
+  state     LunarState @relation(fields: [stateName], references: [name])
+
+  @@unique([name, stateName])
+}
+
 model Property {
   id          String   @id
   createdAt   DateTime @default(now())
