@@ -1,6 +1,5 @@
 import Image from "next/image";
 import { prisma } from "../../../lib/prisma";
-import { sampleProperties } from "../../../lib/moon-data";
 
 export default async function PropertyExplorerPage({
   params,
@@ -9,9 +8,11 @@ export default async function PropertyExplorerPage({
 }) {
   const { propertyId } = await params;
 
-  const property = sampleProperties.find(
-    (item) => item.id.toLowerCase() === propertyId.toLowerCase()
-  );
+  const property = await prisma.property.findUnique({
+    where: {
+      id: propertyId,
+    },
+  });
 
   if (!property) {
     return (
@@ -24,21 +25,16 @@ export default async function PropertyExplorerPage({
     );
   }
 
-  const dbProperty = await prisma.property.findUnique({
-    where: {
-      id: property.id,
-    },
-  });
-
-  const liveStatus = dbProperty?.status || property.status;
-  const isSold = liveStatus === "Sold";
+  const isSold = property.status === "Sold";
   const isRuralAcre = property.type === "Rural Acre";
+
   const propertyImage =
-  property.type === "City Block"
-    ? "/property-images/city-block.jpg"
-    : property.type === "Town Block"
-    ? "/property-images/town-block.jpg"
-    : "/property-images/rural-acre.jpg";
+    property.type === "City Block"
+      ? "/property-images/city-block.jpg"
+      : property.type === "Town Block"
+        ? "/property-images/town-block.jpg"
+        : "/property-images/rural-acre.jpg";
+
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <div className="mx-auto max-w-6xl">
@@ -49,52 +45,26 @@ export default async function PropertyExplorerPage({
           height={650}
           className="mb-10 h-[420px] w-full rounded-3xl border border-yellow-400/30 object-cover"
         />
+
         <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-gray-400">
-  <a href="/moon-map" className="hover:text-yellow-400">
-    Moon Atlas
-  </a>
+          <a href="/moon-map" className="hover:text-yellow-400">
+            Moon Atlas
+          </a>
 
-  <span>›</span>
+          <span>›</span>
 
-  <a
-    href={`/states/${encodeURIComponent(property.state)}`}
-    className="hover:text-yellow-400"
-  >
-    {property.state}
-  </a>
+          <a
+            href={`/states/${encodeURIComponent(property.state)}`}
+            className="hover:text-yellow-400"
+          >
+            {property.state}
+          </a>
 
-  {property.city && (
-    <>
-      <span>›</span>
+          <span>›</span>
 
-      <a
-        href={`/cities/${encodeURIComponent(property.city)}`}
-        className="hover:text-yellow-400"
-      >
-        {property.city}
-      </a>
-    </>
-  )}
+          <span className="font-bold text-yellow-400">{property.id}</span>
+        </div>
 
-  {property.town && (
-    <>
-      <span>›</span>
-
-      <a
-        href={`/towns/${encodeURIComponent(property.town)}`}
-        className="hover:text-yellow-400"
-      >
-        {property.town}
-      </a>
-    </>
-  )}
-
-  <span>›</span>
-
-  <span className="font-bold text-yellow-400">
-    {property.id}
-  </span>
-</div>
         <p className="text-sm font-bold uppercase tracking-[0.3em] text-yellow-400">
           Orbital One Realty Property
         </p>
@@ -108,18 +78,16 @@ export default async function PropertyExplorerPage({
             <p className="mt-2 text-2xl font-bold text-yellow-400">
               {property.type} · {property.size}
             </p>
-        </div>
+          </div>
 
-        <div
-          className={`rounded-full px-5 py-3 text-sm font-black uppercase ${
-            isSold
-              ? "bg-red-600 text-white"
-              : "bg-green-500 text-black"
-          }`}
-        >
-          {liveStatus}
+          <div
+            className={`rounded-full px-5 py-3 text-sm font-black uppercase ${
+              isSold ? "bg-red-600 text-white" : "bg-green-500 text-black"
+            }`}
+          >
+            {property.status}
+          </div>
         </div>
-      </div>
 
         <div className="mt-8 grid gap-6 md:grid-cols-4">
           <div className="rounded-2xl border border-yellow-400 p-6">
@@ -128,14 +96,10 @@ export default async function PropertyExplorerPage({
               ${property.price.toFixed(2)}
             </p>
           </div>
-          <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
-            <p className="text-sm uppercase text-gray-400">
-              Location
-            </p>
 
-            <p className="mt-2 text-xl font-black">
-              {property.city || property.town || property.state}
-            </p>
+          <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
+            <p className="text-sm uppercase text-gray-400">Location</p>
+            <p className="mt-2 text-xl font-black">{property.state}</p>
           </div>
 
           <div className="rounded-2xl border border-white/20 p-6">
@@ -150,7 +114,7 @@ export default async function PropertyExplorerPage({
                 isSold ? "text-red-400" : "text-green-400"
               }`}
             >
-              {liveStatus}
+              {property.status}
             </p>
             <p className="mt-2 text-xs text-gray-500">
               Status synced from live inventory database.
@@ -172,100 +136,6 @@ export default async function PropertyExplorerPage({
           </p>
         </div>
 
-        <div className="mt-10 rounded-3xl border border-white/20 bg-white/5 p-8">
-          <h2 className="text-3xl font-black text-yellow-400">
-            Property Location
-          </h2>
-
-          <div className="mt-6 grid gap-4 md:grid-cols-3">
-            <p>
-              <span className="font-bold text-gray-400">State:</span>{" "}
-              {property.state}
-            </p>
-
-            {property.city && (
-              <p>
-                <span className="font-bold text-gray-400">City:</span>{" "}
-                {property.city}
-              </p>
-            )}
-
-            {property.town && (
-              <p>
-                <span className="font-bold text-gray-400">Town:</span>{" "}
-                {property.town}
-              </p>
-            )}
-          </div>
-        </div>
-          <div className="mt-10 rounded-3xl border border-yellow-400/30 bg-yellow-400/10 p-8">
-            <h2 className="text-3xl font-black text-yellow-400">
-               Moon Atlas Location
-            </h2>
-
-            <div className="mt-6 grid gap-4 md:grid-cols-3">
-              <div>
-                 <p className="text-sm uppercase text-gray-400">State</p>
-                 <p className="mt-2 text-xl font-black">
-                   {property.state}
-                 </p>
-              </div>
-
-              {property.city && (
-                <div>
-                  <p className="text-sm uppercase text-gray-400">City</p>
-                  <p className="mt-2 text-xl font-black">
-                    {property.city}
-                  </p>
-                </div>
-              )}
-
-              {property.town && (
-               <div>
-                 <p className="text-sm uppercase text-gray-400">Town</p>
-                 <p className="mt-2 text-xl font-black">
-                   {property.town}
-                 </p>
-               </div>
-              )}
-            </div>
-               <div className="mt-6 rounded-2xl border border-white/20 bg-black/40 p-4">
-                <p className="text-sm uppercase text-gray-400">
-                  Atlas Coordinates
-                </p>
-                
-                <p className="mt-2 text-xl font-black text-yellow-400">
-                 X: {property.mapX ?? "Pending"} · Y: {property.mapY ?? "Pending"}
-                </p>
-               </div>
-
-            <div className="mt-8">
-              <a
-                 href={`/moon-map?property=${encodeURIComponent(property.id)}`}
-                 className="rounded-xl bg-yellow-400 px-6 py-3 font-black text-black"
-              >
-                  View on Moon Atlas
-              </a>
-            </div>
-          </div>
-
-        <div className="mt-10 rounded-3xl border border-white/20 bg-white/5 p-8">
-          <h2 className="text-3xl font-black text-yellow-400">
-            Nearby Lunar Attractions
-          </h2>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            {property.nearbyAttractions.map((attraction) => (
-              <span
-                key={attraction}
-                className="rounded-full border border-yellow-400 px-4 py-2 text-sm font-bold text-yellow-400"
-              >
-                {attraction}
-              </span>
-            ))}
-          </div>
-        </div>
-
         <div className="mt-10 rounded-3xl border border-yellow-400/30 bg-yellow-400/10 p-8">
           <h2 className="text-3xl font-black text-yellow-400">
             Included With This Property
@@ -275,7 +145,7 @@ export default async function PropertyExplorerPage({
             <p>📜 Personalized Novelty Lunar Deed</p>
             <p>🛂 Lunar Passport Eligibility</p>
             <p>🏛️ Free HOA Membership</p>
-            <p>⭐ 2026 Founding Member Status</p>
+            <p>⭐ 2026 Charter HOA Member Status</p>
             <p>✉️ Welcome Letter PDF</p>
             <p>🌕 Certificate Verification</p>
           </div>

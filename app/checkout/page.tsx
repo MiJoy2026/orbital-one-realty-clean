@@ -1,4 +1,4 @@
-import { sampleProperties } from "../../lib/moon-data";
+import { prisma } from "../../lib/prisma";
 import StripeCheckoutButton from "../../components/StripeCheckoutButton";
 export default async function CheckoutPage({
   searchParams,
@@ -6,9 +6,13 @@ export default async function CheckoutPage({
   searchParams: Promise<{ propertyId?: string }>;
 }) {
   const params = await searchParams;
-  const property = sampleProperties.find(
-    (item) => item.id === params.propertyId
-  );
+  const property = params.propertyId
+  ? await prisma.property.findUnique({
+      where: {
+        id: params.propertyId,
+      },
+    })
+  : null;
 
   const propertyPrice = property ? property.price : 0;
   const deedNamePrice = 1.99;

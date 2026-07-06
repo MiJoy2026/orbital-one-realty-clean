@@ -1,6 +1,5 @@
 import Stripe from "stripe";
 import { prisma } from "./prisma";
-import { sampleProperties } from "./moon-data";
 
 function createCertificateNumber(propertyId: string) {
   const timestamp = Date.now();
@@ -21,11 +20,15 @@ export async function fulfillStripeCheckoutSession(
     throw new Error("Missing propertyId in Stripe session metadata.");
   }
 
-  const property = sampleProperties.find((item) => item.id === propertyId);
+  const property = await prisma.property.findUnique({
+  where: {
+    id: propertyId,
+  },
+});
 
-  if (!property) {
-    throw new Error(`Property not found: ${propertyId}`);
-  }
+if (!property) {
+  throw new Error(`Property not found: ${propertyId}`);
+}
 
   const purchaserEmail = session.customer_details?.email || null;
   const deedName = session.metadata?.deedName || "Deed Recipient";

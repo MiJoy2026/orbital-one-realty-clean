@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { NextResponse } from "next/server";
-import { sampleProperties } from "../../../lib/moon-data";
+import { prisma } from "../../../lib/prisma";
 
 function centerText(
   page: any,
@@ -30,7 +30,15 @@ export async function GET(request: Request) {
 
   const verificationUrl =
   `${appUrl}/verify/${certificateNumber}`;
-  const property = sampleProperties.find((item) => item.id === propertyId);
+  if (!propertyId) {
+  return new NextResponse("Missing property ID", { status: 400 });
+}
+
+const property = await prisma.property.findUnique({
+  where: {
+    id: propertyId,
+  },
+});
 
   if (!property) {
     return NextResponse.json({ error: "Property not found" }, { status: 404 });

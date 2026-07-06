@@ -1,5 +1,5 @@
 import CartCheckoutPanel from "../../components/CartCheckoutPanel";
-import { sampleProperties } from "../../lib/moon-data";
+import { prisma } from "../../lib/prisma";
 
 export default async function CartPage({
   searchParams,
@@ -8,9 +8,13 @@ export default async function CartPage({
 }) {
   const params = await searchParams;
   const acres = Number(params.acres || "1");
-  const property = sampleProperties.find(
-    (item) => item.id === params.propertyId
-  );
+  const property = params.propertyId
+  ? await prisma.property.findUnique({
+      where: {
+        id: params.propertyId,
+      },
+    })
+  : null;
 
   const propertyPrice =
   property?.type === "Rural Acre"

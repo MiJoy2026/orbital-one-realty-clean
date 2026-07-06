@@ -1,7 +1,6 @@
 import { prisma } from "../../../lib/prisma";
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
-import { sampleProperties } from "../../../lib/moon-data";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
 
@@ -15,7 +14,11 @@ export async function POST(request: Request) {
   const recipientEmail = body.recipientEmail || "";
   const giftMessage = body.giftMessage || "";
   
-  const property = sampleProperties.find((item) => item.id === propertyId);
+  const property = await prisma.property.findUnique({
+  where: {
+    id: propertyId,
+  },
+});
 
   if (!property) {
     return NextResponse.json(
