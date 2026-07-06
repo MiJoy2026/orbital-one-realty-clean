@@ -28,9 +28,10 @@ type SelectedProperty = {
   type: string;
   state: string;
   status: string;
-  mapX?: number;
-  mapY?: number;
+  mapX?: number | null;
+  mapY?: number | null;
 };
+
 function TrackZoomLevel({
   onZoomChange,
 }: {
@@ -135,11 +136,7 @@ export default function LunarLeafletMap({
   const [showTowns, setShowTowns] = useState(false);
   const [showProperties, setShowProperties] = useState(true);
   const [showAttractions, setShowAttractions] = useState(true);;
-  const propertyCounts = getPropertyCountsByState();
-
-  const selectedStateStats = selectedState
-    ? propertyCounts[selectedState]
-    : null;
+  const selectedStateStats = null;
     const visibleCities = selectedState
   ? getCitiesByState(selectedState).map((city) => ({
       name: city,
@@ -166,12 +163,7 @@ export default function LunarLeafletMap({
   ">📍 ${selectedProperty?.id || "Property"}</div>`,
 });
 
-  const attractionNearbyMap = Object.fromEntries(
-  lunarAttractions.map((attraction) => [
-    attraction.id,
-    getNearbyPropertiesForAttraction(attraction.id),
-  ])
-);
+  const attractionNearbyMap: Record<string, any[]> = {};
 
   return (
     <div className="mx-auto mt-10 w-full max-w-7xl">
@@ -291,23 +283,7 @@ export default function LunarLeafletMap({
                 positions={region.positions}
                   pathOptions={{
                   color: (() => {
-                  const stats = propertyCounts[region.name];
-
-                   if (!stats || stats.total === 0) {
-                   return "#facc15";
-                  }
-
-                  const availableRatio = stats.available / stats.total;
-
-                   if (availableRatio >= 0.7) {
-                   return "#22c55e";
-                  }
-
-                   if (availableRatio >= 0.3) {
-                   return "#facc15";
-                  }
-
-                   return "#dc2626";
+                  return "#facc15";
                   })(),
                     weight: 2,
                     opacity: 0.65,
@@ -510,7 +486,7 @@ export default function LunarLeafletMap({
           <strong>Nearby Properties</strong>
 
           <div>
-           {attractionNearbyMap[attraction.id]?.map((property) => (
+           {attractionNearbyMap[attraction.id]?.map((property: any) => (
             <div key={property.id}>
               <a href={`/explore/${property.id}`}>
                 {property.id} — {property.type}
@@ -604,19 +580,9 @@ export default function LunarLeafletMap({
                 <p>🌕 3 Cities</p>
                 <p>🏘 20 Towns</p>
 
-                {selectedStateStats ? (
-                <>
-                <p>📍 {selectedStateStats.total} Properties</p>
-                <p className="text-green-400">
-                  🟢 {selectedStateStats.available} Available
+                <p className="text-gray-400">
+                   Property statistics will update from live inventory.
                 </p>
-                <p className="text-red-400">
-                  🔴 {selectedStateStats.sold} Sold
-                </p>
-                </>
-                ) : (
-                <p>🚀 Select a state to view inventory.</p>
-                )}
                 </div>
 
               <a

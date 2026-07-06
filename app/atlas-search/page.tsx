@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
-import { lunarStates, sampleProperties } from "../../lib/moon-data";
+import { prisma } from "../../lib/prisma";
 
 export default async function AtlasSearchPage({
   searchParams,
@@ -13,38 +13,56 @@ export default async function AtlasSearchPage({
     redirect("/moon-map");
   }
 
-  const lowerQuery = query.toLowerCase();
-
-  const property = sampleProperties.find(
-    (item) => item.id.toLowerCase() === lowerQuery
-  );
+  const property = await prisma.property.findFirst({
+    where: {
+      id: {
+        equals: query,
+        mode: "insensitive",
+      },
+    },
+  });
 
   if (property) {
     redirect(`/explore/${property.id}`);
   }
 
-  const state = lunarStates.find(
-    (item) => item.name.toLowerCase() === lowerQuery
-  );
+  const state = await prisma.lunarState.findFirst({
+    where: {
+      name: {
+        equals: query,
+        mode: "insensitive",
+      },
+    },
+  });
 
   if (state) {
     redirect(`/states/${encodeURIComponent(state.name)}`);
   }
 
-  const city = lunarStates
-    .flatMap((state) => state.cities)
-    .find((city) => city.toLowerCase() === lowerQuery);
+  const city = await prisma.lunarCity.findFirst({
+    where: {
+      name: {
+        equals: query,
+        mode: "insensitive",
+      },
+    },
+  });
 
   if (city) {
-    redirect(`/cities/${encodeURIComponent(city)}`);
+    redirect(`/cities/${encodeURIComponent(city.name)}`);
   }
 
-  const town = lunarStates
-    .flatMap((state) => state.towns)
-    .find((town) => town.toLowerCase() === lowerQuery);
+  const town = await prisma.lunarTown.findFirst({
+    where: {
+      name: {
+        equals: query,
+        mode: "insensitive",
+      },
+    },
+  });
 
   if (town) {
-    redirect(`/towns/${encodeURIComponent(town)}`);
+    redirect(`/towns/${encodeURIComponent(town.name)}`);
   }
 
   return (
@@ -58,9 +76,7 @@ export default async function AtlasSearchPage({
           We could not find a state, city, town, or property matching:
         </p>
 
-        <p className="mt-4 text-2xl font-black text-yellow-400">
-          {query}
-        </p>
+        <p className="mt-4 text-2xl font-black text-yellow-400">{query}</p>
 
         <a
           href="/moon-map"

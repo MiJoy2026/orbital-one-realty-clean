@@ -11,7 +11,7 @@ function getDistance(
   return Math.sqrt(dx * dx + dy * dy);
 }
 
-export function getNearbyPropertiesForAttraction(
+export async function getNearbyPropertiesForAttraction(
   attractionId: string,
   limit = 3
 ) {
@@ -23,8 +23,10 @@ export function getNearbyPropertiesForAttraction(
     return [];
   }
 
-  return getAllPropertiesWithCoordinates()
-    .map((property) => ({
+  const properties = await getAllPropertiesWithCoordinates();
+
+  return properties
+  .map((property) => ({
       ...property,
       distance: getDistance(
         { x: attraction.x, y: attraction.y },

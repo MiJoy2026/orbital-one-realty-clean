@@ -1,48 +1,59 @@
-import { sampleProperties } from "./moon-data";
-import { getPropertyCoordinates } from "./property-coordinates";
+import { prisma } from "./prisma";
 
-export function getAllPropertiesWithCoordinates() {
-  return sampleProperties.map((property) => {
-    const coordinates = getPropertyCoordinates(property.state, property.id);
-
-    return {
-      ...property,
-      mapX: coordinates.x,
-      mapY: coordinates.y,
-    };
+export async function getAllPropertiesWithCoordinates() {
+  return prisma.property.findMany({
+    orderBy: { id: "asc" },
   });
 }
 
-export function getPropertyById(propertyId: string) {
-  return getAllPropertiesWithCoordinates().find(
-    (property) => property.id.toLowerCase() === propertyId.toLowerCase()
-  );
+export async function getPropertyById(propertyId: string) {
+  return prisma.property.findFirst({
+    where: {
+      id: {
+        equals: propertyId,
+        mode: "insensitive",
+      },
+    },
+  });
 }
 
-export function getNearbyProperties(propertyId: string, limit = 5) {
-  const selectedProperty = getPropertyById(propertyId);
+export async function getNearbyProperties(propertyId: string, limit = 5) {
+  const selectedProperty = await getPropertyById(propertyId);
 
   if (!selectedProperty) {
     return [];
   }
 
-  return getAllPropertiesWithCoordinates()
-    .filter(
-      (property) =>
-        property.id !== selectedProperty.id &&
-        property.state === selectedProperty.state
-    )
-    .slice(0, limit);
+  return prisma.property.findMany({
+    where: {
+      id: {
+        not: selectedProperty.id,
+      },
+      state: selectedProperty.state,
+    },
+    orderBy: {
+      id: "asc",
+    },
+    take: limit,
+  });
 }
 
-export function getPropertiesByState(stateName: string) {
-  return getAllPropertiesWithCoordinates().filter(
-    (property) => property.state.toLowerCase() === stateName.toLowerCase()
-  );
+export async function getPropertiesByState(stateName: string) {
+  return prisma.property.findMany({
+    where: {
+      state: {
+        equals: stateName,
+        mode: "insensitive",
+      },
+    },
+    orderBy: {
+      id: "asc",
+    },
+  });
 }
 
-export function getPropertyCountsByState() {
-  const properties = getAllPropertiesWithCoordinates();
+export async function getPropertyCountsByState() {
+  const properties = await prisma.property.findMany();
 
   return properties.reduce<
     Record<

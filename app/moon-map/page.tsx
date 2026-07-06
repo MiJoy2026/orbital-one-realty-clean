@@ -1,41 +1,36 @@
-"use client";
-
-import { Suspense } from "react";
 import {
   getPropertyById,
   getNearbyProperties,
 } from "../../lib/property-service";
-import dynamic from "next/dynamic";
-import { useSearchParams } from "next/navigation";
+import LunarLeafletMap from "@/components/LunarLeafletMap";
 
-const LunarLeafletMap = dynamic(
-  () => import("@/components/LunarLeafletMap"),
-  {
-    ssr: false,
-  }
-);
+export default async function MoonMapPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ property?: string; owned?: string }>;
+}) {
+  const params = await searchParams;
 
-function MoonMapContent() {
-  const searchParams = useSearchParams();
-
-  const selectedProperty = searchParams.get("property");
-const ownedParam = searchParams.get("owned");
+  const selectedProperty = params.property || null;
+  const ownedParam = params.owned || null;
 
 const ownedPropertyIds = ownedParam
   ? Array.from(new Set(ownedParam.split(",").filter(Boolean)))
   : [];
 
 const selectedPropertyWithCoordinates = selectedProperty
-  ? getPropertyById(selectedProperty)
+  ? await getPropertyById(selectedProperty)
   : null;
 
 const nearbyProperties = selectedProperty
-  ? getNearbyProperties(selectedProperty)
+  ? await getNearbyProperties(selectedProperty)
   : [];
 
-const ownedProperties = ownedPropertyIds
-  .map((propertyId) => getPropertyById(propertyId))
-  .filter((property) => property !== undefined);
+const ownedProperties = (
+  await Promise.all(
+    ownedPropertyIds.map((propertyId) => getPropertyById(propertyId))
+  )
+).filter((property) => property !== null);
 
   return (
     <main
@@ -228,12 +223,5 @@ const ownedProperties = ownedPropertyIds
         </div>
       </div>
     </main>
-  );
-}
-export default function MoonMapPage() {
-  return (
-    <Suspense fallback={<div className="min-h-screen bg-black text-white" />}>
-      <MoonMapContent />
-    </Suspense>
   );
 }

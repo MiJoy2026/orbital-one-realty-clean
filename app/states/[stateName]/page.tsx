@@ -1,5 +1,4 @@
-import { lunarStateDetails } from "../../../lib/lunar-state-details";
-import { lunarStates, sampleProperties } from "../../../lib/moon-data";
+import { prisma } from "../../../lib/prisma";
 
 export default async function StateDetailPage({
   params,
@@ -9,11 +8,22 @@ export default async function StateDetailPage({
   const { stateName } = await params;
   const decodedName = decodeURIComponent(stateName);
 
-  const state = lunarStates.find(
-    (s) => s.name.toLowerCase() === decodedName.toLowerCase()
-  );
-
-  const details = lunarStateDetails[state?.name ?? ""];
+  const state = await prisma.lunarState.findFirst({
+    where: {
+      name: {
+        equals: decodedName,
+        mode: "insensitive",
+      },
+    },
+    include: {
+      cities: {
+        orderBy: { name: "asc" },
+      },
+      towns: {
+        orderBy: { name: "asc" },
+      },
+    },
+  });
 
   if (!state) {
     return (
@@ -30,12 +40,17 @@ export default async function StateDetailPage({
     );
   }
 
-  const stateProperties = sampleProperties.filter(
-    (property) => property.state === state.name
-  );
+  const stateProperties = await prisma.property.findMany({
+    where: {
+      state: state.name,
+    },
+    orderBy: {
+      id: "asc",
+    },
+  });
 
   const available = stateProperties.filter(
-    (property) => property.status === "Available"
+    (property) => property.status !== "Sold"
   );
 
   const sold = stateProperties.filter((property) => property.status === "Sold");
@@ -60,26 +75,12 @@ export default async function StateDetailPage({
         </h1>
 
         <p className="mt-4 text-2xl font-bold">
-          {details?.nickname ?? "Lunar State"}
+          {state.theme || "Lunar State"}
         </p>
 
         <p className="mt-6 max-w-4xl text-lg text-gray-300">
-          {details?.description ??
-            "One of Orbital One Realty's 57 lunar states."}
+          {state.description || "One of Orbital One Realty's 57 lunar states."}
         </p>
-
-        {details && (
-          <div className="mt-8 flex flex-wrap gap-3">
-            {details.highlights.map((highlight) => (
-              <span
-                key={highlight}
-                className="rounded-full border border-yellow-400 px-4 py-2 text-sm font-bold text-yellow-400"
-              >
-                {highlight}
-              </span>
-            ))}
-          </div>
-        )}
 
         <div className="mt-8 flex flex-wrap gap-4">
           <a
@@ -129,11 +130,11 @@ export default async function StateDetailPage({
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {state.cities.map((city) => (
               <a
-                key={city}
-                href={`/cities/${encodeURIComponent(city)}`}
+                key={city.id}
+                href={`/cities/${encodeURIComponent(city.name)}`}
                 className="rounded-2xl border border-white/20 bg-white/5 p-5 font-bold transition hover:border-yellow-400 hover:bg-yellow-400/10"
               >
-                {city}
+                {city.name}
               </a>
             ))}
           </div>
@@ -151,11 +152,11 @@ export default async function StateDetailPage({
           <div className="mt-6 grid gap-4 md:grid-cols-4">
             {state.towns.slice(0, 8).map((town) => (
               <a
-                key={town}
-                href={`/towns/${encodeURIComponent(town)}`}
+                key={town.id}
+                href={`/towns/${encodeURIComponent(town.name)}`}
                 className="rounded-2xl border border-white/20 bg-white/5 p-5 font-bold transition hover:border-yellow-400 hover:bg-yellow-400/10"
               >
-                {town}
+                {town.name}
               </a>
             ))}
           </div>

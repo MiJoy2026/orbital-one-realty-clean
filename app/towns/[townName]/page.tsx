@@ -1,5 +1,7 @@
-import { prisma } from "../../../lib/prisma";
-import { lunarStates, sampleProperties } from "../../../lib/moon-data";
+import {
+  getLunarTownByName,
+  getPropertiesByTown,
+} from "../../../lib/atlas-service";
 
 export default async function TownDetailPage({
   params,
@@ -9,11 +11,9 @@ export default async function TownDetailPage({
   const { townName } = await params;
   const decodedTownName = decodeURIComponent(townName);
 
-  const state = lunarStates.find((lunarState) =>
-    lunarState.towns.includes(decodedTownName)
-  );
+  const town = await getLunarTownByName(decodedTownName);
 
-  if (!state) {
+  if (!town) {
     return (
       <main className="min-h-screen bg-black px-6 py-20 text-white">
         <h1 className="text-5xl font-black">Town Not Found</h1>
@@ -25,28 +25,13 @@ export default async function TownDetailPage({
     );
   }
 
-  const townProperties = sampleProperties.filter(
-    (property) => property.town === decodedTownName
+  const townProperties = await getPropertiesByTown(town.name);
+
+  const available = townProperties.filter(
+    (property) => property.status !== "Sold"
   );
 
-  const dbProperties = await prisma.property.findMany();
-
-  const townPropertiesWithLiveStatus = townProperties.map((property) => {
-    const dbProperty = dbProperties.find((item) => item.id === property.id);
-
-    return {
-      ...property,
-      status: dbProperty?.status || property.status,
-    };
-  });
-
-  const available = townPropertiesWithLiveStatus.filter(
-    (property) => property.status === "Available"
-  );
-
-  const sold = townPropertiesWithLiveStatus.filter(
-    (property) => property.status === "Sold"
-  );
+  const sold = townProperties.filter((property) => property.status === "Sold");
 
   return (
     <main
@@ -60,25 +45,25 @@ export default async function TownDetailPage({
     >
       <div className="mx-auto max-w-7xl rounded-3xl bg-black/75 p-8 backdrop-blur-sm">
         <p className="text-sm font-black uppercase tracking-[0.35em] text-yellow-400">
-          {state.name} Town Region
+          {town.state.name} Town Region
         </p>
 
         <h1 className="mt-4 text-6xl font-black uppercase text-yellow-400">
-          {decodedTownName}
+          {town.name}
         </h1>
 
         <p className="mt-6 max-w-4xl text-lg text-gray-300">
-          {decodedTownName} is one of 20 town regions within the lunar state of{" "}
-          {state.name}. Town Blocks offer a community-style novelty lunar
+          {town.name} is one of 20 town regions within the lunar state of{" "}
+          {town.state.name}. Town Blocks offer a community-style novelty lunar
           property experience within the Orbital One Realty atlas.
         </p>
 
         <div className="mt-8 flex flex-wrap gap-4">
           <a
-            href={`/states/${encodeURIComponent(state.name)}`}
+            href={`/states/${encodeURIComponent(town.state.name)}`}
             className="rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
           >
-            Back to {state.name}
+            Back to {town.state.name}
           </a>
 
           <a
@@ -92,7 +77,7 @@ export default async function TownDetailPage({
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           <div className="rounded-2xl border border-yellow-400 bg-white/5 p-6">
             <p className="text-4xl font-black text-yellow-400">
-              {townPropertiesWithLiveStatus.length}
+              {townProperties.length}
             </p>
             <p className="mt-2 uppercase text-gray-400">Town Blocks Listed</p>
           </div>
@@ -116,8 +101,8 @@ export default async function TownDetailPage({
           </h2>
 
           <div className="mt-8 grid gap-6 md:grid-cols-2">
-            {townPropertiesWithLiveStatus.length > 0 ? (
-              townPropertiesWithLiveStatus.map((property) => (
+            {townProperties.length > 0 ? (
+              townProperties.map((property) => (
                 <a
                   key={property.id}
                   href={`/explore/${property.id}`}

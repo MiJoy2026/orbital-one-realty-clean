@@ -80,10 +80,16 @@ model Property {
   updatedAt   DateTime @updatedAt
 
   state       String
+  city   String?
+  town   String?
+
   type        String
   size        String
   price       Float
   status      String   @default("Available")
+
+  mapX   Float?
+  mapY   Float?
 }
 
 model StateInventory {

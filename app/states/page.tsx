@@ -1,6 +1,14 @@
-import { lunarStates, sampleProperties } from "../../lib/moon-data";
+import { prisma } from "../../lib/prisma";
 
-export default function StatesPage() {
+export default async function StatesPage() {
+  const states = await prisma.lunarState.findMany({
+    orderBy: {
+      name: "asc",
+    },
+  });
+
+  const properties = await prisma.property.findMany();
+
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <div className="mx-auto max-w-7xl">
@@ -14,8 +22,8 @@ export default function StatesPage() {
         </p>
 
         <div className="mt-12 grid gap-6 md:grid-cols-3 lg:grid-cols-4">
-          {lunarStates.map((state) => {
-            const stateProperties = sampleProperties.filter(
+          {states.map((state) => {
+            const stateProperties = properties.filter(
               (property) => property.state === state.name
             );
 
@@ -29,17 +37,19 @@ export default function StatesPage() {
 
             return (
               <a
-                 key={state.id}
-                 href={`/states/${encodeURIComponent(state.name)}`}
-                 className="block rounded-3xl border border-white/20 bg-white/5 p-6 hover:border-yellow-400"
+                key={state.id}
+                href={`/states/${encodeURIComponent(state.name)}`}
+                className="block rounded-3xl border border-white/20 bg-white/5 p-6 hover:border-yellow-400"
               >
                 <p className="text-sm font-bold uppercase tracking-[0.3em] text-yellow-400">
-                  State {state.id}
+                  Orbital One Lunar State
                 </p>
 
-                <h2 className="mt-3 text-2xl font-black">
-                  {state.name}
-                </h2>
+                <h2 className="mt-3 text-2xl font-black">{state.name}</h2>
+
+                <p className="mt-3 text-sm text-yellow-400">
+                  {state.theme || "Lunar Atlas Region"}
+                </p>
 
                 <div className="mt-5 space-y-2 text-gray-300">
                   <p>3 Cities</p>
@@ -47,7 +57,7 @@ export default function StatesPage() {
                   <p>Rural Acreage</p>
                 </div>
 
-                <div className="mt-5 flex gap-2">
+                <div className="mt-5 flex flex-wrap gap-2">
                   <span className="rounded-full bg-green-600 px-3 py-1 text-sm font-bold">
                     {available} Available
                   </span>

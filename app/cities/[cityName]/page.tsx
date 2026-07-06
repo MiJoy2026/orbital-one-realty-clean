@@ -1,5 +1,7 @@
-import { prisma } from "../../../lib/prisma";
-import { lunarStates, sampleProperties } from "../../../lib/moon-data";
+import {
+  getLunarCityByName,
+  getPropertiesByCity,
+} from "../../../lib/atlas-service";
 
 export default async function CityDetailPage({
   params,
@@ -9,11 +11,9 @@ export default async function CityDetailPage({
   const { cityName } = await params;
   const decodedCityName = decodeURIComponent(cityName);
 
-  const state = lunarStates.find((lunarState) =>
-    lunarState.cities.includes(decodedCityName)
-  );
+  const city = await getLunarCityByName(decodedCityName);
 
-  if (!state) {
+  if (!city) {
     return (
       <main className="min-h-screen bg-black px-6 py-20 text-white">
         <h1 className="text-5xl font-black">City Not Found</h1>
@@ -25,28 +25,13 @@ export default async function CityDetailPage({
     );
   }
 
-  const cityProperties = sampleProperties.filter(
-    (property) => property.city === decodedCityName
+  const cityProperties = await getPropertiesByCity(city.name);
+
+  const available = cityProperties.filter(
+    (property) => property.status !== "Sold"
   );
 
-  const dbProperties = await prisma.property.findMany();
-
-  const cityPropertiesWithLiveStatus = cityProperties.map((property) => {
-    const dbProperty = dbProperties.find((item) => item.id === property.id);
-
-    return {
-      ...property,
-      status: dbProperty?.status || property.status,
-    };
-  });
-
-  const available = cityPropertiesWithLiveStatus.filter(
-    (property) => property.status === "Available"
-  );
-
-  const sold = cityPropertiesWithLiveStatus.filter(
-    (property) => property.status === "Sold"
-  );
+  const sold = cityProperties.filter((property) => property.status === "Sold");
 
   return (
     <main
@@ -60,25 +45,25 @@ export default async function CityDetailPage({
     >
       <div className="mx-auto max-w-7xl rounded-3xl bg-black/75 p-8 backdrop-blur-sm">
         <p className="text-sm font-black uppercase tracking-[0.35em] text-yellow-400">
-          {state.name} City Region
+          {city.state.name} City Region
         </p>
 
         <h1 className="mt-4 text-6xl font-black uppercase text-yellow-400">
-          {decodedCityName}
+          {city.name}
         </h1>
 
         <p className="mt-6 max-w-4xl text-lg text-gray-300">
-          {decodedCityName} is one of three premium city regions within the
-          lunar state of {state.name}. City Blocks represent Orbital One
+          {city.name} is one of three premium city regions within the lunar
+          state of {city.state.name}. City Blocks represent Orbital One
           Realty&apos;s premium novelty lunar property locations.
         </p>
 
         <div className="mt-8 flex flex-wrap gap-4">
           <a
-            href={`/states/${encodeURIComponent(state.name)}`}
+            href={`/states/${encodeURIComponent(city.state.name)}`}
             className="rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
           >
-            Back to {state.name}
+            Back to {city.state.name}
           </a>
 
           <a
@@ -92,7 +77,7 @@ export default async function CityDetailPage({
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           <div className="rounded-2xl border border-yellow-400 bg-white/5 p-6">
             <p className="text-4xl font-black text-yellow-400">
-              {cityPropertiesWithLiveStatus.length}
+              {cityProperties.length}
             </p>
             <p className="mt-2 uppercase text-gray-400">City Blocks Listed</p>
           </div>
@@ -116,8 +101,8 @@ export default async function CityDetailPage({
           </h2>
 
           <div className="mt-8 grid gap-6 md:grid-cols-2">
-            {cityPropertiesWithLiveStatus.length > 0 ? (
-              cityPropertiesWithLiveStatus.map((property) => (
+            {cityProperties.length > 0 ? (
+              cityProperties.map((property) => (
                 <a
                   key={property.id}
                   href={`/explore/${property.id}`}

@@ -22,7 +22,7 @@ export default async function AttractionDetailPage({
     );
   }
 
-  const nearbyProperties = getNearbyPropertiesForAttraction(attraction.id, 6);
+  const nearbyProperties = await getNearbyPropertiesForAttraction(attraction.id, 6);
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -144,7 +144,7 @@ export default async function AttractionDetailPage({
           </h2>
 
           <div className="mt-8 grid gap-6 md:grid-cols-2">
-            {nearbyProperties.map((property) => (
+            {nearbyProperties.map((property: any) => (
               <a
                 key={property.id}
                 href={`/explore/${property.id}`}
