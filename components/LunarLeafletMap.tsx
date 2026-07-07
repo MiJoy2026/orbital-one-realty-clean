@@ -1,4 +1,5 @@
 "use client";
+import { getParcelGridForZoom } from "@/lib/parcel-grid";
 import { getNearbyPropertiesForAttraction } from "@/lib/attraction-service";
 import { lunarAttractions } from "@/lib/lunar-attractions";
 import {
@@ -136,6 +137,7 @@ export default function LunarLeafletMap({
   const [showTowns, setShowTowns] = useState(false);
   const [showProperties, setShowProperties] = useState(true);
   const [showAttractions, setShowAttractions] = useState(true);;
+  const [reservingParcel, setReservingParcel] = useState(false);
   const selectedStateStats = null;
     const visibleCities = selectedState
   ? getCitiesByState(selectedState).map((city) => ({
@@ -148,6 +150,9 @@ export default function LunarLeafletMap({
       name: town,
       ...getLocationCoordinates(selectedState, town, "town"),
     }))
+  : [];
+  const visibleParcels = selectedState
+  ? getParcelGridForZoom(selectedState, zoomLevel)
   : [];
   const selectedPropertyIcon = divIcon({
   className: "",
@@ -164,6 +169,45 @@ export default function LunarLeafletMap({
 });
 
   const attractionNearbyMap: Record<string, any[]> = {};
+
+  async function reserveParcel(parcel: {
+  parcelKey: string;
+  stateName: string;
+  centerX: number;
+  centerY: number;
+}) {
+  if (reservingParcel) return;
+
+  try {
+    setReservingParcel(true);
+
+    const response = await fetch("/api/reserve-property", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        stateName: parcel.stateName,
+        propertyType: "Rural Acre",
+        parcelKey: parcel.parcelKey,
+        acreage: 1,
+        mapX: parcel.centerX,
+        mapY: parcel.centerY,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      alert(data.error || "Unable to reserve parcel.");
+      return;
+    }
+
+    window.location.href = `/cart?reservationId=${data.reservationId}`;
+  } finally {
+    setReservingParcel(false);
+  }
+}
 
   return (
     <div className="mx-auto mt-10 w-full max-w-7xl">
@@ -405,6 +449,38 @@ export default function LunarLeafletMap({
         </div>
       </Popup>
     </Marker>
+  ))}
+      {selectedState &&
+  visibleParcels.map((parcel) => (
+    <Polygon
+      key={parcel.parcelKey}
+      positions={[
+        [parcel.mapY, parcel.mapX],
+        [parcel.mapY, parcel.mapX + parcel.width],
+        [parcel.mapY + parcel.height, parcel.mapX + parcel.width],
+        [parcel.mapY + parcel.height, parcel.mapX],
+      ]}
+      pathOptions={{
+        color: "#22c55e",
+        weight: 1,
+        opacity: 0.7,
+        fillOpacity: 0.08,
+      }}
+      eventHandlers={{
+        click: () => reserveParcel(parcel),
+      }}
+    >
+      <Popup>
+        <div style={{ minWidth: "180px" }}>
+          <strong>{parcel.parcelKey}</strong>
+          <br />
+          {parcel.stateName} Rural Parcel
+          <br />
+          <br />
+          Click-to-reserve coming next.
+        </div>
+      </Popup>
+    </Polygon>
   ))}
        {showAttractions &&
   lunarAttractions.map((attraction) => (
