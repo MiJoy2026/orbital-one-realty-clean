@@ -4,14 +4,27 @@ import { prisma } from "../../lib/prisma";
 export default async function CartPage({
   searchParams,
 }: {
-  searchParams: Promise<{ propertyId?: string; acres?: string }>;
+  searchParams: Promise<{
+  propertyId?: string;
+  reservationId?: string;
+  acres?: string;
+}>;
 }) {
   const params = await searchParams;
+  const reservation = params.reservationId
+  ? await prisma.propertyReservation.findUnique({
+      where: {
+        id: params.reservationId,
+      },
+    })
+  : null;
   const acres = Number(params.acres || "1");
-  const property = params.propertyId
+  const propertyId = params.propertyId || reservation?.parcelKey;
+
+  const property = propertyId
   ? await prisma.property.findUnique({
       where: {
-        id: params.propertyId,
+        id: propertyId,
       },
     })
   : null;
@@ -42,19 +55,30 @@ export default async function CartPage({
             </h2>
 
             {property ? (
-              <div className="mt-6 rounded-2xl border border-white/20 p-6">
-                <p className="text-2xl font-bold">{property.id}</p>
+  <div className="mt-6 rounded-2xl border border-white/20 p-6">
+    <p className="text-2xl font-bold">{property.id}</p>
 
-                <p className="mt-2 text-gray-300">
-                  {property.type} • {property.state} •{" "}
-                  {property.type === "Rural Acre" ? `${acres} Acre${acres === 1 ? "" : "s"}` : property.size}
-                </p>
+    <div className="mt-2 text-gray-300">
+      <p>
+        {property.type} • {property.state} •{" "}
+        {property.type === "Rural Acre"
+          ? `${acres} Acre${acres === 1 ? "" : "s"}`
+          : property.size}
+      </p>
 
-                <p className="mt-4 text-3xl font-black text-yellow-400">
-                  ${property.price.toFixed(2)}
-                </p>
-              </div>
-            ) : (
+      {reservation && (
+        <p className="mt-2 font-bold text-green-400">
+          ✔ Reserved until{" "}
+          {new Date(reservation.expiresAt).toLocaleTimeString()}
+        </p>
+      )}
+    </div>
+
+    <p className="mt-4 text-3xl font-black text-yellow-400">
+      ${property.price.toFixed(2)}
+    </p>
+  </div>
+) : (
               <div className="mt-6 rounded-2xl border border-white/20 p-6">
                 <p className="text-2xl font-bold">Your cart is empty</p>
 
@@ -81,6 +105,7 @@ export default async function CartPage({
              propertyId={property.id}
              acres={acres}
              propertyPrice={propertyPrice}
+             reservationId={reservation?.id}
           />
             ) : (
                <button

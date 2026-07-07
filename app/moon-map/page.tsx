@@ -2,7 +2,7 @@ import {
   getPropertyById,
   getNearbyProperties,
 } from "../../lib/property-service";
-import LunarLeafletMap from "@/components/LunarLeafletMap";
+import LunarLeafletMap from "@/components/LunarLeafletMapClient";
 
 export default async function MoonMapPage({
   searchParams,

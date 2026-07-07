@@ -13,6 +13,7 @@ export async function POST(request: Request) {
   const isGift = Boolean(body.isGift);
   const recipientEmail = body.recipientEmail || "";
   const giftMessage = body.giftMessage || "";
+  const reservationId = body.reservationId || "";
   
   const property = await prisma.property.findUnique({
   where: {
@@ -94,6 +95,7 @@ if (dbProperty?.status === "Sold") {
   passportSelected: String(passportSelected),
   recipientEmail,
   giftMessage,
+  reservationId,
 },
   });
 

@@ -37,6 +37,25 @@ model Order {
   hoaClaimed     Boolean @default(false)
 }
 
+model PropertyReservation {
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  stateName   String
+  cityName    String?
+  townName    String?
+
+  parcelKey   String   @unique
+  propertyType String
+  acreage     Float?
+
+  mapX        Float?
+  mapY        Float?
+
+  status      String   @default("Reserved")
+}
+
 model LunarState {
   id          String   @id @default(cuid())
   createdAt   DateTime @default(now())

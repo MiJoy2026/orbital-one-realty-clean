@@ -7,10 +7,12 @@ export default function CartCheckoutPanel({
   propertyId,
   acres,
   propertyPrice,
+  reservationId,
 }: {
   propertyId: string;
   acres?: number;
   propertyPrice: number;
+  reservationId?: string;
 }) {
   const [passportSelected, setPassportSelected] = useState(false);
 
@@ -55,6 +57,7 @@ export default function CartCheckoutPanel({
         propertyId={propertyId}
         acres={acres}
         passportSelected={passportSelected}
+        reservationId={reservationId}
       />
     </>
   );

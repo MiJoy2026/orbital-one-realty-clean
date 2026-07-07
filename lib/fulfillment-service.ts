@@ -37,6 +37,7 @@ if (!property) {
   const passportPurchased = session.metadata?.passportSelected === "true";
   const recipientEmail = session.metadata?.recipientEmail || null;
   const giftMessage = session.metadata?.giftMessage || null;
+  const reservationId = session.metadata?.reservationId || null;
 
   const memberEmail = isGift && recipientEmail ? recipientEmail : purchaserEmail;
 
@@ -103,6 +104,17 @@ if (!property) {
       hoaClaimed: false,
     },
   });
+
+      if (reservationId) {
+  await prisma.propertyReservation.update({
+    where: {
+      id: reservationId,
+    },
+    data: {
+      status: "Completed",
+    },
+  });
+}
 
   return {
     propertyId,
