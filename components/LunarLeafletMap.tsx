@@ -1,5 +1,5 @@
 "use client";
-
+import ParcelLayer from "@/components/moon-map/ParcelLayer";
 import { getParcelGridForZoom } from "@/lib/parcel-grid";
 import { lunarAttractions } from "@/lib/lunar-attractions";
 import {
@@ -483,69 +483,13 @@ export default function LunarLeafletMap({
                 </Marker>
               ))}
 
-            {selectedState &&
-              visibleParcels.map((parcel) => {
-                const status = parcelStatuses[parcel.parcelKey] || "Available";
-
-                const color =
-                  status === "Sold"
-                    ? "#dc2626"
-                    : status === "Reserved"
-                      ? "#3b82f6"
-                      : "#22c55e";
-
-                return (
-                  <Polygon
-                    key={parcel.parcelKey}
-                    positions={[
-                      [parcel.mapY, parcel.mapX],
-                      [parcel.mapY, parcel.mapX + parcel.width],
-                      [
-                        parcel.mapY + parcel.height,
-                        parcel.mapX + parcel.width,
-                      ],
-                      [parcel.mapY + parcel.height, parcel.mapX],
-                    ]}
-                    pathOptions={{
-                      color,
-                      fillColor: color,
-                      weight: 1,
-                      opacity: 0.9,
-                      fillOpacity: 0.18,
-                    }}
-                    eventHandlers={{
-                      click: () => {
-                        if (status === "Sold") {
-                          alert("This parcel has already been sold.");
-                          return;
-                        }
-
-                        if (status === "Reserved") {
-                          alert("This parcel is currently reserved.");
-                          return;
-                        }
-
-                        reserveParcel(parcel);
-                      },
-                    }}
-                  >
-                    <Popup>
-                      <div style={{ minWidth: "190px" }}>
-                        <strong>{parcel.parcelKey}</strong>
-                        <br />
-                        {parcel.stateName} Rural Parcel
-                        <br />
-                        Status: {status}
-                        <br />
-                        <br />
-                        {status === "Available"
-                          ? "Click this parcel to reserve it."
-                          : "This parcel is not currently available."}
-                      </div>
-                    </Popup>
-                  </Polygon>
-                );
-              })}
+            {selectedState && (
+  <ParcelLayer
+    parcels={visibleParcels}
+    parcelStatuses={parcelStatuses}
+    onReserve={reserveParcel}
+  />
+)}
 
             {showAttractions &&
               lunarAttractions.map((attraction) => (
