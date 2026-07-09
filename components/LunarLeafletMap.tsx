@@ -1,5 +1,7 @@
 "use client";
 import StateLayer from "@/components/moon-map/StateLayer";
+import CityLayer from "@/components/moon-map/CityLayer";
+import TownLayer from "@/components/moon-map/TownLayer";
 import ParcelLayer from "@/components/moon-map/ParcelLayer";
 import { getParcelGridForZoom } from "@/lib/parcel-grid";
 import { lunarAttractions } from "@/lib/lunar-attractions";
@@ -349,84 +351,30 @@ export default function LunarLeafletMap({
             <ImageOverlay url="/atlas/moon-atlas-v2.jpg" bounds={bounds} />
 
             <StateLayer
-  showStates={showStates}
-  selectedState={selectedState}
-  onSelectState={setSelectedState}
-/>
+              showStates={showStates}
+              selectedState={selectedState}
+              onSelectState={setSelectedState}
+            />
 
-            {showCities &&
-              zoomLevel >= 0 &&
-              visibleCities.map((city) => (
-                <Marker
-                  key={`city-${city.name}`}
-                  position={[city.y, city.x]}
-                  icon={divIcon({
-                    className: "",
-                    html: `<div style="
-                      color:#7dd3fc;
-                      font-weight:800;
-                      font-size:13px;
-                      text-transform:uppercase;
-                      text-shadow:0 0 8px #000;
-                      white-space:nowrap;
-                    ">🏙 ${city.name}</div>`,
-                  })}
-                >
-                  <Popup>
-                    <div style={{ minWidth: "160px" }}>
-                      <strong>{city.name}</strong>
-                      <br />
-                      Lunar City
-                      <br />
-                      <br />
-                      <a href={`/cities/${encodeURIComponent(city.name)}`}>
-                        View City
-                      </a>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
+            <CityLayer
+              showCities={showCities}
+              zoomLevel={zoomLevel}
+              cities={visibleCities}
+            />
 
-            {showTowns &&
-              zoomLevel >= 0 &&
-              visibleTowns.map((town) => (
-                <Marker
-                  key={`town-${town.name}`}
-                  position={[town.y, town.x]}
-                  icon={divIcon({
-                    className: "",
-                    html: `<div style="
-                      color:#fde68a;
-                      font-weight:800;
-                      font-size:11px;
-                      text-transform:uppercase;
-                      text-shadow:0 0 8px #000;
-                      white-space:nowrap;
-                    ">🏘 ${town.name}</div>`,
-                  })}
-                >
-                  <Popup>
-                    <div style={{ minWidth: "160px" }}>
-                      <strong>{town.name}</strong>
-                      <br />
-                      Lunar Town
-                      <br />
-                      <br />
-                      <a href={`/towns/${encodeURIComponent(town.name)}`}>
-                        View Town
-                      </a>
-                    </div>
-                  </Popup>
-                </Marker>
-              ))}
+            <TownLayer
+              showTowns={showTowns}
+              zoomLevel={zoomLevel}
+              towns={visibleTowns}
+            />
 
             {selectedState && (
-  <ParcelLayer
-    parcels={visibleParcels}
-    parcelStatuses={parcelStatuses}
-    onReserve={reserveParcel}
-  />
-)}
+              <ParcelLayer
+               parcels={visibleParcels}
+               parcelStatuses={parcelStatuses}
+               onReserve={reserveParcel}
+              />
+            )}
 
             {showAttractions &&
               lunarAttractions.map((attraction) => (
