@@ -3,6 +3,8 @@ import StateLayer from "@/components/moon-map/StateLayer";
 import CityLayer from "@/components/moon-map/CityLayer";
 import TownLayer from "@/components/moon-map/TownLayer";
 import ParcelLayer from "@/components/moon-map/ParcelLayer";
+import PropertyInfoPanel from "@/components/moon-map/PropertyInfoPanel";
+import type { ParcelCell } from "@/lib/parcel-grid";
 import { getParcelGridForZoom } from "@/lib/parcel-grid";
 import { lunarAttractions } from "@/lib/lunar-attractions";
 import {
@@ -11,6 +13,7 @@ import {
   getLocationCoordinates,
 } from "@/lib/lunar-location-service";
 import { stateCenters } from "@/lib/property-coordinates";
+import ReservationCountdown from "@/components/moon-map/ReservationCountdown";
 import { useEffect, useMemo, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import {
@@ -33,6 +36,12 @@ type SelectedProperty = {
   status: string;
   mapX?: number | null;
   mapY?: number | null;
+};
+
+type ActiveReservation = {
+  reservationId: string;
+  parcelKey: string;
+  expiresAt: string;
 };
 
 function TrackZoomLevel({
@@ -139,6 +148,10 @@ export default function LunarLeafletMap({
   const [showProperties, setShowProperties] = useState(true);
   const [showAttractions, setShowAttractions] = useState(true);
   const [reservingParcel, setReservingParcel] = useState(false);
+  const [selectedParcelKey, setSelectedParcelKey] = useState<string | null>(null);
+  const [selectedParcel, setSelectedParcel] = useState<ParcelCell | null>(null);
+  const [activeReservation, setActiveReservation] =
+     useState<ActiveReservation | null>(null);
   const [parcelStatuses, setParcelStatuses] = useState<Record<string, string>>(
     {}
   );
@@ -209,6 +222,7 @@ export default function LunarLeafletMap({
 
     try {
       setReservingParcel(true);
+      setSelectedParcelKey(parcel.parcelKey);
 
       const response = await fetch("/api/reserve-property", {
         method: "POST",
@@ -232,7 +246,11 @@ export default function LunarLeafletMap({
         return;
       }
 
-      window.location.href = `/cart?reservationId=${data.reservationId}`;
+      setActiveReservation({
+        reservationId: data.reservationId,
+        parcelKey: data.parcelKey,
+        expiresAt: data.expiresAt,
+      });
     } finally {
       setReservingParcel(false);
     }
@@ -325,9 +343,9 @@ export default function LunarLeafletMap({
             center={[500, 500]}
             zoom={0}
             minZoom={-2}
-            maxZoom={3}
+            maxZoom={7}
             zoomControl={false}
-            wheelPxPerZoomLevel={80}
+            wheelPxPerZoomLevel={120}
             maxBounds={bounds}
             maxBoundsViscosity={0.7}
             style={{
@@ -370,9 +388,13 @@ export default function LunarLeafletMap({
 
             {selectedState && (
               <ParcelLayer
-               parcels={visibleParcels}
-               parcelStatuses={parcelStatuses}
-               onReserve={reserveParcel}
+                parcels={visibleParcels}
+                parcelStatuses={parcelStatuses}
+                selectedParcelKey={selectedParcelKey}
+                onSelect={(parcel) => {
+                 setSelectedParcel(parcel);
+                 setSelectedParcelKey(parcel.parcelKey);
+                }}
               />
             )}
 
@@ -527,40 +549,36 @@ export default function LunarLeafletMap({
           </MapContainer>
         </div>
 
-        <div className="rounded-3xl border border-yellow-400/30 bg-black/70 p-6">
-          <p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-400">
-            State Information
-          </p>
+        <PropertyInfoPanel
+  selectedParcel={selectedParcel}
+  selectedState={selectedState}
+  activeReservation={activeReservation}
+  reservingParcel={reservingParcel}
+  onReserve={reserveParcel}
+  onExpired={async () => {
+    if (!activeReservation) return;
 
-          {selectedState ? (
-            <>
-              <h2 className="mt-4 text-3xl font-black text-yellow-400">
-                {selectedState}
-              </h2>
+    await fetch("/api/release-reservation", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        reservationId: activeReservation.reservationId,
+      }),
+    });
 
-              <p className="mt-4 text-gray-300">Orbital One Lunar State</p>
+    setParcelStatuses((currentStatuses) => {
+      const nextStatuses = { ...currentStatuses };
+      delete nextStatuses[activeReservation.parcelKey];
+      return nextStatuses;
+    });
 
-              <div className="mt-6 space-y-3">
-                <p>🌕 3 Cities</p>
-                <p>🏘 20 Towns</p>
-                <p className="text-gray-400">
-                  Select a green parcel to reserve your rural lunar property.
-                </p>
-              </div>
-
-              <a
-                href={`/states/${encodeURIComponent(selectedState)}`}
-                className="mt-8 inline-block rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
-              >
-                Browse Properties
-              </a>
-            </>
-          ) : (
-            <div className="mt-6 text-gray-400">
-              Click a lunar state on the map to view information.
-            </div>
-          )}
-        </div>
+    setActiveReservation(null);
+    setSelectedParcelKey(null);
+    setSelectedParcel(null);
+  }}
+/>
       </div>
     </div>
   );
