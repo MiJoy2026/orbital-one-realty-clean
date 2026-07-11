@@ -1,4 +1,5 @@
 "use client";
+import VisibleParcelLayer from "@/components/moon-map/VisibleParcelLayer";
 import StateLayer from "@/components/moon-map/StateLayer";
 import CityLayer from "@/components/moon-map/CityLayer";
 import TownLayer from "@/components/moon-map/TownLayer";
@@ -345,7 +346,17 @@ export default function LunarLeafletMap({
             minZoom={-2}
             maxZoom={7}
             zoomControl={false}
-            wheelPxPerZoomLevel={120}
+            preferCanvas={true}
+            zoomSnap={0}
+            zoomDelta={0.5}
+            zoomAnimation={true}
+            fadeAnimation={true}
+            markerZoomAnimation={true}
+            inertia={true}
+            inertiaDeceleration={3000}
+            inertiaMaxSpeed={1200}
+            wheelPxPerZoomLevel={240}
+            wheelDebounceTime={10}
             maxBounds={bounds}
             maxBoundsViscosity={0.7}
             style={{
@@ -387,11 +398,11 @@ export default function LunarLeafletMap({
             />
 
             {selectedState && (
-              <ParcelLayer
-                parcels={visibleParcels}
-                parcelStatuses={parcelStatuses}
-                selectedParcelKey={selectedParcelKey}
-                onSelect={(parcel) => {
+              <VisibleParcelLayer
+                 parcels={visibleParcels}
+                 parcelStatuses={parcelStatuses}
+                 selectedParcelKey={selectedParcelKey}
+                 onSelect={(parcel) => {
                  setSelectedParcel(parcel);
                  setSelectedParcelKey(parcel.parcelKey);
                 }}
@@ -554,6 +565,7 @@ export default function LunarLeafletMap({
   selectedState={selectedState}
   activeReservation={activeReservation}
   reservingParcel={reservingParcel}
+  zoomLevel={zoomLevel}
   onReserve={reserveParcel}
   onExpired={async () => {
     if (!activeReservation) return;

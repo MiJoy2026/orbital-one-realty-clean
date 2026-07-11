@@ -14,6 +14,7 @@ export default function PropertyInfoPanel({
   selectedState,
   activeReservation,
   reservingParcel,
+  zoomLevel,
   onReserve,
   onExpired,
 }: {
@@ -21,23 +22,69 @@ export default function PropertyInfoPanel({
   selectedState: string | null;
   activeReservation: ActiveReservation | null;
   reservingParcel: boolean;
+  zoomLevel: number;
   onReserve: (parcel: ParcelCell) => void;
   onExpired: () => void;
 }) {
   if (!selectedParcel) {
     return (
-      <div className="rounded-3xl border border-yellow-400/30 bg-black/70 p-6">
-        <p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-400">
-          Parcel Information
+  <div className="rounded-3xl border border-yellow-400/30 bg-black/70 p-6">
+    <p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-400">
+      Lunar Atlas
+    </p>
+
+    {selectedState ? (
+      <>
+        <h2 className="mt-4 text-3xl font-black text-yellow-400">
+          {selectedState}
+        </h2>
+
+        {zoomLevel < 7 ? (
+          <>
+            <p className="mt-6 text-gray-300">
+              You are exploring this lunar region.
+            </p>
+
+            <div className="mt-6 rounded-2xl border border-blue-400/30 bg-blue-400/10 p-4">
+              <p className="font-black text-blue-300">
+                🔍 Zoom in further
+              </p>
+
+              <p className="mt-2 text-sm text-gray-300">
+                Individual rural acres become available at the deepest zoom
+                level.
+              </p>
+
+              <p className="mt-4 text-yellow-400">
+                Current Zoom Level: {zoomLevel}
+              </p>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mt-6 text-green-400 font-bold">
+              🟢 Individual rural acres are now available.
+            </p>
+
+            <p className="mt-4 text-gray-300">
+              Click any green parcel to view its details.
+            </p>
+          </>
+        )}
+      </>
+    ) : (
+      <>
+        <p className="mt-6 text-gray-300">
+          Welcome to the Orbital One Lunar Atlas.
         </p>
 
-        <div className="mt-6 text-gray-400">
-          {selectedState
-            ? "Click a green parcel to view its details."
-            : "Select a lunar state, then choose a rural parcel."}
-        </div>
-      </div>
-    );
+        <p className="mt-4 text-gray-400">
+          Select one of the lunar states to begin exploring.
+        </p>
+      </>
+    )}
+  </div>
+);
   }
 
   const reservationMatches =
