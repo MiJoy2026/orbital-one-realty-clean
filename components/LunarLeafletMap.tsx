@@ -4,6 +4,7 @@ import StateLayer from "@/components/moon-map/StateLayer";
 import CityLayer from "@/components/moon-map/CityLayer";
 import TownLayer from "@/components/moon-map/TownLayer";
 import ParcelLayer from "@/components/moon-map/ParcelLayer";
+import LunarTileLayer from "@/components/moon-map/LunarTileLayer";
 import PropertyInfoPanel from "@/components/moon-map/PropertyInfoPanel";
 import type { ParcelCell } from "@/lib/parcel-grid";
 import { getParcelGridForZoom } from "@/lib/parcel-grid";
@@ -27,7 +28,7 @@ import {
   ScaleControl,
   useMap,
 } from "react-leaflet";
-import { CRS, divIcon } from "leaflet";
+import { CRS, Transformation, divIcon } from "leaflet";
 import { lunarMapRegions } from "@/lib/lunar-map-regions";
 
 type SelectedProperty = {
@@ -43,6 +44,18 @@ type ActiveReservation = {
   reservationId: string;
   parcelKey: string;
   expiresAt: string;
+};
+
+const lunarCoordinateScale = 256 / 1000;
+
+const LunarCRS = {
+  ...CRS.Simple,
+  transformation: new Transformation(
+    lunarCoordinateScale,
+    0,
+    -lunarCoordinateScale,
+    256
+  ),
 };
 
 function TrackZoomLevel({
@@ -256,6 +269,7 @@ export default function LunarLeafletMap({
       setReservingParcel(false);
     }
   }
+      const useTileAtlas = true;
 
   return (
     <div className="mx-auto mt-10 w-full max-w-7xl">
@@ -340,23 +354,23 @@ export default function LunarLeafletMap({
         <div className="h-[850px] overflow-hidden rounded-3xl border border-yellow-400/40 bg-black shadow-2xl">
           <MapContainer
             key="orbital-one-lunar-map"
-            crs={CRS.Simple}
+            crs={LunarCRS}
             center={[500, 500]}
             zoom={0}
             minZoom={-2}
             maxZoom={7}
             zoomControl={false}
             preferCanvas={true}
-            zoomSnap={0}
-            zoomDelta={0.5}
+            zoomSnap={1}
+            zoomDelta={1}
             zoomAnimation={true}
             fadeAnimation={true}
             markerZoomAnimation={true}
             inertia={true}
             inertiaDeceleration={3000}
             inertiaMaxSpeed={1200}
-            wheelPxPerZoomLevel={240}
-            wheelDebounceTime={10}
+            wheelPxPerZoomLevel={60}
+            wheelDebounceTime={40}
             maxBounds={bounds}
             maxBoundsViscosity={0.7}
             style={{
@@ -377,7 +391,11 @@ export default function LunarLeafletMap({
               }}
             />
 
-            <ImageOverlay url="/atlas/moon-atlas-v2.jpg" bounds={bounds} />
+            {useTileAtlas ? (
+               <LunarTileLayer />
+                ) : (
+               <ImageOverlay url="/atlas/moon-atlas-v2.jpg" bounds={bounds} />
+            )}
 
             <StateLayer
               showStates={showStates}
