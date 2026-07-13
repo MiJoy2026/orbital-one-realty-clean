@@ -8,7 +8,7 @@ import LunarTileLayer from "@/components/moon-map/LunarTileLayer";
 import PropertyInfoPanel from "@/components/moon-map/PropertyInfoPanel";
 import type { ParcelCell } from "@/lib/parcel-grid";
 import { getParcelGridForZoom } from "@/lib/parcel-grid";
-import { lunarAttractions } from "@/lib/lunar-attractions";
+import { getVisibleLunarAttractions } from "@/lib/lunar-attractions";
 import {
   getCitiesByState,
   getTownsByState,
@@ -183,6 +183,8 @@ export default function LunarLeafletMap({
         ...getLocationCoordinates(selectedState, town, "town"),
       }))
     : [];
+
+  const visibleAttractions = getVisibleLunarAttractions(zoomLevel);
 
   const visibleParcels = useMemo(() => {
   return selectedState ? getParcelGridForZoom(selectedState, zoomLevel) : [];
@@ -428,7 +430,7 @@ export default function LunarLeafletMap({
             )}
 
             {showAttractions &&
-              lunarAttractions.map((attraction) => (
+               visibleAttractions.map((attraction) => (
                 <Marker
                   key={`attraction-${attraction.id}`}
                   position={[attraction.y, attraction.x]}
