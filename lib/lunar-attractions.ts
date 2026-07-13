@@ -248,3 +248,25 @@ export function getLunarAttractionsByType(type: LunarAttractionType) {
     (attraction) => attraction.type === type
   );
 }
+export function getNearbyLunarAttractions(
+  mapX: number,
+  mapY: number,
+  limit = 3
+) {
+  return lunarAttractions
+    .map((attraction) => {
+      const horizontalDistance = attraction.x - mapX;
+      const verticalDistance = attraction.y - mapY;
+
+      const distance = Math.sqrt(
+        horizontalDistance ** 2 + verticalDistance ** 2
+      );
+
+      return {
+        ...attraction,
+        distance,
+      };
+    })
+    .sort((first, second) => first.distance - second.distance)
+    .slice(0, limit);
+}

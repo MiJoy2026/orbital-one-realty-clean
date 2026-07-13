@@ -1,5 +1,5 @@
 "use client";
-
+import { getNearbyLunarAttractions } from "@/lib/lunar-attractions";
 import type { ParcelCell } from "@/lib/parcel-grid";
 import ReservationCountdown from "@/components/moon-map/ReservationCountdown";
 
@@ -90,6 +90,12 @@ export default function PropertyInfoPanel({
   const reservationMatches =
     activeReservation?.parcelKey === selectedParcel.parcelKey;
 
+  const nearbyAttractions = getNearbyLunarAttractions(
+  selectedParcel.centerX,
+  selectedParcel.centerY,
+  3
+);
+
   return (
     <div className="rounded-3xl border border-yellow-400/30 bg-black/70 p-6">
       <p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-400">
@@ -126,6 +132,31 @@ export default function PropertyInfoPanel({
         <p className="mt-2">🏛 Complimentary HOA Membership</p>
         <p className="mt-2">🌕 Permanent Orbital One Registry Record</p>
       </div>
+      <div className="mt-6 rounded-2xl border border-blue-400/30 bg-blue-400/10 p-4">
+  <p className="text-sm font-black uppercase tracking-[0.2em] text-blue-300">
+    Nearby Lunar Attractions
+  </p>
+
+  <div className="mt-4 space-y-3">
+    {nearbyAttractions.map((attraction) => (
+      <a
+        key={attraction.id}
+        href={`/attractions/${attraction.id}`}
+        className="block rounded-xl border border-white/10 bg-black/30 p-3 transition hover:border-blue-300"
+      >
+        <p className="font-black text-white">{attraction.name}</p>
+
+        <p className="mt-1 text-xs uppercase text-gray-400">
+          {attraction.type}
+        </p>
+
+        <p className="mt-2 text-sm text-blue-300">
+          Approx. {attraction.distance.toFixed(1)} map units away
+        </p>
+      </a>
+    ))}
+  </div>
+</div>
 
       {reservationMatches && activeReservation ? (
         <div className="mt-6 rounded-2xl border border-yellow-400 bg-yellow-400/10 p-4">
