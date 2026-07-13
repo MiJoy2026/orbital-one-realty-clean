@@ -47,3 +47,4 @@ next-env.d.ts
 
 # Generated high-resolution lunar tiles
 /public/atlas/lroc-tiles/
+/public/atlas/lroc-tiles-v2/
