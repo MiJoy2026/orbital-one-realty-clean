@@ -586,6 +586,11 @@ export default function LunarLeafletMap({
   activeReservation={activeReservation}
   reservingParcel={reservingParcel}
   zoomLevel={zoomLevel}
+  selectedParcelStatus={
+  selectedParcel
+    ? parcelStatuses[selectedParcel.parcelKey] || "Available"
+    : "Available"
+}
   onReserve={reserveParcel}
   onExpired={async () => {
     if (!activeReservation) return;
@@ -610,6 +615,35 @@ export default function LunarLeafletMap({
     setSelectedParcelKey(null);
     setSelectedParcel(null);
   }}
+  onCancelReservation={async () => {
+  if (!activeReservation) return;
+
+  const response = await fetch("/api/release-reservation", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      reservationId: activeReservation.reservationId,
+    }),
+  });
+
+  if (!response.ok) {
+    const data = await response.json();
+    alert(data.error || "Unable to cancel the reservation.");
+    return;
+  }
+
+  setParcelStatuses((currentStatuses) => {
+    const nextStatuses = { ...currentStatuses };
+    delete nextStatuses[activeReservation.parcelKey];
+    return nextStatuses;
+  });
+
+  setActiveReservation(null);
+  setSelectedParcelKey(null);
+  setSelectedParcel(null);
+}}
 />
       </div>
     </div>

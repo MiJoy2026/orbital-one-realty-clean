@@ -248,6 +248,55 @@ export function getLunarAttractionsByType(type: LunarAttractionType) {
     (attraction) => attraction.type === type
   );
 }
+const APPROXIMATE_KILOMETERS_PER_MAP_UNIT = 3.47;
+
+export function convertMapUnitsToKilometers(mapUnits: number) {
+  return mapUnits * APPROXIMATE_KILOMETERS_PER_MAP_UNIT;
+}
+
+export function getMapDirection(
+  fromX: number,
+  fromY: number,
+  toX: number,
+  toY: number
+) {
+  const horizontal = toX - fromX;
+  const vertical = toY - fromY;
+
+  const angle = Math.atan2(vertical, horizontal) * (180 / Math.PI);
+  const normalizedAngle = (angle + 360) % 360;
+
+  if (normalizedAngle >= 337.5 || normalizedAngle < 22.5) {
+    return "east";
+  }
+
+  if (normalizedAngle < 67.5) {
+    return "northeast";
+  }
+
+  if (normalizedAngle < 112.5) {
+    return "north";
+  }
+
+  if (normalizedAngle < 157.5) {
+    return "northwest";
+  }
+
+  if (normalizedAngle < 202.5) {
+    return "west";
+  }
+
+  if (normalizedAngle < 247.5) {
+    return "southwest";
+  }
+
+  if (normalizedAngle < 292.5) {
+    return "south";
+  }
+
+  return "southeast";
+}
+
 export function getNearbyLunarAttractions(
   mapX: number,
   mapY: number,
@@ -262,10 +311,17 @@ export function getNearbyLunarAttractions(
         horizontalDistance ** 2 + verticalDistance ** 2
       );
 
-      return {
+       return {
         ...attraction,
         distance,
-      };
+        distanceKilometers: convertMapUnitsToKilometers(distance),
+        direction: getMapDirection(
+        mapX,
+        mapY,
+        attraction.x,
+        attraction.y
+      ),
+    };
     })
     .sort((first, second) => first.distance - second.distance)
     .slice(0, limit);
