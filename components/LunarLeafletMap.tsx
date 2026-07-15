@@ -1,4 +1,6 @@
 "use client";
+import SearchBox from "@/components/moon-map/SearchBox";
+import type { AtlasSearchResult } from "@/lib/search-index";
 import VisibleParcelLayer from "@/components/moon-map/VisibleParcelLayer";
 import StateLayer from "@/components/moon-map/StateLayer";
 import CityLayer from "@/components/moon-map/CityLayer";
@@ -82,6 +84,26 @@ function TrackZoomLevel({
   return null;
 }
 
+function FlyToSearchResult({
+  searchResult,
+}: {
+  searchResult: AtlasSearchResult | null;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!searchResult) {
+      return;
+    }
+
+    map.flyTo([searchResult.y, searchResult.x], searchResult.zoom, {
+      duration: 1.4,
+    });
+  }, [map, searchResult]);
+
+  return null;
+}
+
 function FlyToSelectedProperty({
   selectedProperty,
 }: {
@@ -156,6 +178,8 @@ export default function LunarLeafletMap({
 
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(0);
+  const [selectedSearchResult, setSelectedSearchResult] =
+     useState<AtlasSearchResult | null>(null);
   const [showStates, setShowStates] = useState(true);
   const [showCities, setShowCities] = useState(true);
   const [showTowns, setShowTowns] = useState(false);
@@ -351,7 +375,17 @@ export default function LunarLeafletMap({
           </label>
         </div>
       </div>
+            <div className="mb-4">
+              <SearchBox
+                onSelectResult={(result) => {
+                setSelectedSearchResult(result);
 
+                  if (result.type === "Attraction") {
+                  setShowAttractions(true);
+                 }
+                }}
+              />
+            </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="h-[850px] overflow-hidden rounded-3xl border border-yellow-400/40 bg-black shadow-2xl">
           <MapContainer
@@ -385,6 +419,7 @@ export default function LunarLeafletMap({
             <ScaleControl position="bottomleft" />
             <FlyToSelectedProperty selectedProperty={selectedProperty} />
             <FlyToSelectedState selectedState={selectedState} />
+            <FlyToSearchResult searchResult={selectedSearchResult} />
             <TrackZoomLevel onZoomChange={setZoomLevel} />
             <MapHomeButton
               onReset={() => {

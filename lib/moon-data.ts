@@ -1,22 +1,6 @@
 export type PropertyStatus = "Available" | "Sold";
 export type PropertyType = "Rural Acre" | "Town Block" | "City Block";
 
-export type LunarProperty = {
-  id: string;
-  state: string;
-  city?: string;
-  town?: string;
-  type: PropertyType;
-  size: string;
-  price: number;
-  status: PropertyStatus;
-
-    mapX?: number;
-    mapY?: number;
-    
-  nearbyAttractions: string[];
-};
-
 const lunarStateNames = [
   "Hammel",
   "Clavius",
@@ -77,114 +61,63 @@ const lunarStateNames = [
   "Le Monnier",
 ];
 
-export const lunarStates = lunarStateNames.map((name, index) => ({
-  id: index + 1,
-  name,
-  cities: [
-    `${name} City One`,
-    `${name} City Two`,
-    `${name} City Three`,
-  ],
-  towns: Array.from(
-    { length: 20 },
-    (_, townIndex) => `${name} Town ${townIndex + 1}`
-  ),
-}));
-
-export const sampleProperties: LunarProperty[] = [
-  {
-    id: "R-001",
-    state: "Hammel",
-    type: "Rural Acre",
-    size: "1 Acre",
-    price: 24.95,
-    status: "Available",
-
-    mapX: 500,
-    mapY: 500,
-
-    nearbyAttractions: ["Apollo 11 Landing Site", "Sea of Tranquility"],
-  },
-  {
-    id: "R-002",
-    state: "Hammel",
-    type: "Rural Acre",
-    size: "1/2 Acre",
-    price: 16.95,
-    status: "Available",
-
-    mapX: 500,
-    mapY: 500,
-
-    nearbyAttractions: ["Famous Lunar Craters", "Historic Moon Plains"],
-  },
-  {
-    id: "R-003",
-    state: "Clavius",
-    type: "Rural Acre",
-    size: "1 Acre",
-    price: 24.95,
-    status: "Sold",
-
-    mapX: 500,
-    mapY: 500,
-
-    nearbyAttractions: ["Tycho Crater", "Southern Highlands"],
-  },
-  {
-    id: "T-001",
-    state: "Schiller",
-    town: "Schiller Town 1",
-    type: "Town Block",
-    size: "Town Block",
-    price: 39.95,
-    status: "Available",
-
-    mapX: 500,
-    mapY: 500,
-
-    nearbyAttractions: ["Copernicus Crater", "Lunar Ridge Trail"],
-  },
-  {
-    id: "T-002",
-    state: "Schiller",
-    town: "Schiller Town 2",
-    type: "Town Block",
-    size: "Town Block",
-    price: 39.95,
-    status: "Sold",
-
-    mapX: 500,
-    mapY: 500,
-
-    nearbyAttractions: ["Mare Imbrium", "Lunar Overlook"],
-  },
-  {
-    id: "C-001",
-    state: "Rhetta",
-    city: "Rhetta City One",
-    type: "City Block",
-    size: "City Block",
-    price: 54.95,
-    status: "Available",
-
-    mapX: 500,
-    mapY: 500,
-
-    nearbyAttractions: ["Aristarchus Plateau", "Bright Crater Field"],
-  },
-  {
-    id: "C-002",
-    state: "Rhetta",
-    city: "Rhetta City Two",
-    type: "City Block",
-    size: "City Block",
-    price: 54.95,
-    status: "Sold",
-
-    mapX: 500,
-    mapY: 500,
-
-    nearbyAttractions: ["Lunar North Vista", "Highland Ridge"],
-  },
+const hammelCities = [
+  "Gateway City",
+  "Highland City",
+  "Pioneer City",
 ];
+
+const hammelTowns = [
+  "Founders Point",
+  "Horizon",
+  "Moonrise",
+  "Starlight",
+  "Explorer",
+  "Discovery",
+  "Unity",
+  "Frontier",
+  "Lunar Harbor",
+  "Orbiter",
+  "Highland View",
+  "Gateway Ridge",
+  "First Light",
+  "Celestial",
+  "Nova",
+  "Tranquil Crossing",
+  "Pioneer Hills",
+  "Crater View",
+  "Earthrise",
+  "Charter Township",
+];
+
+export const stateCenters: Record<string, { x: number; y: number }> = {
+  Hammel: {
+    x: 500,
+    y: 500,
+  },
+};
+
+export const lunarStates = lunarStateNames.map((name, index) => {
+  if (name === "Hammel") {
+    return {
+      id: index + 1,
+      name,
+      cities: hammelCities,
+      towns: hammelTowns,
+    };
+  }
+
+  return {
+    id: index + 1,
+    name,
+    cities: [
+      `${name} City One`,
+      `${name} City Two`,
+      `${name} City Three`,
+    ],
+    towns: Array.from(
+      { length: 20 },
+      (_, townIndex) => `${name} Town ${townIndex + 1}`
+    ),
+  };
+});

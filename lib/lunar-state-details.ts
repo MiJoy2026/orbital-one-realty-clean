@@ -2,9 +2,14 @@ export type LunarStateDetail = {
   nickname: string;
   description: string;
   highlights: string[];
+
+  searchAliases?: string[];
+  featuredAttractionIds?: string[];
+  launchReady?: boolean;
 };
 
 export const lunarStateDetails: Record<string, LunarStateDetail> = {
+
   "Hammel": {
   nickname: "Gateway Highlands",
   description:
