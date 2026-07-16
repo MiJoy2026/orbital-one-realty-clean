@@ -1,22 +1,33 @@
 import "dotenv/config";
+
 import { prisma } from "../lib/prisma";
-import { lunarAtlasStates } from "../lib/lunarAtlas";
+import { lunarStates } from "../lib/moon-data";
+import { lunarStateDetails } from "../lib/lunar-state-details";
 
 async function main() {
-  console.log("Seeding Orbital One Lunar Atlas...");
+  console.log("Syncing the live Orbital One lunar atlas...");
 
-  for (const state of lunarAtlasStates) {
-    console.log(`Seeding ${state.name}...`);
+  for (const state of lunarStates) {
+    const details = lunarStateDetails[state.name];
+
+    console.log(`Syncing ${state.name}...`);
+
     await prisma.lunarState.upsert({
-      where: { name: state.name },
+      where: {
+        name: state.name,
+      },
       update: {
-        theme: state.theme,
-        description: state.description,
+        theme: details?.nickname ?? null,
+        description:
+          details?.description ??
+          `${state.name} is part of the official Orbital One Realty lunar atlas.`,
       },
       create: {
         name: state.name,
-        theme: state.theme,
-        description: state.description,
+        theme: details?.nickname ?? null,
+        description:
+          details?.description ??
+          `${state.name} is part of the official Orbital One Realty lunar atlas.`,
       },
     });
 
@@ -53,10 +64,23 @@ async function main() {
     }
   }
 
-  console.log("Lunar Atlas seeded successfully.");
+  const stateCount = await prisma.lunarState.count();
+  const cityCount = await prisma.lunarCity.count();
+  const townCount = await prisma.lunarTown.count();
+
+  console.log("");
+  console.log("Live atlas synchronization completed.");
+  console.log(`Database states: ${stateCount}`);
+  console.log(`Database cities: ${cityCount}`);
+  console.log(`Database towns: ${townCount}`);
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exit(1);
-});
+main()
+  .catch((error) => {
+    console.error("Atlas synchronization failed:");
+    console.error(error);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

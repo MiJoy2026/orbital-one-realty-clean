@@ -1,4 +1,6 @@
 "use client";
+import StateInfoPanel from "@/components/moon-map/StateInfoPanel";
+import { lunarStates } from "@/lib/moon-data";
 import SearchBox from "@/components/moon-map/SearchBox";
 import type { AtlasSearchResult } from "@/lib/search-index";
 import VisibleParcelLayer from "@/components/moon-map/VisibleParcelLayer";
@@ -193,6 +195,10 @@ export default function LunarLeafletMap({
   const [parcelStatuses, setParcelStatuses] = useState<Record<string, string>>(
     {}
   );
+
+  const selectedStateSummary = selectedState
+  ? lunarStates.find((state) => state.name === selectedState) ?? null
+  : null;
 
   const visibleCities = selectedState
     ? getCitiesByState(selectedState).map((city) => ({
@@ -615,71 +621,76 @@ export default function LunarLeafletMap({
           </MapContainer>
         </div>
 
-        <PropertyInfoPanel
-  selectedParcel={selectedParcel}
-  selectedState={selectedState}
-  activeReservation={activeReservation}
-  reservingParcel={reservingParcel}
-  zoomLevel={zoomLevel}
-  selectedParcelStatus={
-  selectedParcel
-    ? parcelStatuses[selectedParcel.parcelKey] || "Available"
-    : "Available"
-}
-  onReserve={reserveParcel}
-  onExpired={async () => {
-    if (!activeReservation) return;
+        {selectedParcel ? (
+  <PropertyInfoPanel
+    selectedParcel={selectedParcel}
+    selectedState={selectedState}
+    activeReservation={activeReservation}
+    reservingParcel={reservingParcel}
+    zoomLevel={zoomLevel}
+    selectedParcelStatus={
+      parcelStatuses[selectedParcel.parcelKey] || "Available"
+    }
+    onReserve={reserveParcel}
+    onExpired={async () => {
+      if (!activeReservation) return;
 
-    await fetch("/api/release-reservation", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        reservationId: activeReservation.reservationId,
-      }),
-    });
+      await fetch("/api/release-reservation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          reservationId: activeReservation.reservationId,
+        }),
+      });
 
-    setParcelStatuses((currentStatuses) => {
-      const nextStatuses = { ...currentStatuses };
-      delete nextStatuses[activeReservation.parcelKey];
-      return nextStatuses;
-    });
+      setParcelStatuses((currentStatuses) => {
+        const nextStatuses = { ...currentStatuses };
+        delete nextStatuses[activeReservation.parcelKey];
+        return nextStatuses;
+      });
 
-    setActiveReservation(null);
-    setSelectedParcelKey(null);
-    setSelectedParcel(null);
-  }}
-  onCancelReservation={async () => {
-  if (!activeReservation) return;
+      setActiveReservation(null);
+      setSelectedParcelKey(null);
+      setSelectedParcel(null);
+    }}
+    onCancelReservation={async () => {
+      if (!activeReservation) return;
 
-  const response = await fetch("/api/release-reservation", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      reservationId: activeReservation.reservationId,
-    }),
-  });
+      const response = await fetch("/api/release-reservation", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          reservationId: activeReservation.reservationId,
+        }),
+      });
 
-  if (!response.ok) {
-    const data = await response.json();
-    alert(data.error || "Unable to cancel the reservation.");
-    return;
-  }
+      if (!response.ok) {
+        const data = await response.json();
+        alert(data.error || "Unable to cancel the reservation.");
+        return;
+      }
 
-  setParcelStatuses((currentStatuses) => {
-    const nextStatuses = { ...currentStatuses };
-    delete nextStatuses[activeReservation.parcelKey];
-    return nextStatuses;
-  });
+      setParcelStatuses((currentStatuses) => {
+        const nextStatuses = { ...currentStatuses };
+        delete nextStatuses[activeReservation.parcelKey];
+        return nextStatuses;
+      });
 
-  setActiveReservation(null);
-  setSelectedParcelKey(null);
-  setSelectedParcel(null);
-}}
-/>
+      setActiveReservation(null);
+      setSelectedParcelKey(null);
+      setSelectedParcel(null);
+    }}
+  />
+) : (
+  <StateInfoPanel
+    selectedState={selectedState}
+    stateSummary={selectedStateSummary}
+  />
+)}
       </div>
     </div>
   );

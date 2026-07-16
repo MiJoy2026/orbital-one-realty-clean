@@ -10,16 +10,28 @@ export type LunarStateDetail = {
 
 export const lunarStateDetails: Record<string, LunarStateDetail> = {
 
-  "Hammel": {
+"Hammel": {
   nickname: "Gateway Highlands",
   description:
-    "A distinguished lunar state known for its broad plains and premium novelty acreage opportunities. Hammel serves as one of the flagship regions within the Orbital One Realty atlas.",
+    "Hammel is the flagship gateway state of the Orbital One Realty atlas. Known for its broad highland terrain, prominent horizons, and strong exploration identity, Hammel offers a balanced mix of rural acreage, city blocks, and town properties for novelty lunar ownership.",
   highlights: [
-    "Founding lunar territory",
-    "Popular rural acreage",
-    "Historic exploration region",
-    "Premium gift destination",
+    "Flagship Orbital One lunar state",
+    "Three launch-ready lunar cities",
+    "Twenty named lunar towns",
+    "Popular rural acreage region",
+    "Strong exploration and pioneer theme",
   ],
+  searchAliases: [
+    "Gateway Highlands",
+    "Hammel State",
+    "Gateway State",
+    "Hammel Highlands",
+  ],
+  featuredAttractionIds: [
+    "apollo11",
+    "maretranquillitatis",
+  ],
+  launchReady: false,
 },
 
 "Clavius": {
