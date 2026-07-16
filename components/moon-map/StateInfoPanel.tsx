@@ -73,6 +73,52 @@ export default function StateInfoPanel({
         </div>
       </div>
 
+      {details?.cities && details.cities.length > 0 && (
+  <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+    <p className="text-sm font-black uppercase tracking-[0.2em] text-yellow-400">
+      Cities
+    </p>
+
+    <div className="mt-4 space-y-3">
+      {details.cities.map((city) => (
+        <div
+          key={city.name}
+          className="rounded-xl border border-white/10 bg-black/20 p-3"
+        >
+          <p className="font-black text-white">{city.name}</p>
+
+          <p className="mt-2 text-sm leading-6 text-gray-400">
+            {city.description}
+          </p>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+{details?.towns && details.towns.length > 0 && (
+  <div className="mt-6 rounded-2xl border border-white/10 bg-white/5 p-4">
+    <p className="text-sm font-black uppercase tracking-[0.2em] text-yellow-400">
+      Towns
+    </p>
+
+    <div className="mt-4 max-h-96 space-y-3 overflow-y-auto pr-2">
+      {details.towns.map((town) => (
+        <div
+          key={town.name}
+          className="rounded-xl border border-white/10 bg-black/20 p-3"
+        >
+          <p className="font-black text-white">{town.name}</p>
+
+          <p className="mt-2 text-sm leading-6 text-gray-400">
+            {town.description}
+          </p>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
       {details?.highlights && details.highlights.length > 0 && (
         <div className="mt-6 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-4">
           <p className="text-sm font-black uppercase tracking-[0.2em] text-cyan-300">

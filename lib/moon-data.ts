@@ -1,3 +1,4 @@
+import { lunarStateDetails } from "@/lib/lunar-state-details";
 export type PropertyStatus = "Available" | "Sold";
 export type PropertyType = "Rural Acre" | "Town Block" | "City Block";
 
@@ -61,63 +62,38 @@ const lunarStateNames = [
   "Le Monnier",
 ];
 
-const hammelCities = [
-  "Gateway City",
-  "Highland City",
-  "Pioneer City",
-];
+export const lunarStates = lunarStateNames.map((name, index) => {
+  const details = lunarStateDetails[name];
 
-const hammelTowns = [
-  "Founders Point",
-  "Horizon",
-  "Moonrise",
-  "Starlight",
-  "Explorer",
-  "Discovery",
-  "Unity",
-  "Frontier",
-  "Lunar Harbor",
-  "Orbiter",
-  "Highland View",
-  "Gateway Ridge",
-  "First Light",
-  "Celestial",
-  "Nova",
-  "Tranquil Crossing",
-  "Pioneer Hills",
-  "Crater View",
-  "Earthrise",
-  "Charter Township",
-];
+  const finalizedCities = details?.cities?.map((city) => city.name);
+  const finalizedTowns = details?.towns?.map((town) => town.name);
 
-export const stateCenters: Record<string, { x: number; y: number }> = {
+  return {
+    id: index + 1,
+    name,
+
+    cities:
+      finalizedCities && finalizedCities.length === 3
+        ? finalizedCities
+        : [
+            `${name} City One`,
+            `${name} City Two`,
+            `${name} City Three`,
+          ],
+
+    towns:
+      finalizedTowns && finalizedTowns.length === 20
+        ? finalizedTowns
+        : Array.from(
+            { length: 20 },
+            (_, townIndex) => `${name} Town ${townIndex + 1}`
+          ),
+  };
+});
+
+  export const stateCenters: Record<string, { x: number; y: number }> = {
   Hammel: {
     x: 500,
     y: 500,
   },
 };
-
-export const lunarStates = lunarStateNames.map((name, index) => {
-  if (name === "Hammel") {
-    return {
-      id: index + 1,
-      name,
-      cities: hammelCities,
-      towns: hammelTowns,
-    };
-  }
-
-  return {
-    id: index + 1,
-    name,
-    cities: [
-      `${name} City One`,
-      `${name} City Two`,
-      `${name} City Three`,
-    ],
-    towns: Array.from(
-      { length: 20 },
-      (_, townIndex) => `${name} Town ${townIndex + 1}`
-    ),
-  };
-});
