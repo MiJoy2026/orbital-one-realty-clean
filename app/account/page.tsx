@@ -65,20 +65,28 @@ const orders = await prisma.order.findMany({
     ? "Pending Activation"
     : "Inactive";
   const ruralAcresOwned = orders.reduce(
-  (sum, order) => sum + (order.acreagePurchased || 0),
+  (
+    sum: number,
+    order: { acreagePurchased: number | null }
+  ) => sum + (order.acreagePurchased || 0),
   0
 );
 
 const townBlocksOwned = orders.filter(
-  (order) => order.propertyType === "Town Block"
+  (order: { propertyType: string }) =>
+    order.propertyType === "Town Block"
 ).length;
 
 const cityBlocksOwned = orders.filter(
-  (order) => order.propertyType === "City Block"
+  (order: { propertyType: string }) =>
+    order.propertyType === "City Block"
 ).length;
 
 const portfolioValue = orders.reduce(
-  (sum, order) => sum + order.amountPaid,
+  (
+    sum: number,
+    order: { amountPaid: number }
+  ) => sum + order.amountPaid,
   0
 );
   return (
