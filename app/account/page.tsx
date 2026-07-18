@@ -42,7 +42,9 @@ const orders = await prisma.order.findMany({
   const allocations = await prisma.acreageAllocation.findMany({
     where: {
       certificateNumber: {
-        in: orders.map((order) => order.certificateNumber),
+        in: orders.map(
+         (order: { certificateNumber: string }) => order.certificateNumber
+        ),
       },
     },
   });
