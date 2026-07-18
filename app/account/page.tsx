@@ -1,7 +1,25 @@
 import Image from "next/image";
 import { redirect } from "next/navigation";
 import { getSessionUserId } from "../../lib/session";
-import { prisma } from "../../lib/prisma";
+import { prisma } from "../../lib/prisma";type AccountOrder = {
+  id: string;
+  certificateNumber: string;
+  acreagePurchased: number | null;
+  hoaClaimed: boolean;
+  propertyType: string;
+  amountPaid: number;
+  propertyId: string;
+  lunarState: string;
+  deedName: string;
+  createdAt: Date;
+};
+
+type AccountAllocation = {
+  certificateNumber: string;
+  startingAcre: number;
+  endingAcre: number;
+};
+
 
 export default async function AccountPage() {
   const userId = await getSessionUserId();
@@ -24,7 +42,7 @@ const member = await prisma.member.findUnique({
   },
 });
 
-const orders = await prisma.order.findMany({
+const orders = (await prisma.order.findMany({
   where: {
     OR: [
       { userId: user.id },
@@ -35,11 +53,11 @@ const orders = await prisma.order.findMany({
   orderBy: {
     createdAt: "desc",
   },
-});
+})) as AccountOrder[];
 
   const email = user.email;
 
-  const allocations = await prisma.acreageAllocation.findMany({
+  const allocations = (await prisma.acreageAllocation.findMany({
     where: {
       certificateNumber: {
         in: orders.map(
@@ -47,7 +65,7 @@ const orders = await prisma.order.findMany({
         ),
       },
     },
-  });
+  })) as AccountAllocation[];
 
   const totalProperties = orders.length;
   const totalAcres = orders.reduce(
