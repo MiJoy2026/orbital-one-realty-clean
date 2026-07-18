@@ -59,7 +59,7 @@ const orders = await prisma.order.findMany({
   );
   const totalCertificates = orders.length;
   const hoaStatus =
-  member || orders.some((order) => order.hoaClaimed)
+  member || orders.some((order: { hoaClaimed: boolean }) => order.hoaClaimed)
     ? "2026 Charter HOA Member"
     : orders.length > 0
     ? "Pending Activation"
