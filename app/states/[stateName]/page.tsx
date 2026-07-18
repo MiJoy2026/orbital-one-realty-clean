@@ -1,4 +1,5 @@
-import { prisma } from "../../../lib/prisma";
+import { lunarStateDetails } from "@/lib/lunar-state-details";
+import { prisma } from "@/lib/prisma";
 
 export default async function StateDetailPage({
   params,
@@ -8,41 +9,38 @@ export default async function StateDetailPage({
   const { stateName } = await params;
   const decodedName = decodeURIComponent(stateName);
 
-  const state = await prisma.lunarState.findFirst({
-    where: {
-      name: {
-        equals: decodedName,
-        mode: "insensitive",
-      },
-    },
-    include: {
-      cities: {
-        orderBy: { name: "asc" },
-      },
-      towns: {
-        orderBy: { name: "asc" },
-      },
-    },
-  });
+  // Match without depending on capitalization in the URL.
+  const officialStateName = Object.keys(lunarStateDetails).find(
+    (name) => name.toLowerCase() === decodedName.toLowerCase()
+  );
 
-  if (!state) {
+  if (!officialStateName) {
     return (
       <main className="min-h-screen bg-black px-6 py-20 text-white">
-        <h1 className="text-5xl font-black">State Not Found</h1>
+        <div className="mx-auto max-w-7xl">
+          <h1 className="text-5xl font-black">State Not Found</h1>
 
-        <a
-          href="/moon-map"
-          className="mt-6 inline-block rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400 hover:bg-yellow-400 hover:text-black"
-        >
-          Back to Lunar Atlas
-        </a>
+          <p className="mt-4 text-gray-300">
+            This state is not part of the official Orbital One lunar atlas.
+          </p>
+
+          <a
+            href="/states"
+            className="mt-6 inline-block rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
+          >
+            Back to Lunar States
+          </a>
+        </div>
       </main>
     );
   }
 
+  const state = lunarStateDetails[officialStateName];
+
+  // Prisma now supplies only dynamic property inventory.
   const stateProperties = await prisma.property.findMany({
     where: {
-      state: state.name,
+      state: officialStateName,
     },
     orderBy: {
       id: "asc",
@@ -53,7 +51,9 @@ export default async function StateDetailPage({
     (property) => property.status !== "Sold"
   );
 
-  const sold = stateProperties.filter((property) => property.status === "Sold");
+  const sold = stateProperties.filter(
+    (property) => property.status === "Sold"
+  );
 
   return (
     <main
@@ -71,23 +71,31 @@ export default async function StateDetailPage({
         </p>
 
         <h1 className="mt-4 text-6xl font-black uppercase text-yellow-400">
-          {state.name}
+          {officialStateName}
         </h1>
 
         <p className="mt-4 text-2xl font-bold">
-          {state.theme || "Lunar State"}
+          {state.nickname || "Lunar State"}
         </p>
 
         <p className="mt-6 max-w-4xl text-lg text-gray-300">
-          {state.description || "One of Orbital One Realty's 57 lunar states."}
+          {state.description ||
+            "One of Orbital One Realty's 57 official lunar states."}
         </p>
 
         <div className="mt-8 flex flex-wrap gap-4">
           <a
-            href="/moon-map"
-            className="rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
+            href="/states"
+            className="rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400 transition hover:bg-yellow-400 hover:text-black"
           >
-            Back to Lunar Atlas
+            Back to Lunar States
+          </a>
+
+          <a
+            href="/moon-map"
+            className="rounded-xl border border-white/30 px-6 py-3 font-black text-white transition hover:border-yellow-400 hover:text-yellow-400"
+          >
+            Open Lunar Atlas
           </a>
 
           <a
@@ -117,10 +125,31 @@ export default async function StateDetailPage({
           </div>
 
           <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
-            <p className="text-4xl font-black">{stateProperties.length}</p>
+            <p className="text-4xl font-black">
+              {stateProperties.length}
+            </p>
             <p className="mt-2 uppercase text-gray-400">Listings</p>
           </div>
         </div>
+
+        {state.highlights.length > 0 && (
+          <section className="mt-16">
+            <h2 className="text-3xl font-black uppercase text-yellow-400">
+              State Highlights
+            </h2>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-2">
+              {state.highlights.map((highlight) => (
+                <div
+                  key={highlight}
+                  className="rounded-2xl border border-white/20 bg-white/5 p-5 text-gray-200"
+                >
+                  {highlight}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
         <section className="mt-16">
           <h2 className="text-3xl font-black uppercase text-yellow-400">
@@ -130,7 +159,7 @@ export default async function StateDetailPage({
           <div className="mt-6 grid gap-4 md:grid-cols-3">
             {state.cities.map((city) => (
               <a
-                key={city.id}
+                key={city.name}
                 href={`/cities/${encodeURIComponent(city.name)}`}
                 className="rounded-2xl border border-white/20 bg-white/5 p-5 font-bold transition hover:border-yellow-400 hover:bg-yellow-400/10"
               >
@@ -152,7 +181,7 @@ export default async function StateDetailPage({
           <div className="mt-6 grid gap-4 md:grid-cols-4">
             {state.towns.slice(0, 8).map((town) => (
               <a
-                key={town.id}
+                key={town.name}
                 href={`/towns/${encodeURIComponent(town.name)}`}
                 className="rounded-2xl border border-white/20 bg-white/5 p-5 font-bold transition hover:border-yellow-400 hover:bg-yellow-400/10"
               >
@@ -189,7 +218,9 @@ export default async function StateDetailPage({
                     {property.type}
                   </p>
 
-                  <h3 className="mt-2 text-3xl font-black">{property.id}</h3>
+                  <h3 className="mt-2 text-3xl font-black">
+                    {property.id}
+                  </h3>
 
                   <p className="mt-2 text-gray-300">{property.size}</p>
 

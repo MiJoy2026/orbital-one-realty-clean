@@ -1,13 +1,17 @@
-import { prisma } from "../../lib/prisma";
+import { lunarStateDetails } from "@/lib/lunar-state-details";
+import { prisma } from "@/lib/prisma";
 
 export default async function StatesPage() {
-  const states = await prisma.lunarState.findMany({
-    orderBy: {
-      name: "asc",
+  const stateNames = Object.keys(lunarStateDetails).sort((a, b) =>
+    a.localeCompare(b)
+  );
+
+  const properties = await prisma.property.findMany({
+    select: {
+      state: true,
+      status: true,
     },
   });
-
-  const properties = await prisma.property.findMany();
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -17,14 +21,16 @@ export default async function StatesPage() {
         </h1>
 
         <p className="mt-6 text-center text-xl text-gray-300">
-          Explore all 57 Orbital One lunar states. Each state includes 3 cities,
-          20 towns, and rural novelty acreage.
+          Explore all {stateNames.length} Orbital One lunar states. Each state
+          includes 3 cities, 20 towns, and rural novelty acreage.
         </p>
 
         <div className="mt-12 grid gap-6 md:grid-cols-3 lg:grid-cols-4">
-          {states.map((state) => {
+          {stateNames.map((stateName) => {
+            const details = lunarStateDetails[stateName];
+
             const stateProperties = properties.filter(
-              (property) => property.state === state.name
+              (property) => property.state === stateName
             );
 
             const available = stateProperties.filter(
@@ -37,23 +43,23 @@ export default async function StatesPage() {
 
             return (
               <a
-                key={state.id}
-                href={`/states/${encodeURIComponent(state.name)}`}
-                className="block rounded-3xl border border-white/20 bg-white/5 p-6 hover:border-yellow-400"
+                key={stateName}
+                href={`/states/${encodeURIComponent(stateName)}`}
+                className="block rounded-3xl border border-white/20 bg-white/5 p-6 transition hover:border-yellow-400"
               >
                 <p className="text-sm font-bold uppercase tracking-[0.3em] text-yellow-400">
                   Orbital One Lunar State
                 </p>
 
-                <h2 className="mt-3 text-2xl font-black">{state.name}</h2>
+                <h2 className="mt-3 text-2xl font-black">{stateName}</h2>
 
                 <p className="mt-3 text-sm text-yellow-400">
-                  {state.theme || "Lunar Atlas Region"}
+                  {details.nickname || "Lunar Atlas Region"}
                 </p>
 
                 <div className="mt-5 space-y-2 text-gray-300">
-                  <p>3 Cities</p>
-                  <p>20 Towns</p>
+                  <p>{details.cities.length} Cities</p>
+                  <p>{details.towns.length} Towns</p>
                   <p>Rural Acreage</p>
                 </div>
 

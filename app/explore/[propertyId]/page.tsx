@@ -27,6 +27,19 @@ export default async function PropertyExplorerPage({
 
   const isSold = property.status === "Sold";
   const isRuralAcre = property.type === "Rural Acre";
+  const locationName =
+  property.type === "City Block" && property.city
+    ? property.city
+    : property.type === "Town Block" && property.town
+      ? property.town
+      : property.state;
+
+  const locationType =
+    property.type === "City Block"
+    ? "City"
+    : property.type === "Town Block"
+      ? "Town"
+      : "Lunar Region";
 
   const propertyImage =
     property.type === "City Block"
@@ -60,9 +73,35 @@ export default async function PropertyExplorerPage({
             {property.state}
           </a>
 
-          <span>›</span>
+          {property.type === "City Block" && property.city && (
+  <>
+    <span>›</span>
 
-          <span className="font-bold text-yellow-400">{property.id}</span>
+    <a
+      href={`/cities/${encodeURIComponent(property.city)}`}
+      className="hover:text-yellow-400"
+    >
+      {property.city}
+    </a>
+  </>
+)}
+
+{property.type === "Town Block" && property.town && (
+  <>
+    <span>›</span>
+
+    <a
+      href={`/towns/${encodeURIComponent(property.town)}`}
+      className="hover:text-yellow-400"
+    >
+      {property.town}
+    </a>
+  </>
+)}
+
+<span>›</span>
+
+<span className="font-bold text-yellow-400">{property.id}</span>
         </div>
 
         <p className="text-sm font-bold uppercase tracking-[0.3em] text-yellow-400">
@@ -98,8 +137,8 @@ export default async function PropertyExplorerPage({
           </div>
 
           <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
-            <p className="text-sm uppercase text-gray-400">Location</p>
-            <p className="mt-2 text-xl font-black">{property.state}</p>
+            <p className="text-sm uppercase text-gray-400">{locationType}</p>
+            <p className="mt-2 text-xl font-black">{locationName}</p>
           </div>
 
           <div className="rounded-2xl border border-white/20 p-6">
@@ -128,8 +167,8 @@ export default async function PropertyExplorerPage({
           </h2>
 
           <p className="mt-6 text-lg leading-8 text-gray-300">
-            This {property.size} {property.type} in the lunar state of{" "}
-            {property.state} is a novelty keepsake property designed for gifts,
+            This {property.size} {property.type} in {locationName}, within the lunar
+            state of {property.state}, is a novelty keepsake property designed for gifts,
             collectors, space enthusiasts, and anyone who wants a fun connection
             to the Moon. Each purchase includes personalized digital documents
             and entry into the Orbital One Realty registry.

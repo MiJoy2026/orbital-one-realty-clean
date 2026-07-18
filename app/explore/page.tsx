@@ -1,16 +1,24 @@
+import { lunarStateDetails } from "@/lib/lunar-state-details";
 import { prisma } from "@/lib/prisma";
 
 export default async function ExplorePage() {
-  const [properties, stateCount, cityCount, townCount] = await Promise.all([
-    prisma.property.findMany({
-      orderBy: {
-        id: "asc",
-      },
-    }),
-    prisma.lunarState.count(),
-    prisma.lunarCity.count(),
-    prisma.lunarTown.count(),
-  ]);
+  const properties = await prisma.property.findMany({
+  orderBy: {
+    id: "asc",
+  },
+});
+
+const stateCount = Object.keys(lunarStateDetails).length;
+
+const cityCount = Object.values(lunarStateDetails).reduce(
+  (total, state) => total + state.cities.length,
+  0
+);
+
+const townCount = Object.values(lunarStateDetails).reduce(
+  (total, state) => total + state.towns.length,
+  0
+);
 
   const availableProperties = properties.filter(
     (property) => property.status !== "Sold"
