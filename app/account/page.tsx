@@ -169,7 +169,7 @@ const portfolioValue = orders.reduce(
            {orders.length > 0 && (
           <a
             href={`/moon-map?property=${orders[0].propertyId}&owned=${orders
-            .map((order) => order.propertyId)
+             .map((order: { propertyId: string }) => order.propertyId)
             .join(",")}`}
             className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
           >
