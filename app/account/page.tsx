@@ -51,8 +51,11 @@ const orders = await prisma.order.findMany({
 
   const totalProperties = orders.length;
   const totalAcres = orders.reduce(
-    (sum, order) => sum + (order.acreagePurchased || 0),
-    0
+  (
+    sum: number,
+    order: { acreagePurchased: number | null }
+  ) => sum + (order.acreagePurchased || 0),
+  0
   );
   const totalCertificates = orders.length;
   const hoaStatus =
