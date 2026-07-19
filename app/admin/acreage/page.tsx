@@ -1,4 +1,5 @@
 import AdminNav from "../../../components/AdminNav";
+import type { AcreageAllocation } from "@prisma/client";
 import { prisma } from "../../../lib/prisma";
 
 export default async function AdminAcreagePage() {
@@ -30,7 +31,7 @@ export default async function AdminAcreagePage() {
             </thead>
 
             <tbody>
-              {allocations.map((allocation) => (
+              {allocations.map((allocation: AcreageAllocation) => (
                 <tr
                   key={allocation.id}
                   className="border-t border-white/10"
