@@ -1,3 +1,5 @@
+import { CartProvider } from "../context/CartContext";
+import CartButton from "../components/CartButton";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -21,6 +23,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body>
+        <CartProvider>
         <nav className="sticky top-0 z-50 border-b border-yellow-400/20 bg-black/95 text-white backdrop-blur">
           <div className="mx-auto max-w-7xl px-6">
             <div className="flex items-center justify-between gap-4 py-1">
@@ -43,14 +46,8 @@ export default async function RootLayout({
                   {isLoggedIn ? "👤 My Account" : "👤 Sign In"}
                 </Link>
 
-                <Link
-                  href="/cart"
-                  className="rounded-full border border-yellow-400 px-3 py-1.5 text-xl transition hover:bg-yellow-400 hover:text-black"
-                  title="Shopping Cart"
-                  aria-label="Shopping Cart"
-                >
-                  🛒
-                </Link>
+                <CartButton />
+
               </div>
             </div>
 
@@ -99,6 +96,7 @@ export default async function RootLayout({
         </nav>
 
         {children}
+        </CartProvider>
       </body>
     </html>
   );

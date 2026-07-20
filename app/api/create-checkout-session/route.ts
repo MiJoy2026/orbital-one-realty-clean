@@ -2,7 +2,13 @@ import { prisma } from "../../../lib/prisma";
 import Stripe from "stripe";
 import { NextResponse } from "next/server";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
+
+if (!stripeSecretKey) {
+  throw new Error("STRIPE_SECRET_KEY is not configured");
+}
+
+const stripe = new Stripe(stripeSecretKey);
 
 export async function POST(request: Request) {
   const body = await request.json();

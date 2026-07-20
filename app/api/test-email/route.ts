@@ -1,7 +1,13 @@
 import { Resend } from "resend";
 import { NextResponse } from "next/server";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const apiKey = process.env.RESEND_API_KEY;
+
+if (!apiKey) {
+  throw new Error("RESEND_API_KEY is not configured");
+}
+
+const resend = new Resend(apiKey);
 
 export async function GET() {
   const result = await resend.emails.send({
