@@ -712,6 +712,115 @@ export function getStateEdges(
     );
 }
 
+/**
+ * Restores every edge used by one state from a known baseline topology.
+ * Shared edges and junction nodes are restored once, so neighboring states
+ * remain connected and receive the same border correction automatically.
+ */
+export function restoreTopologyState(
+  topology: LunaSphereTopology,
+  baseline: LunaSphereTopology,
+  stateIdOrName: string
+): LunaSphereTopology {
+  const currentState = getTopologyState(
+    topology,
+    stateIdOrName
+  );
+  const baselineState = getTopologyState(
+    baseline,
+    stateIdOrName
+  );
+
+  if (!currentState || !baselineState) {
+    return topology;
+  }
+
+  const affectedEdgeIds = new Set(
+    baselineState.edges.map(
+      (edgeReference) => edgeReference.edgeId
+    )
+  );
+  const baselineEdgeById = new Map(
+    baseline.edges.map((edge) => [edge.id, edge] as const)
+  );
+  const baselineNodeById = new Map(
+    baseline.nodes.map((node) => [node.id, node] as const)
+  );
+  const currentNodeById = new Map(
+    topology.nodes.map((node) => [node.id, node] as const)
+  );
+
+  const edges = topology.edges.map((edge) => {
+    if (!affectedEdgeIds.has(edge.id)) {
+      return {
+        ...edge,
+        nodeIds: [...edge.nodeIds],
+        stateIds: [...edge.stateIds],
+      };
+    }
+
+    const baselineEdge = baselineEdgeById.get(edge.id);
+
+    return baselineEdge
+      ? {
+          ...baselineEdge,
+          nodeIds: [...baselineEdge.nodeIds],
+          stateIds: [...baselineEdge.stateIds],
+        }
+      : {
+          ...edge,
+          nodeIds: [...edge.nodeIds],
+          stateIds: [...edge.stateIds],
+        };
+  });
+
+  const referencedNodeIds = new Set(
+    edges.flatMap((edge) => edge.nodeIds)
+  );
+  const restoredNodeIds = new Set(
+    baseline.edges
+      .filter((edge) => affectedEdgeIds.has(edge.id))
+      .flatMap((edge) => edge.nodeIds)
+  );
+  const orderedNodeIds = [
+    ...topology.nodes.map((node) => node.id),
+    ...baseline.nodes.map((node) => node.id),
+  ].filter(
+    (nodeId, index, allNodeIds) =>
+      referencedNodeIds.has(nodeId) &&
+      allNodeIds.indexOf(nodeId) === index
+  );
+
+  const nodes = orderedNodeIds
+    .map((nodeId) => {
+      const sourceNode = restoredNodeIds.has(nodeId)
+        ? baselineNodeById.get(nodeId)
+        : currentNodeById.get(nodeId) ??
+          baselineNodeById.get(nodeId);
+
+      return sourceNode
+        ? {
+            ...sourceNode,
+            coordinate: [
+              sourceNode.coordinate[0],
+              sourceNode.coordinate[1],
+            ] as MutableLunarCoordinate,
+          }
+        : null;
+    })
+    .filter(
+      (node): node is LunaSphereTopologyNode =>
+        Boolean(node)
+    );
+
+  return {
+    ...topology,
+    revision: topology.revision + 1,
+    nodes,
+    edges,
+  };
+}
+
 export function moveTopologyNode(
   topology: LunaSphereTopology,
   nodeId: string,
