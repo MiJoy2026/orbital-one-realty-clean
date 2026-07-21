@@ -220,3 +220,40 @@ export const lunarMapRegions: LunarMapRegion[] = lunarStates.map(
     };
   }
 );
+
+export type LunarStateCenter = {
+  x: number;
+  y: number;
+};
+
+export const lunarStateCenters: Record<string, LunarStateCenter> =
+  Object.fromEntries(
+    lunarMapRegions.map((region) => [
+      region.name,
+      {
+        x: region.labelPosition[1],
+        y: region.labelPosition[0],
+      },
+    ])
+  );
+
+export function getLunarStateCenter(
+  stateName: string
+): LunarStateCenter {
+  return (
+    lunarStateCenters[stateName] ?? {
+      x: MOON_CENTER_X,
+      y: MOON_CENTER_Y,
+    }
+  );
+}
+
+export function getLunarMapRegion(
+  stateName: string
+): LunarMapRegion | undefined {
+  return lunarMapRegions.find(
+    (region) =>
+      region.name.toLowerCase() ===
+      stateName.trim().toLowerCase()
+  );
+}

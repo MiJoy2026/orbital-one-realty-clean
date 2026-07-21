@@ -136,67 +136,55 @@ export function getParcelGridForZoom(
   stateName: string,
   zoom: number
 ): ParcelCell[] {
+  if (zoom < 5) {
+  return [];
+}
   /*
    * Every resolution covers the same 256 × 256 map area.
    * Each new level divides the previous cells evenly, so the
    * parcel boundaries remain aligned while zooming.
    */
 
-  if (zoom <= 2) {
-    return generateParcelGrid(
-      stateName,
-      RURAL_GRID_START_X,
-      RURAL_GRID_START_Y,
-      8,
-      8,
-      RURAL_GRID_SIZE / 8,
-      {
-        resolutionLevel: 1,
-        selectable: false,
-      }
-    );
-  }
-
-  if (zoom <= 4) {
-    return generateParcelGrid(
-      stateName,
-      RURAL_GRID_START_X,
-      RURAL_GRID_START_Y,
-      16,
-      16,
-      RURAL_GRID_SIZE / 16,
-      {
-        resolutionLevel: 2,
-        selectable: false,
-      }
-    );
-  }
-
-  if (zoom <= 6) {
-    return generateParcelGrid(
-      stateName,
-      RURAL_GRID_START_X,
-      RURAL_GRID_START_Y,
-      32,
-      32,
-      RURAL_GRID_SIZE / 32,
-      {
-        resolutionLevel: 3,
-        selectable: false,
-      }
-    );
-  }
-
+  if (zoom === 5) {
   return generateParcelGrid(
     stateName,
     RURAL_GRID_START_X,
     RURAL_GRID_START_Y,
-    64,
-    64,
-    RURAL_GRID_SIZE / 64,
+    16,
+    16,
+    RURAL_GRID_SIZE / 16,
     {
-      resolutionLevel: 4,
-      selectable: true,
+      resolutionLevel: 2,
+      selectable: false,
     }
   );
+}
+
+if (zoom === 6) {
+  return generateParcelGrid(
+    stateName,
+    RURAL_GRID_START_X,
+    RURAL_GRID_START_Y,
+    32,
+    32,
+    RURAL_GRID_SIZE / 32,
+    {
+      resolutionLevel: 3,
+      selectable: false,
+    }
+  );
+}
+
+return generateParcelGrid(
+  stateName,
+  RURAL_GRID_START_X,
+  RURAL_GRID_START_Y,
+  64,
+  64,
+  RURAL_GRID_SIZE / 64,
+  {
+    resolutionLevel: 4,
+    selectable: true,
+  }
+);
 }

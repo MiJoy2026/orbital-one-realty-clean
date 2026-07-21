@@ -1,5 +1,6 @@
 import { lunarAttractions } from "@/lib/lunar-attractions";
-import { lunarStates, stateCenters } from "@/lib/moon-data";
+import { lunarStates } from "@/lib/moon-data";
+import { getLunarStateCenter } from "@/lib/lunar-map-regions";
 import { lunarStateDetails } from "@/lib/lunar-state-details";
 import { getLocationCoordinates } from "@/lib/lunar-location-service";
 import { getParcelGridForZoom } from "@/lib/parcel-grid";
@@ -47,9 +48,9 @@ const stateSearchResults: AtlasSearchResult[] = lunarStates.map((state) => {
       ? `Lunar State • ${details.nickname}`
       : "Orbital One Lunar State",
     type: "State",
-    x: stateCenters[state.name]?.x ?? 500,
-    y: stateCenters[state.name]?.y ?? 500,
-    zoom: 1,
+    x: getLunarStateCenter(state.name).x,
+    y: getLunarStateCenter(state.name).y,
+    zoom: 3,
     searchTerms: aliases,
   };
 });

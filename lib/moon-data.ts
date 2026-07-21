@@ -16,13 +16,3 @@ export const lunarStates = lunarStateNames.map((name, index) => {
     towns: details.towns.map((town) => town.name),
   };
 });
-
-export const stateCenters: Record<
-  string,
-  { x: number; y: number }
-> = {
-  Hammel: {
-    x: 500,
-    y: 500,
-  },
-};

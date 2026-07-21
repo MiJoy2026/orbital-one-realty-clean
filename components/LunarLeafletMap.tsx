@@ -136,7 +136,7 @@ function FlyToSelectedState({
 
     const center = stateCenters[selectedState] ?? stateCenters.Default;
 
-    map.flyTo([center.y, center.x], 1, {
+    map.flyTo([center.y, center.x], 3, {
       duration: 1.2,
     });
   }, [map, selectedState]);
@@ -151,7 +151,7 @@ function MapHomeButton({ onReset }: { onReset: () => void }) {
     <button
       type="button"
       onClick={() => {
-        map.flyTo([500, 500], 0, {
+        map.flyTo([500, 500], 3, {
           duration: 1.2,
         });
 
@@ -383,14 +383,31 @@ export default function LunarLeafletMap({
       </div>
             <div className="mb-4">
               <SearchBox
-                onSelectResult={(result) => {
-                setSelectedSearchResult(result);
+  onSelectResult={(result) => {
+    setSelectedSearchResult(result);
 
-                  if (result.type === "Attraction") {
-                  setShowAttractions(true);
-                 }
-                }}
-              />
+    if (result.type === "State") {
+      setSelectedState(result.name);
+      setSelectedParcel(null);
+      setSelectedParcelKey(null);
+    }
+
+    if (result.type === "City" || result.type === "Town") {
+      const stateName = result.subtitle.split("•")[1]?.trim();
+
+      if (stateName) {
+        setSelectedState(stateName);
+      }
+
+      setSelectedParcel(null);
+      setSelectedParcelKey(null);
+    }
+
+    if (result.type === "Attraction") {
+      setShowAttractions(true);
+    }
+  }}
+/>
             </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="h-[850px] overflow-hidden rounded-3xl border border-yellow-400/40 bg-black shadow-2xl">
