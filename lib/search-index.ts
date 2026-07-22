@@ -3,7 +3,6 @@ import { lunarStates } from "@/lib/moon-data";
 import { getLunarStateCenter } from "@/lib/lunar-map-regions";
 import { lunarStateDetails } from "@/lib/lunar-state-details";
 import { getLocationCoordinates } from "@/lib/lunar-location-service";
-import { getParcelGridForZoom } from "@/lib/parcel-grid";
 
 
 export type AtlasSearchResultType =
@@ -93,29 +92,52 @@ const townSearchResults: AtlasSearchResult[] = lunarStates.flatMap((state) =>
   })
 );
 
-const parcelSearchResults: AtlasSearchResult[] = lunarStates.flatMap((state) =>
-  getParcelGridForZoom(state.name, 7).map((parcel) => ({
-    id: parcel.parcelKey,
-    name: parcel.parcelKey,
+function createStateSlug(stateName: string): string {
+  return stateName
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
+function createExactParcelSearchResult(
+  query: string
+): AtlasSearchResult | null {
+  const normalizedParcelKey = query.trim().toUpperCase();
+
+  if (!/^[A-Z0-9-]+-R-C\d{3}-R\d{3}$/.test(normalizedParcelKey)) {
+    return null;
+  }
+
+  const state = lunarStates.find((candidate) =>
+    normalizedParcelKey.startsWith(
+      `${createStateSlug(candidate.name)}-R-C`
+    )
+  );
+
+  if (!state) {
+    return null;
+  }
+
+  const stateCenter = getLunarStateCenter(state.name);
+
+  return {
+    id: normalizedParcelKey,
+    name: normalizedParcelKey,
     subtitle: `Rural Acre • ${state.name}`,
     type: "Parcel",
-    x: parcel.centerX,
-    y: parcel.centerY,
+    x: stateCenter.x,
+    y: stateCenter.y,
     zoom: 7,
-    searchTerms: [
-      state.name,
-      "rural acre",
-      "parcel",
-    ],
-  }))
-);
+    searchTerms: [state.name, "rural acre", "parcel"],
+  };
+}
 
 export const atlasSearchIndex: AtlasSearchResult[] = [
   ...attractionSearchResults,
   ...stateSearchResults,
   ...citySearchResults,
   ...townSearchResults,
-  ...parcelSearchResults,
 ];
 
 export function searchAtlas(
@@ -128,7 +150,12 @@ export function searchAtlas(
     return [];
   }
 
-  return atlasSearchIndex
+  const exactParcelResult = createExactParcelSearchResult(query);
+  const searchIndex = exactParcelResult
+    ? [exactParcelResult, ...atlasSearchIndex]
+    : atlasSearchIndex;
+
+  return searchIndex
     .map((result) => {
       const normalizedName = result.name.toLowerCase();
       const normalizedSubtitle = result.subtitle.toLowerCase();

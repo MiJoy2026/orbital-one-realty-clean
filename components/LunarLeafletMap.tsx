@@ -7,12 +7,14 @@ import VisibleParcelLayer from "@/components/moon-map/VisibleParcelLayer";
 import StateLayer from "@/components/moon-map/StateLayer";
 import CityLayer from "@/components/moon-map/CityLayer";
 import TownLayer from "@/components/moon-map/TownLayer";
-import ParcelLayer from "@/components/moon-map/ParcelLayer";
 import LunarTileLayer from "@/components/moon-map/LunarTileLayer";
 import PropertyInfoPanel from "@/components/moon-map/PropertyInfoPanel";
 import SettlementInfoPanel from "@/components/moon-map/SettlementInfoPanel";
 import type { ParcelCell } from "@/lib/parcel-grid";
-import { getParcelGridForZoom } from "@/lib/parcel-grid";
+import {
+  getParcelGridForZoom,
+  getSelectableRuralParcelByKey,
+} from "@/lib/parcel-grid";
 import { getVisibleLunarAttractions } from "@/lib/lunar-attractions";
 import ReservationCountdown from "@/components/moon-map/ReservationCountdown";
 import { useEffect, useMemo, useState } from "react";
@@ -245,9 +247,38 @@ export default function LunarLeafletMap({
 
   const visibleAttractions = getVisibleLunarAttractions(zoomLevel);
 
+  const selectedStateRegion = useMemo(
+    () =>
+      selectedState
+        ? mapRegions.find((region) => region.name === selectedState) ?? null
+        : null,
+    [mapRegions, selectedState]
+  );
+
+  const ruralExclusions = useMemo(
+    () =>
+      [...visibleCities, ...visibleTowns].map((settlement) => ({
+        id: settlement.id,
+        boundary: settlement.boundary,
+      })),
+    [visibleCities, visibleTowns]
+  );
+
   const visibleParcels = useMemo(() => {
-  return selectedState ? getParcelGridForZoom(selectedState, zoomLevel) : [];
-}, [selectedState, zoomLevel]);
+    if (!selectedState || !selectedStateRegion) {
+      return [];
+    }
+
+    return getParcelGridForZoom(selectedState, zoomLevel, {
+      stateBoundary: selectedStateRegion.positions,
+      excludedTerritories: ruralExclusions,
+    });
+  }, [
+    ruralExclusions,
+    selectedState,
+    selectedStateRegion,
+    zoomLevel,
+  ]);
 
   useEffect(() => {
     if (visibleParcels.length === 0) {
@@ -331,9 +362,56 @@ export default function LunarLeafletMap({
     }
   }
 
+  function findParcelSearchSelection(
+    result: AtlasSearchResult
+  ): { stateName: string; parcel: ParcelCell } | null {
+    if (result.type !== "Parcel") {
+      return null;
+    }
+
+    const stateName = result.subtitle.split("•")[1]?.trim();
+    const stateRegion = mapRegions.find(
+      (region) => region.name === stateName
+    );
+
+    if (!stateName || !stateRegion) {
+      return null;
+    }
+
+    const excludedTerritories = publicSettlements
+      .filter((settlement) => settlement.stateName === stateName)
+      .map((settlement) => ({
+        id: settlement.id,
+        boundary: settlement.boundary,
+      }));
+    const parcel = getSelectableRuralParcelByKey(
+      stateName,
+      result.id,
+      {
+        stateBoundary: stateRegion.positions,
+        excludedTerritories,
+      }
+    );
+
+    return parcel ? { stateName, parcel } : null;
+  }
+
   function resolveSearchResult(
     result: AtlasSearchResult
   ): AtlasSearchResult {
+    if (result.type === "Parcel") {
+      const selection = findParcelSearchSelection(result);
+
+      return selection
+        ? {
+            ...result,
+            x: selection.parcel.centerX,
+            y: selection.parcel.centerY,
+            zoom: 7,
+          }
+        : result;
+    }
+
     if (result.type !== "City" && result.type !== "Town") {
       return result;
     }
@@ -486,6 +564,22 @@ export default function LunarLeafletMap({
                       setShowCities(true);
                     } else {
                       setShowTowns(true);
+                    }
+                  }
+
+                  if (result.type === "Parcel") {
+                    const selection = findParcelSearchSelection(result);
+
+                    if (selection) {
+                      setSelectedState(selection.stateName);
+                      setSelectedSettlementId(null);
+                      setSelectedParcel(selection.parcel);
+                      setSelectedParcelKey(selection.parcel.parcelKey);
+                    } else {
+                      setSelectedSearchResult(null);
+                      alert(
+                        "That parcel key is not saleable in the active LunaSphere geography."
+                      );
                     }
                   }
 
