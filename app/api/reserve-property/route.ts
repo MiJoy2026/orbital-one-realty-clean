@@ -7,8 +7,16 @@ import {
 import { getPublicGeographySnapshot } from "../../../lib/lunasphere-geography-store";
 import { getSelectableRuralParcelByKey } from "../../../lib/parcel-grid";
 import { prisma } from "../../../lib/prisma";
+import {
+  getSelectableTownBlockByKey,
+  parseTownBlockKey,
+} from "../../../lib/town-block-grid";
 
-const SUPPORTED_PROPERTY_TYPES = ["Rural Acre", "City Block"] as const;
+const SUPPORTED_PROPERTY_TYPES = [
+  "Rural Acre",
+  "City Block",
+  "Town Block",
+] as const;
 type SupportedPropertyType = (typeof SUPPORTED_PROPERTY_TYPES)[number];
 
 type ValidatedInventoryProperty = {
@@ -137,13 +145,46 @@ export async function POST(request: Request) {
     }
   }
 
+  if (propertyType === "Town Block") {
+    const parsedKey = parseTownBlockKey(propertyKey);
+    const town = parsedKey
+      ? publicGeography.settlements.find(
+          (settlement) =>
+            settlement.kind === "town" &&
+            settlement.stateName.toLowerCase() ===
+              stateRegion.name.toLowerCase() &&
+            settlement.territoryNumber === parsedKey.townNumber
+        )
+      : null;
+    const block = town
+      ? getSelectableTownBlockByKey(town, propertyKey)
+      : null;
+
+    if (town && block) {
+      inventoryProperty = {
+        propertyKey: block.parcelKey,
+        propertyType: "Town Block",
+        stateName: stateRegion.name,
+        cityName: null,
+        townName: town.name,
+        acreage: null,
+        size: "1 Town Block",
+        price: 39.95,
+        centerX: block.centerX,
+        centerY: block.centerY,
+      };
+    }
+  }
+
   if (!inventoryProperty) {
     return NextResponse.json(
       {
         error:
           propertyType === "City Block"
             ? "This block is not part of the current saleable city inventory."
-            : "This parcel is not part of the current saleable rural territory.",
+            : propertyType === "Town Block"
+              ? "This block is not part of the current saleable town inventory."
+              : "This parcel is not part of the current saleable rural territory.",
       },
       { status: 409 }
     );

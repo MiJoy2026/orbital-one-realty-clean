@@ -98,9 +98,17 @@ export default function PropertyInfoPanel({
   const canReserve = parcelStatus === "Available";
   const propertyType = selectedParcel.propertyType ?? "Rural Acre";
   const isCityBlock = propertyType === "City Block";
-  const propertyPrice = selectedParcel.price ?? (isCityBlock ? 54.95 : 24.95);
-  const sizeLabel = selectedParcel.sizeLabel ?? (isCityBlock ? "1 City Block" : "1 Acre");
-  const propertyNoun = isCityBlock ? "City Block" : "Lunar Parcel";
+  const isTownBlock = propertyType === "Town Block";
+  const propertyPrice =
+    selectedParcel.price ?? (isCityBlock ? 54.95 : isTownBlock ? 39.95 : 24.95);
+  const sizeLabel =
+    selectedParcel.sizeLabel ??
+    (isCityBlock ? "1 City Block" : isTownBlock ? "1 Town Block" : "1 Acre");
+  const propertyNoun = isCityBlock
+    ? "City Block"
+    : isTownBlock
+      ? "Town Block"
+      : "Lunar Parcel";
 
   const nearbyAttractions = getNearbyLunarAttractions(
   selectedParcel.centerX,
@@ -127,7 +135,13 @@ const locationSummary = isCityBlock
         0
       )} km ${nearestAttraction.direction} of ${nearestAttraction.name}.`
     : `Located in ${selectedParcel.cityName}, within the lunar state of ${selectedParcel.stateName}.`
-  : nearestAttraction
+  : isTownBlock
+    ? nearestAttraction
+      ? `Located in ${selectedParcel.townName}, within ${selectedParcel.stateName}, approximately ${nearestAttraction.distanceKilometers.toFixed(
+          0
+        )} km ${nearestAttraction.direction} of ${nearestAttraction.name}.`
+      : `Located in ${selectedParcel.townName}, within the lunar state of ${selectedParcel.stateName}.`
+    : nearestAttraction
     ? `Located in ${selectedParcel.stateName}, approximately ${nearestAttraction.distanceKilometers.toFixed(
         0
       )} km ${nearestAttraction.direction} of ${nearestAttraction.name}.`
@@ -182,6 +196,11 @@ if (isCityBlock) {
   parcelHighlights.push("Premium City Property");
 }
 
+if (isTownBlock) {
+  parcelHighlights.unshift(`Located in ${selectedParcel.townName}`);
+  parcelHighlights.push("Community Town Property");
+}
+
 parcelHighlights.push("Complimentary HOA Membership");
 
 const whyThisParcel =
@@ -189,7 +208,9 @@ const whyThisParcel =
     ? `${parcelHighlights.slice(0, 3).join(", ")}.`
     : isCityBlock
       ? `A premium block within ${selectedParcel.cityName}.`
-      : "A distinctive lunar parcel within the Orbital One atlas.";
+      : isTownBlock
+        ? `A community-style block within ${selectedParcel.townName}.`
+        : "A distinctive lunar parcel within the Orbital One atlas.";
 
   return (
     <div className="rounded-3xl border border-yellow-400/30 bg-black/70 p-6">
@@ -280,6 +301,13 @@ const whyThisParcel =
           <p>
             <span className="font-bold text-gray-400">City:</span>{" "}
             {selectedParcel.cityName}
+          </p>
+        )}
+
+        {isTownBlock && selectedParcel.townName && (
+          <p>
+            <span className="font-bold text-gray-400">Town:</span>{" "}
+            {selectedParcel.townName}
           </p>
         )}
 

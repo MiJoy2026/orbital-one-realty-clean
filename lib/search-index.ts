@@ -133,6 +133,35 @@ function createExactParcelSearchResult(
     };
   }
 
+  const townBlockMatch = normalizedPropertyKey.match(
+    /^(.*)-TOWN-(\d{2})-TB-C\d{3}-R\d{3}$/
+  );
+
+  if (townBlockMatch) {
+    const state = lunarStates.find(
+      (candidate) => createStateSlug(candidate.name) === townBlockMatch[1]
+    );
+    const townNumber = Number(townBlockMatch[2]);
+    const townName = state?.towns[townNumber - 1];
+
+    if (!state || !townName) {
+      return null;
+    }
+
+    const stateCenter = getLunarStateCenter(state.name);
+
+    return {
+      id: normalizedPropertyKey,
+      name: normalizedPropertyKey,
+      subtitle: `Town Block • ${state.name}`,
+      type: "Parcel",
+      x: stateCenter.x,
+      y: stateCenter.y,
+      zoom: 7,
+      searchTerms: [state.name, townName, "town block", "block"],
+    };
+  }
+
   if (!/^[A-Z0-9-]+-R-C\d{3}-R\d{3}$/.test(normalizedPropertyKey)) {
     return null;
   }

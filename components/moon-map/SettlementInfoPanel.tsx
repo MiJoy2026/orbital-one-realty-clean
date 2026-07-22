@@ -58,17 +58,23 @@ export default function SettlementInfoPanel({
       <p className="mt-5 text-sm leading-6 text-gray-300">
         {isCity
           ? "This approved city territory now contains multiple individually saleable City Blocks. Zoom in to view the block grid."
-          : "This boundary comes from the active, controlled LunaSphere geography release. Town Block inventory will be generated only inside this approved territory."}
+          : "This approved town territory now contains multiple individually saleable Town Blocks. Zoom in to view the block grid."}
       </p>
 
-      {isCity && (
-        <div className="mt-5 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-4 text-sm text-cyan-100">
-          <p className="font-black">City Blocks · $54.95 each</p>
-          <p className="mt-2 text-cyan-100/80">
-            Preview blocks appear as you zoom in. Individual blocks become selectable at zoom level 7.
-          </p>
-        </div>
-      )}
+      <div
+        className={`mt-5 rounded-2xl p-4 text-sm ${
+          isCity
+            ? "border border-cyan-400/30 bg-cyan-400/10 text-cyan-100"
+            : "border border-amber-400/30 bg-amber-400/10 text-amber-100"
+        }`}
+      >
+        <p className="font-black">
+          {isCity ? "City Blocks · $54.95 each" : "Town Blocks · $39.95 each"}
+        </p>
+        <p className="mt-2 opacity-80">
+          Preview blocks appear as you zoom in. Individual blocks become selectable at zoom level 7.
+        </p>
+      </div>
 
       <Link
         href={detailHref}

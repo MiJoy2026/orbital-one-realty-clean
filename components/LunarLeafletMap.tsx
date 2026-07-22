@@ -5,6 +5,7 @@ import SearchBox from "@/components/moon-map/SearchBox";
 import type { AtlasSearchResult } from "@/lib/search-index";
 import VisibleParcelLayer from "@/components/moon-map/VisibleParcelLayer";
 import VisibleCityBlockLayer from "@/components/moon-map/VisibleCityBlockLayer";
+import VisibleTownBlockLayer from "@/components/moon-map/VisibleTownBlockLayer";
 import StateLayer from "@/components/moon-map/StateLayer";
 import CityLayer from "@/components/moon-map/CityLayer";
 import TownLayer from "@/components/moon-map/TownLayer";
@@ -17,6 +18,11 @@ import {
   getSelectableCityBlockByKey,
   parseCityBlockKey,
 } from "@/lib/city-block-grid";
+import {
+  getSelectableTownBlockByKey,
+  getTownBlockGridForZoom,
+  parseTownBlockKey,
+} from "@/lib/town-block-grid";
 import {
   getParcelGridForZoom,
   getSelectableRuralParcelByKey,
@@ -275,6 +281,8 @@ export default function LunarLeafletMap({
 
   const selectedCity =
     selectedSettlement?.kind === "city" ? selectedSettlement : null;
+  const selectedTown =
+    selectedSettlement?.kind === "town" ? selectedSettlement : null;
 
   const visibleAttractions = getVisibleLunarAttractions(zoomLevel);
 
@@ -320,9 +328,21 @@ export default function LunarLeafletMap({
     [selectedCity, zoomLevel]
   );
 
+  const visibleTownBlocks = useMemo(
+    () =>
+      selectedTown
+        ? getTownBlockGridForZoom(selectedTown, zoomLevel)
+        : [],
+    [selectedTown, zoomLevel]
+  );
+
   const visibleInventoryCells = useMemo(
-    () => [...visibleParcels, ...visibleCityBlocks],
-    [visibleCityBlocks, visibleParcels]
+    () => [
+      ...visibleParcels,
+      ...visibleCityBlocks,
+      ...visibleTownBlocks,
+    ],
+    [visibleCityBlocks, visibleParcels, visibleTownBlocks]
   );
 
   const propertyStatusRequestSequence = useRef(0);
@@ -509,6 +529,28 @@ export default function LunarLeafletMap({
             stateName,
             parcel: block,
             settlementId: city.id,
+          }
+        : null;
+    }
+
+    const parsedTownBlockKey = parseTownBlockKey(result.id);
+
+    if (parsedTownBlockKey) {
+      const town = publicSettlements.find(
+        (settlement) =>
+          settlement.kind === "town" &&
+          settlement.stateName === stateName &&
+          settlement.territoryNumber === parsedTownBlockKey.townNumber
+      );
+      const block = town
+        ? getSelectableTownBlockByKey(town, result.id)
+        : null;
+
+      return town && block
+        ? {
+            stateName,
+            parcel: block,
+            settlementId: town.id,
           }
         : null;
     }
@@ -712,6 +754,21 @@ export default function LunarLeafletMap({
                       setSelectedSettlementId(selection.settlementId);
                       setSelectedParcel(selection.parcel);
                       setSelectedParcelKey(selection.parcel.parcelKey);
+
+                      if (selection.settlementId) {
+                        const settlement = publicSettlements.find(
+                          (candidate) =>
+                            candidate.id === selection.settlementId
+                        );
+
+                        if (settlement?.kind === "city") {
+                          setShowCities(true);
+                        }
+
+                        if (settlement?.kind === "town") {
+                          setShowTowns(true);
+                        }
+                      }
                     } else {
                       setSelectedSearchResult(null);
                       alert(
@@ -835,6 +892,18 @@ export default function LunarLeafletMap({
             {selectedCity && (
               <VisibleCityBlockLayer
                 blocks={visibleCityBlocks}
+                propertyStatuses={parcelStatuses}
+                selectedBlockKey={selectedParcelKey}
+                onSelect={(block) => {
+                  setSelectedParcel(block);
+                  setSelectedParcelKey(block.parcelKey);
+                }}
+              />
+            )}
+
+            {selectedTown && (
+              <VisibleTownBlockLayer
+                blocks={visibleTownBlocks}
                 propertyStatuses={parcelStatuses}
                 selectedBlockKey={selectedParcelKey}
                 onSelect={(block) => {
