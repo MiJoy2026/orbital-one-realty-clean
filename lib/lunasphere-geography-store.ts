@@ -2,12 +2,16 @@ import { createHash } from "node:crypto";
 
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { lunarMapRegions } from "./lunar-map-regions";
+import {
+  lunarMapRegions,
+  type LunarMapRegion,
+} from "./lunar-map-regions";
 import { prisma } from "./prisma";
 import { hasCompatibleTopologyStructure } from "./lunasphere-studio-draft";
 import {
   cloneTopology,
   createTopologyFromRegions,
+  topologyToLunarMapRegions,
   validateTopology,
   type LunaSphereTopology,
   type LunaSphereTopologyStatus,
@@ -36,6 +40,23 @@ export type GeographyReleaseDetail = GeographyReleaseRecord & {
 
 export type GeographyActivationRecord = GeographyReleaseRecord & {
   activatedAt: string;
+};
+
+export type PublicGeographySource =
+  | "active-release"
+  | "built-in-fallback";
+
+export type PublicGeographyFallbackReason =
+  | "no-active-release"
+  | "database-unavailable"
+  | "invalid-active-release";
+
+export type PublicGeographySnapshot = {
+  source: PublicGeographySource;
+  regions: LunarMapRegion[];
+  activeReleaseNumber: number | null;
+  activatedAt: string | null;
+  fallbackReason: PublicGeographyFallbackReason | null;
 };
 
 export type GeographyWorkspace = {
@@ -110,6 +131,25 @@ export function parseAndValidateTopology(
   return topology;
 }
 
+function canonicalizeHashValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => canonicalizeHashValue(item));
+  }
+
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+
+    return Object.keys(record)
+      .sort()
+      .reduce<Record<string, unknown>>((result, key) => {
+        result[key] = canonicalizeHashValue(record[key]);
+        return result;
+      }, {});
+  }
+
+  return value;
+}
+
 function createTopologyHash(topology: LunaSphereTopology): string {
   const hashableTopology: LunaSphereTopology = {
     ...cloneTopology(topology),
@@ -117,7 +157,7 @@ function createTopologyHash(topology: LunaSphereTopology): string {
   };
 
   return createHash("sha256")
-    .update(JSON.stringify(hashableTopology))
+    .update(JSON.stringify(canonicalizeHashValue(hashableTopology)))
     .digest("hex");
 }
 
@@ -219,6 +259,98 @@ export async function getGeographyRelease(
     ...mapReleaseRecord(release),
     topology: parseAndValidateTopology(release.topology, "published"),
   };
+}
+
+type PublicMapRegionSource = {
+  name: string;
+  labelPosition: readonly [number, number];
+  positions: readonly (readonly [number, number])[];
+};
+
+function cloneMapRegions(
+  regions: readonly PublicMapRegionSource[]
+): LunarMapRegion[] {
+  return regions.map((region) => ({
+    name: region.name,
+    labelPosition: [
+      region.labelPosition[0],
+      region.labelPosition[1],
+    ],
+    positions: region.positions.map(
+      ([y, x]) => [y, x] as [number, number]
+    ),
+  }));
+}
+
+function createBuiltInPublicGeography(
+  fallbackReason: PublicGeographyFallbackReason
+): PublicGeographySnapshot {
+  return {
+    source: "built-in-fallback",
+    regions: cloneMapRegions(lunarMapRegions),
+    activeReleaseNumber: null,
+    activatedAt: null,
+    fallbackReason,
+  };
+}
+
+/**
+ * Resolves the geography that the customer-facing Moon Map should render.
+ *
+ * The most recently activated, valid numbered release wins. If no release is
+ * active, the database cannot be reached, or stored geography fails current
+ * validation, the original built-in 57-state map remains available.
+ */
+export async function getPublicGeographySnapshot(
+  client: PrismaClient = prisma
+): Promise<PublicGeographySnapshot> {
+  try {
+    const activation =
+      await client.lunaSphereGeographyActivation.findFirst({
+        where: {
+          worldId: baselineTopology.worldId,
+          worldVersion: baselineTopology.worldVersion,
+        },
+        include: {
+          release: true,
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+
+    if (!activation) {
+      return createBuiltInPublicGeography("no-active-release");
+    }
+
+    try {
+      const topology = parseAndValidateTopology(
+        activation.release.topology,
+        "published"
+      );
+      const regions = topologyToLunarMapRegions(topology);
+
+      return {
+        source: "active-release",
+        regions: cloneMapRegions(regions),
+        activeReleaseNumber: activation.release.releaseNumber,
+        activatedAt: activation.createdAt.toISOString(),
+        fallbackReason: null,
+      };
+    } catch (error) {
+      console.error(
+        "[LunaSphere] Active public geography is invalid; using built-in boundaries.",
+        error
+      );
+
+      return createBuiltInPublicGeography("invalid-active-release");
+    }
+  } catch (error) {
+    console.error(
+      "[LunaSphere] Public geography lookup failed; using built-in boundaries.",
+      error
+    );
+
+    return createBuiltInPublicGeography("database-unavailable");
+  }
 }
 
 export async function saveGeographyDraft(

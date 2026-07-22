@@ -18,7 +18,6 @@ import {
   getTownsByState,
   getLocationCoordinates,
 } from "@/lib/lunar-location-service";
-import { stateCenters } from "@/lib/property-coordinates";
 import ReservationCountdown from "@/components/moon-map/ReservationCountdown";
 import { useEffect, useMemo, useState } from "react";
 import "leaflet/dist/leaflet.css";
@@ -33,7 +32,7 @@ import {
   useMap,
 } from "react-leaflet";
 import { CRS, Transformation, divIcon } from "leaflet";
-import { lunarMapRegions } from "@/lib/lunar-map-regions";
+import type { LunarMapRegion } from "@/lib/lunar-map-regions";
 
 type SelectedProperty = {
   id: string;
@@ -126,20 +125,25 @@ function FlyToSelectedProperty({
 
 function FlyToSelectedState({
   selectedState,
+  regions,
 }: {
   selectedState: string | null;
+  regions: LunarMapRegion[];
 }) {
   const map = useMap();
 
   useEffect(() => {
     if (!selectedState) return;
 
-    const center = stateCenters[selectedState] ?? stateCenters.Default;
+    const region = regions.find(
+      (candidate) => candidate.name === selectedState
+    );
+    const center = region?.labelPosition ?? [500, 500];
 
-    map.flyTo([center.y, center.x], 3, {
+    map.flyTo(center, 3, {
       duration: 1.2,
     });
-  }, [map, selectedState]);
+  }, [map, regions, selectedState]);
 
   return null;
 }
@@ -165,10 +169,14 @@ function MapHomeButton({ onReset }: { onReset: () => void }) {
 }
 
 export default function LunarLeafletMap({
+  mapRegions,
+  activeGeographyReleaseNumber = null,
   selectedProperty,
   nearbyProperties = [],
   ownedProperties = [],
 }: {
+  mapRegions: LunarMapRegion[];
+  activeGeographyReleaseNumber?: number | null;
   selectedProperty?: SelectedProperty | null;
   nearbyProperties?: SelectedProperty[];
   ownedProperties?: SelectedProperty[];
@@ -325,6 +333,11 @@ export default function LunarLeafletMap({
           <span className="rounded-full border border-yellow-400/50 px-3 py-1 text-yellow-400">
             Click State
           </span>
+          {activeGeographyReleaseNumber !== null && (
+            <span className="rounded-full border border-purple-400/60 px-3 py-1 text-purple-300">
+              Geography R{activeGeographyReleaseNumber}
+            </span>
+          )}
           <span className="rounded-full border border-green-500 px-3 py-1 text-green-400">
             Available
           </span>
@@ -384,7 +397,9 @@ export default function LunarLeafletMap({
             <div className="mb-4">
               <SearchBox
   onSelectResult={(result) => {
-    setSelectedSearchResult(result);
+    setSelectedSearchResult(
+      result.type === "State" ? null : result
+    );
 
     if (result.type === "State") {
       setSelectedState(result.name);
@@ -441,7 +456,10 @@ export default function LunarLeafletMap({
             <ZoomControl position="topright" />
             <ScaleControl position="bottomleft" />
             <FlyToSelectedProperty selectedProperty={selectedProperty} />
-            <FlyToSelectedState selectedState={selectedState} />
+            <FlyToSelectedState
+              selectedState={selectedState}
+              regions={mapRegions}
+            />
             <FlyToSearchResult searchResult={selectedSearchResult} />
             <TrackZoomLevel onZoomChange={setZoomLevel} />
             <MapHomeButton
@@ -458,6 +476,7 @@ export default function LunarLeafletMap({
             )}
 
             <StateLayer
+              regions={mapRegions}
               showStates={showStates}
               selectedState={selectedState}
               onSelectState={setSelectedState}

@@ -3,13 +3,19 @@ import {
   getNearbyProperties,
 } from "../../lib/property-service";
 import LunarLeafletMap from "@/components/LunarLeafletMapClient";
+import { getPublicGeographySnapshot } from "@/lib/lunasphere-geography-store";
+
+export const dynamic = "force-dynamic";
 
 export default async function MoonMapPage({
   searchParams,
 }: {
   searchParams: Promise<{ property?: string; owned?: string }>;
 }) {
-  const params = await searchParams;
+  const [params, publicGeography] = await Promise.all([
+    searchParams,
+    getPublicGeographySnapshot(),
+  ]);
 
   const selectedProperty = params.property || null;
   const ownedParam = params.owned || null;
@@ -155,6 +161,10 @@ const ownedProperties = (
   </div>
 )}
       <LunarLeafletMap
+        mapRegions={publicGeography.regions}
+        activeGeographyReleaseNumber={
+          publicGeography.activeReleaseNumber
+        }
         selectedProperty={selectedPropertyWithCoordinates}
         nearbyProperties={nearbyProperties}
         ownedProperties={ownedProperties}

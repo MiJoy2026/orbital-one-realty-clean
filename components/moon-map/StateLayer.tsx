@@ -2,13 +2,15 @@
 
 import { Polygon, Marker, Popup } from "react-leaflet";
 import { divIcon } from "leaflet";
-import { lunarMapRegions } from "@/lib/lunar-map-regions";
+import type { LunarMapRegion } from "@/lib/lunar-map-regions";
 
 export default function StateLayer({
+  regions,
   showStates,
   selectedState,
   onSelectState,
 }: {
+  regions: LunarMapRegion[];
   showStates: boolean;
   selectedState: string | null;
   onSelectState: (stateName: string) => void;
@@ -19,7 +21,7 @@ export default function StateLayer({
 
   return (
     <>
-      {lunarMapRegions.map((region) => (
+      {regions.map((region) => (
         <div key={region.name}>
           <Polygon
             positions={region.positions}
