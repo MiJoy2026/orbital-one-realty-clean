@@ -10,14 +10,10 @@ import TownLayer from "@/components/moon-map/TownLayer";
 import ParcelLayer from "@/components/moon-map/ParcelLayer";
 import LunarTileLayer from "@/components/moon-map/LunarTileLayer";
 import PropertyInfoPanel from "@/components/moon-map/PropertyInfoPanel";
+import SettlementInfoPanel from "@/components/moon-map/SettlementInfoPanel";
 import type { ParcelCell } from "@/lib/parcel-grid";
 import { getParcelGridForZoom } from "@/lib/parcel-grid";
 import { getVisibleLunarAttractions } from "@/lib/lunar-attractions";
-import {
-  getCitiesByState,
-  getTownsByState,
-  getLocationCoordinates,
-} from "@/lib/lunar-location-service";
 import ReservationCountdown from "@/components/moon-map/ReservationCountdown";
 import { useEffect, useMemo, useState } from "react";
 import "leaflet/dist/leaflet.css";
@@ -33,6 +29,7 @@ import {
 } from "react-leaflet";
 import { CRS, Transformation, divIcon } from "leaflet";
 import type { LunarMapRegion } from "@/lib/lunar-map-regions";
+import type { PublicLunaSphereSettlement } from "@/lib/lunasphere-public-geography";
 
 type SelectedProperty = {
   id: string;
@@ -170,12 +167,14 @@ function MapHomeButton({ onReset }: { onReset: () => void }) {
 
 export default function LunarLeafletMap({
   mapRegions,
+  publicSettlements,
   activeGeographyReleaseNumber = null,
   selectedProperty,
   nearbyProperties = [],
   ownedProperties = [],
 }: {
   mapRegions: LunarMapRegion[];
+  publicSettlements: PublicLunaSphereSettlement[];
   activeGeographyReleaseNumber?: number | null;
   selectedProperty?: SelectedProperty | null;
   nearbyProperties?: SelectedProperty[];
@@ -187,6 +186,8 @@ export default function LunarLeafletMap({
   ] as [[number, number], [number, number]];
 
   const [selectedState, setSelectedState] = useState<string | null>(null);
+  const [selectedSettlementId, setSelectedSettlementId] =
+    useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(0);
   const [selectedSearchResult, setSelectedSearchResult] =
      useState<AtlasSearchResult | null>(null);
@@ -208,19 +209,39 @@ export default function LunarLeafletMap({
   ? lunarStates.find((state) => state.name === selectedState) ?? null
   : null;
 
-  const visibleCities = selectedState
-    ? getCitiesByState(selectedState).map((city) => ({
-        name: city,
-        ...getLocationCoordinates(selectedState, city, "city"),
-      }))
-    : [];
+  const visibleCities = useMemo(
+    () =>
+      selectedState
+        ? publicSettlements.filter(
+            (settlement) =>
+              settlement.stateName === selectedState &&
+              settlement.kind === "city"
+          )
+        : [],
+    [publicSettlements, selectedState]
+  );
 
-  const visibleTowns = selectedState
-    ? getTownsByState(selectedState).map((town) => ({
-        name: town,
-        ...getLocationCoordinates(selectedState, town, "town"),
-      }))
-    : [];
+  const visibleTowns = useMemo(
+    () =>
+      selectedState
+        ? publicSettlements.filter(
+            (settlement) =>
+              settlement.stateName === selectedState &&
+              settlement.kind === "town"
+          )
+        : [],
+    [publicSettlements, selectedState]
+  );
+
+  const selectedSettlement = useMemo(
+    () =>
+      selectedSettlementId
+        ? publicSettlements.find(
+            (settlement) => settlement.id === selectedSettlementId
+          ) ?? null
+        : null,
+    [publicSettlements, selectedSettlementId]
+  );
 
   const visibleAttractions = getVisibleLunarAttractions(zoomLevel);
 
@@ -309,7 +330,36 @@ export default function LunarLeafletMap({
       setReservingParcel(false);
     }
   }
-      const useTileAtlas = true;
+
+  function resolveSearchResult(
+    result: AtlasSearchResult
+  ): AtlasSearchResult {
+    if (result.type !== "City" && result.type !== "Town") {
+      return result;
+    }
+
+    const stateName = result.subtitle.split("•")[1]?.trim();
+    const kind = result.type === "City" ? "city" : "town";
+    const settlement = publicSettlements.find(
+      (candidate) =>
+        candidate.kind === kind &&
+        candidate.name === result.name &&
+        (!stateName || candidate.stateName === stateName)
+    );
+
+    if (!settlement) {
+      return result;
+    }
+
+    return {
+      ...result,
+      x: settlement.center[1],
+      y: settlement.center[0],
+      zoom: settlement.kind === "city" ? 4 : 6,
+    };
+  }
+
+  const useTileAtlas = true;
 
   return (
     <div className="mx-auto mt-10 w-full max-w-7xl">
@@ -396,33 +446,54 @@ export default function LunarLeafletMap({
       </div>
             <div className="mb-4">
               <SearchBox
-  onSelectResult={(result) => {
-    setSelectedSearchResult(
-      result.type === "State" ? null : result
-    );
+                onSelectResult={(result) => {
+                  const resolvedResult = resolveSearchResult(result);
 
-    if (result.type === "State") {
-      setSelectedState(result.name);
-      setSelectedParcel(null);
-      setSelectedParcelKey(null);
-    }
+                  setSelectedSearchResult(
+                    result.type === "State" ? null : resolvedResult
+                  );
 
-    if (result.type === "City" || result.type === "Town") {
-      const stateName = result.subtitle.split("•")[1]?.trim();
+                  if (result.type === "State") {
+                    setSelectedState(result.name);
+                    setSelectedSettlementId(null);
+                    setSelectedParcel(null);
+                    setSelectedParcelKey(null);
+                  }
 
-      if (stateName) {
-        setSelectedState(stateName);
-      }
+                  if (result.type === "City" || result.type === "Town") {
+                    const stateName = result.subtitle
+                      .split("•")[1]
+                      ?.trim();
+                    const settlementKind =
+                      result.type === "City" ? "city" : "town";
+                    const settlement = publicSettlements.find(
+                      (candidate) =>
+                        candidate.kind === settlementKind &&
+                        candidate.name === result.name &&
+                        (!stateName ||
+                          candidate.stateName === stateName)
+                    );
 
-      setSelectedParcel(null);
-      setSelectedParcelKey(null);
-    }
+                    if (stateName) {
+                      setSelectedState(stateName);
+                    }
 
-    if (result.type === "Attraction") {
-      setShowAttractions(true);
-    }
-  }}
-/>
+                    setSelectedSettlementId(settlement?.id ?? null);
+                    setSelectedParcel(null);
+                    setSelectedParcelKey(null);
+
+                    if (result.type === "City") {
+                      setShowCities(true);
+                    } else {
+                      setShowTowns(true);
+                    }
+                  }
+
+                  if (result.type === "Attraction") {
+                    setShowAttractions(true);
+                  }
+                }}
+              />
             </div>
       <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
         <div className="h-[850px] overflow-hidden rounded-3xl border border-yellow-400/40 bg-black shadow-2xl">
@@ -465,6 +536,9 @@ export default function LunarLeafletMap({
             <MapHomeButton
               onReset={() => {
                 setSelectedState(null);
+                setSelectedSettlementId(null);
+                setSelectedParcel(null);
+                setSelectedParcelKey(null);
                 setShowTowns(false);
               }}
             />
@@ -479,19 +553,12 @@ export default function LunarLeafletMap({
               regions={mapRegions}
               showStates={showStates}
               selectedState={selectedState}
-              onSelectState={setSelectedState}
-            />
-
-            <CityLayer
-              showCities={showCities}
-              zoomLevel={zoomLevel}
-              cities={visibleCities}
-            />
-
-            <TownLayer
-              showTowns={showTowns}
-              zoomLevel={zoomLevel}
-              towns={visibleTowns}
+              onSelectState={(stateName) => {
+                setSelectedState(stateName);
+                setSelectedSettlementId(null);
+                setSelectedParcel(null);
+                setSelectedParcelKey(null);
+              }}
             />
 
             {selectedState && (
@@ -500,11 +567,38 @@ export default function LunarLeafletMap({
                  parcelStatuses={parcelStatuses}
                  selectedParcelKey={selectedParcelKey}
                  onSelect={(parcel) => {
+                 setSelectedSettlementId(null);
                  setSelectedParcel(parcel);
                  setSelectedParcelKey(parcel.parcelKey);
                 }}
               />
             )}
+
+            <CityLayer
+              showCities={showCities}
+              zoomLevel={zoomLevel}
+              cities={visibleCities}
+              selectedCityId={selectedSettlementId}
+              onSelectCity={(city) => {
+                setSelectedState(city.stateName);
+                setSelectedSettlementId(city.id);
+                setSelectedParcel(null);
+                setSelectedParcelKey(null);
+              }}
+            />
+
+            <TownLayer
+              showTowns={showTowns}
+              zoomLevel={zoomLevel}
+              towns={visibleTowns}
+              selectedTownId={selectedSettlementId}
+              onSelectTown={(town) => {
+                setSelectedState(town.stateName);
+                setSelectedSettlementId(town.id);
+                setSelectedParcel(null);
+                setSelectedParcelKey(null);
+              }}
+            />
 
             {showAttractions &&
                visibleAttractions.map((attraction) => (
@@ -721,6 +815,8 @@ export default function LunarLeafletMap({
       setSelectedParcel(null);
     }}
   />
+) : selectedSettlement ? (
+  <SettlementInfoPanel settlement={selectedSettlement} />
 ) : (
   <StateInfoPanel
     selectedState={selectedState}

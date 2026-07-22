@@ -1,59 +1,95 @@
 "use client";
 
-import { Marker, Popup } from "react-leaflet";
-import { divIcon } from "leaflet";
+import Link from "next/link";
 
-interface Town {
-  name: string;
-  x: number;
-  y: number;
-}
+import { divIcon } from "leaflet";
+import { Marker, Polygon, Popup } from "react-leaflet";
+
+import type { PublicLunaSphereSettlement } from "@/lib/lunasphere-public-geography";
 
 export default function TownLayer({
   showTowns,
   zoomLevel,
   towns,
+  selectedTownId,
+  onSelectTown,
 }: {
   showTowns: boolean;
   zoomLevel: number;
-  towns: Town[];
+  towns: PublicLunaSphereSettlement[];
+  selectedTownId: string | null;
+  onSelectTown: (town: PublicLunaSphereSettlement) => void;
 }) {
-  if (!showTowns || zoomLevel < 0) {
+  if (!showTowns || zoomLevel < 5) {
     return null;
   }
 
   return (
     <>
-      {towns.map((town) => (
-        <Marker
-          key={`town-${town.name}`}
-          position={[town.y, town.x]}
-          icon={divIcon({
-            className: "",
-            html: `<div style="
-              color:#fde68a;
-              font-weight:800;
-              font-size:11px;
-              text-transform:uppercase;
-              text-shadow:0 0 8px #000;
-              white-space:nowrap;
-            ">🏘 ${town.name}</div>`,
-          })}
-        >
-          <Popup>
-            <div style={{ minWidth: "160px" }}>
-              <strong>{town.name}</strong>
-              <br />
-              Lunar Town
-              <br />
-              <br />
-              <a href="/towns/${encodeURIComponent(town.name)}">
-                View Town
-              </a>
-            </div>
-          </Popup>
-        </Marker>
-      ))}
+      {towns.map((town) => {
+        const isSelected = selectedTownId === town.id;
+
+        return (
+          <div key={town.id}>
+            <Polygon
+              positions={town.boundary}
+              pathOptions={{
+                color: "#fbbf24",
+                fillColor: "#d97706",
+                weight: isSelected ? 3 : 1.5,
+                opacity: isSelected ? 1 : 0.76,
+                fillOpacity: isSelected ? 0.3 : 0.11,
+              }}
+              eventHandlers={{
+                click: () => onSelectTown(town),
+                mouseover: (event) => {
+                  event.target.setStyle({
+                    opacity: 1,
+                    weight: 3,
+                    fillOpacity: 0.3,
+                  });
+                },
+                mouseout: (event) => {
+                  event.target.setStyle({
+                    opacity: isSelected ? 1 : 0.76,
+                    weight: isSelected ? 3 : 1.5,
+                    fillOpacity: isSelected ? 0.3 : 0.11,
+                  });
+                },
+              }}
+            >
+              <Popup>
+                <div style={{ minWidth: "190px" }}>
+                  <strong>{town.name}</strong>
+                  <br />
+                  Lunar Town · {town.stateName}
+                  <br />
+                  <br />
+                  <Link href={`/towns/${encodeURIComponent(town.name)}`}>
+                    View Town
+                  </Link>
+                </div>
+              </Popup>
+            </Polygon>
+
+            <Marker
+              position={town.center}
+              icon={divIcon({
+                className: "",
+                html: `<div style="
+                  color:#fde68a;
+                  font-weight:900;
+                  font-size:11px;
+                  text-transform:uppercase;
+                  text-shadow:0 0 8px #000, 0 2px 10px #000;
+                  white-space:nowrap;
+                  pointer-events:none;
+                ">🏘 ${town.name}</div>`,
+              })}
+            />
+          </div>
+        );
+      })}
     </>
   );
 }

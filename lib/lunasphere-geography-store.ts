@@ -11,6 +11,11 @@ import {
   type LunaSphereGeographyDocument,
 } from "./lunasphere-geography-document";
 import {
+  resolveStateTerritories,
+  type ResolvedLunaSphereSettlement,
+} from "./lunasphere-territories";
+import type { PublicLunaSphereSettlement } from "./lunasphere-public-geography";
+import {
   lunarMapRegions,
   type LunarMapRegion,
 } from "./lunar-map-regions";
@@ -62,6 +67,7 @@ export type PublicGeographyFallbackReason =
 export type PublicGeographySnapshot = {
   source: PublicGeographySource;
   regions: LunarMapRegion[];
+  settlements: PublicLunaSphereSettlement[];
   activeReleaseNumber: number | null;
   activatedAt: string | null;
   fallbackReason: PublicGeographyFallbackReason | null;
@@ -324,12 +330,52 @@ function cloneMapRegions(
   }));
 }
 
+function clonePublicSettlement(
+  settlement: ResolvedLunaSphereSettlement
+): PublicLunaSphereSettlement {
+  return {
+    id: settlement.id,
+    stateId: settlement.stateId,
+    stateName: settlement.stateName,
+    stateNumber: settlement.stateNumber,
+    kind: settlement.kind,
+    territoryNumber: settlement.territoryNumber,
+    name: settlement.name,
+    slug: settlement.slug,
+    center: [settlement.center[0], settlement.center[1]],
+    boundary: settlement.boundary.map(
+      ([y, x]) => [y, x] as [number, number]
+    ),
+  };
+}
+
+function resolvePublicSettlements(
+  geography: LunaSphereGeographyDocument
+): PublicLunaSphereSettlement[] {
+  return geography.topology.states.flatMap((state) => {
+    const territories = resolveStateTerritories(
+      geography.topology,
+      geography.territories,
+      state.name
+    );
+
+    if (!territories) {
+      return [];
+    }
+
+    return [...territories.cities, ...territories.towns].map(
+      clonePublicSettlement
+    );
+  });
+}
+
 function createBuiltInPublicGeography(
   fallbackReason: PublicGeographyFallbackReason
 ): PublicGeographySnapshot {
   return {
     source: "built-in-fallback",
     regions: cloneMapRegions(lunarMapRegions),
+    settlements: resolvePublicSettlements(baselineGeography),
     activeReleaseNumber: null,
     activatedAt: null,
     fallbackReason,
@@ -337,9 +383,8 @@ function createBuiltInPublicGeography(
 }
 
 /**
- * Resolves the state geography that the customer-facing Moon Map renders.
- * Nested settlement geometry is stored in the same active release but remains
- * intentionally dormant until the public city/town layer milestone.
+ * Resolves the complete geography that the customer-facing Moon Map renders.
+ * State, city, and town geometry always come from the same validated release.
  */
 export async function getPublicGeographySnapshot(
   client: PrismaClient = prisma
@@ -373,6 +418,7 @@ export async function getPublicGeographySnapshot(
       return {
         source: "active-release",
         regions: cloneMapRegions(regions),
+        settlements: resolvePublicSettlements(geography),
         activeReleaseNumber: activation.release.releaseNumber,
         activatedAt: activation.createdAt.toISOString(),
         fallbackReason: null,
