@@ -190,6 +190,23 @@ model LunaSphereGeographyRelease {
   topologyHash     String
   topology         Json
 
+  activations      LunaSphereGeographyActivation[]
+
   @@unique([worldId, worldVersion, releaseNumber], map: "LunaSphereGeoRelease_world_version_number_key")
   @@index([worldId, worldVersion, publishedAt], map: "LunaSphereGeoRelease_world_version_published_idx")
+}
+
+model LunaSphereGeographyActivation {
+  id            String   @id @default(cuid())
+  createdAt     DateTime @default(now())
+
+  worldId       String
+  worldVersion  String
+  releaseNumber Int
+  releaseId     String
+
+  release       LunaSphereGeographyRelease @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+
+  @@index([worldId, worldVersion, createdAt], map: "LunaSphereGeoActivation_world_version_created_idx")
+  @@index([releaseId])
 }

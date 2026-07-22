@@ -30,9 +30,19 @@ export type GeographyReleaseRecord = {
   topologyHash: string;
 };
 
+export type GeographyReleaseDetail = GeographyReleaseRecord & {
+  topology: LunaSphereTopology;
+};
+
+export type GeographyActivationRecord = GeographyReleaseRecord & {
+  activatedAt: string;
+};
+
 export type GeographyWorkspace = {
   draft: GeographyDraftRecord | null;
   latestRelease: GeographyReleaseRecord | null;
+  activeRelease: GeographyActivationRecord | null;
+  releases: GeographyReleaseRecord[];
 };
 
 export class LunaSphereGeographyValidationError extends Error {
@@ -46,6 +56,13 @@ export class LunaSphereGeographyConflictError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "LunaSphereGeographyConflictError";
+  }
+}
+
+export class LunaSphereGeographyNotFoundError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "LunaSphereGeographyNotFoundError";
   }
 }
 
@@ -104,10 +121,24 @@ function createTopologyHash(topology: LunaSphereTopology): string {
     .digest("hex");
 }
 
+function mapReleaseRecord(record: {
+  releaseNumber: number;
+  publishedAt: Date;
+  topologyRevision: number;
+  topologyHash: string;
+}): GeographyReleaseRecord {
+  return {
+    releaseNumber: record.releaseNumber,
+    publishedAt: record.publishedAt.toISOString(),
+    topologyRevision: record.topologyRevision,
+    topologyHash: record.topologyHash,
+  };
+}
+
 export async function getGeographyWorkspace(
   client: PrismaClient = prisma
 ): Promise<GeographyWorkspace> {
-  const [draft, latestRelease] = await Promise.all([
+  const [draft, releases, activeActivation] = await Promise.all([
     client.lunaSphereGeographyDraft.findUnique({
       where: {
         worldId_worldVersion: {
@@ -116,7 +147,7 @@ export async function getGeographyWorkspace(
         },
       },
     }),
-    client.lunaSphereGeographyRelease.findFirst({
+    client.lunaSphereGeographyRelease.findMany({
       where: {
         worldId: baselineTopology.worldId,
         worldVersion: baselineTopology.worldVersion,
@@ -125,7 +156,19 @@ export async function getGeographyWorkspace(
         releaseNumber: "desc",
       },
     }),
+    client.lunaSphereGeographyActivation.findFirst({
+      where: {
+        worldId: baselineTopology.worldId,
+        worldVersion: baselineTopology.worldVersion,
+      },
+      include: {
+        release: true,
+      },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    }),
   ]);
+
+  const releaseRecords = releases.map(mapReleaseRecord);
 
   return {
     draft: draft
@@ -135,14 +178,46 @@ export async function getGeographyWorkspace(
           topology: parseStoredTopology(draft.topology),
         }
       : null,
-    latestRelease: latestRelease
+    latestRelease: releaseRecords[0] ?? null,
+    activeRelease: activeActivation
       ? {
-          releaseNumber: latestRelease.releaseNumber,
-          publishedAt: latestRelease.publishedAt.toISOString(),
-          topologyRevision: latestRelease.topologyRevision,
-          topologyHash: latestRelease.topologyHash,
+          ...mapReleaseRecord(activeActivation.release),
+          activatedAt: activeActivation.createdAt.toISOString(),
         }
       : null,
+    releases: releaseRecords,
+  };
+}
+
+export async function getGeographyRelease(
+  releaseNumber: number,
+  client: PrismaClient = prisma
+): Promise<GeographyReleaseDetail> {
+  if (!Number.isInteger(releaseNumber) || releaseNumber < 1) {
+    throw new LunaSphereGeographyNotFoundError(
+      "The requested LunaSphere geography release does not exist."
+    );
+  }
+
+  const release = await client.lunaSphereGeographyRelease.findUnique({
+    where: {
+      worldId_worldVersion_releaseNumber: {
+        worldId: baselineTopology.worldId,
+        worldVersion: baselineTopology.worldVersion,
+        releaseNumber,
+      },
+    },
+  });
+
+  if (!release) {
+    throw new LunaSphereGeographyNotFoundError(
+      `LunaSphere geography release ${releaseNumber} was not found.`
+    );
+  }
+
+  return {
+    ...mapReleaseRecord(release),
+    topology: parseAndValidateTopology(release.topology, "published"),
   };
 }
 
@@ -309,12 +384,72 @@ export async function publishGeographyRelease(
         topologyRevision: draft.topologyRevision,
         topology: draftTopology,
       },
-      release: {
-        releaseNumber: release.releaseNumber,
-        publishedAt: release.publishedAt.toISOString(),
-        topologyRevision: release.topologyRevision,
-        topologyHash: release.topologyHash,
-      },
+      release: mapReleaseRecord(release),
+    };
+  });
+}
+
+export async function activateGeographyRelease(
+  releaseNumber: number,
+  client: PrismaClient = prisma
+): Promise<GeographyActivationRecord> {
+  if (!Number.isInteger(releaseNumber) || releaseNumber < 1) {
+    throw new LunaSphereGeographyNotFoundError(
+      "The requested LunaSphere geography release does not exist."
+    );
+  }
+
+  return client.$transaction(async (transaction) => {
+    const release =
+      await transaction.lunaSphereGeographyRelease.findUnique({
+        where: {
+          worldId_worldVersion_releaseNumber: {
+            worldId: baselineTopology.worldId,
+            worldVersion: baselineTopology.worldVersion,
+            releaseNumber,
+          },
+        },
+      });
+
+    if (!release) {
+      throw new LunaSphereGeographyNotFoundError(
+        `LunaSphere geography release ${releaseNumber} was not found.`
+      );
+    }
+
+    parseAndValidateTopology(release.topology, "published");
+
+    const currentActivation =
+      await transaction.lunaSphereGeographyActivation.findFirst({
+        where: {
+          worldId: baselineTopology.worldId,
+          worldVersion: baselineTopology.worldVersion,
+        },
+        include: {
+          release: true,
+        },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      });
+
+    if (currentActivation?.release.releaseNumber === releaseNumber) {
+      throw new LunaSphereGeographyConflictError(
+        `Release ${releaseNumber} is already the active LunaSphere geography release.`
+      );
+    }
+
+    const activation =
+      await transaction.lunaSphereGeographyActivation.create({
+        data: {
+          worldId: release.worldId,
+          worldVersion: release.worldVersion,
+          releaseNumber: release.releaseNumber,
+          releaseId: release.id,
+        },
+      });
+
+    return {
+      ...mapReleaseRecord(release),
+      activatedAt: activation.createdAt.toISOString(),
     };
   });
 }

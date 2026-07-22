@@ -186,6 +186,8 @@ type DatabaseStatus =
   | "ready"
   | "saving"
   | "publishing"
+  | "previewing"
+  | "activating"
   | "error";
 
 type DatabaseDraftMetadata = {
@@ -201,9 +203,19 @@ type GeographyReleaseMetadata = {
   topologyHash: string;
 };
 
+type GeographyActivationMetadata = GeographyReleaseMetadata & {
+  activatedAt: string;
+};
+
+type GeographyReleaseDetail = GeographyReleaseMetadata & {
+  topology: LunaSphereTopology;
+};
+
 type GeographyWorkspaceResponse = {
   draft: DatabaseDraftMetadata | null;
   latestRelease: GeographyReleaseMetadata | null;
+  activeRelease: GeographyActivationMetadata | null;
+  releases: GeographyReleaseMetadata[];
   error?: string;
 };
 
@@ -420,7 +432,7 @@ export default function LunaSphereDesigner() {
       future: [],
     }
   );
-  const topology = history.present;
+  const workingTopology = history.present;
 
   const dragBaselineRef = useRef<LunaSphereTopology | null>(
     null
@@ -447,9 +459,19 @@ export default function LunaSphereDesigner() {
     useState<DatabaseDraftMetadata | null>(null);
   const [latestRelease, setLatestRelease] =
     useState<GeographyReleaseMetadata | null>(null);
+  const [activeRelease, setActiveRelease] =
+    useState<GeographyActivationMetadata | null>(null);
+  const [releases, setReleases] = useState<
+    GeographyReleaseMetadata[]
+  >([]);
+  const [releasePreview, setReleasePreview] =
+    useState<GeographyReleaseDetail | null>(null);
   const [databaseNotice, setDatabaseNotice] = useState<
     string | null
   >(null);
+
+  const topology = releasePreview?.topology ?? workingTopology;
+  const isPreviewingRelease = releasePreview !== null;
 
   const regions = useMemo(
     () =>
@@ -580,6 +602,10 @@ export default function LunaSphereDesigner() {
     () => validateTopology(topology),
     [topology]
   );
+  const workingValidation = useMemo(
+    () => validateTopology(workingTopology),
+    [workingTopology]
+  );
   const summary = useMemo(
     () => createTopologySummary(topology),
     [topology]
@@ -630,6 +656,8 @@ export default function LunaSphereDesigner() {
 
         setDatabaseDraft(workspace.draft);
         setLatestRelease(workspace.latestRelease);
+        setActiveRelease(workspace.activeRelease);
+        setReleases(workspace.releases);
         setDatabaseStatus("ready");
 
         if (announce) {
@@ -715,7 +743,7 @@ export default function LunaSphereDesigner() {
 
       const result = saveLunaSphereStudioDraft(
         window.localStorage,
-        topology
+        workingTopology
       );
 
       if (result.ok) {
@@ -731,11 +759,11 @@ export default function LunaSphereDesigner() {
       window.clearTimeout(savingStatusTimeoutId);
       window.clearTimeout(timeoutId);
     };
-  }, [draftReady, topology]);
+  }, [draftReady, workingTopology]);
 
   useEffect(() => {
     function handleKeyboardShortcut(event: KeyboardEvent) {
-      if (isTextEntryElement(event.target)) {
+      if (isPreviewingRelease || isTextEntryElement(event.target)) {
         return;
       }
 
@@ -785,7 +813,7 @@ export default function LunaSphereDesigner() {
         "keydown",
         handleKeyboardShortcut
       );
-  }, [removableNodeEdge, selectedNodeId]);
+  }, [isPreviewingRelease, removableNodeEdge, selectedNodeId]);
 
   function selectState(stateName: string) {
     setSelectedState(stateName);
@@ -876,7 +904,7 @@ export default function LunaSphereDesigner() {
   function saveDraftNow() {
     const result = saveLunaSphereStudioDraft(
       window.localStorage,
-      topology
+      workingTopology
     );
 
     if (result.ok) {
@@ -938,7 +966,7 @@ export default function LunaSphereDesigner() {
   }
 
   async function saveDatabaseDraft() {
-    if (!validation.valid) {
+    if (!workingValidation.valid) {
       setDatabaseNotice(
         "Fix the topology errors before saving the shared database draft."
       );
@@ -954,7 +982,7 @@ export default function LunaSphereDesigner() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          topology,
+          topology: workingTopology,
           expectedSavedAt: databaseDraft?.savedAt ?? null,
         }),
       });
@@ -1022,7 +1050,7 @@ export default function LunaSphereDesigner() {
   }
 
   async function publishDatabaseRelease() {
-    if (!validation.valid) {
+    if (!workingValidation.valid) {
       setDatabaseNotice(
         "Fix the topology errors before publishing a geography release."
       );
@@ -1047,7 +1075,7 @@ export default function LunaSphereDesigner() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ topology }),
+          body: JSON.stringify({ topology: workingTopology }),
         }
       );
       const result = await readResponseBody<{
@@ -1057,6 +1085,13 @@ export default function LunaSphereDesigner() {
 
       setDatabaseDraft(result.draft);
       setLatestRelease(result.release);
+      setReleases((currentReleases) => [
+        result.release,
+        ...currentReleases.filter(
+          (release) =>
+            release.releaseNumber !== result.release.releaseNumber
+        ),
+      ]);
       setDatabaseStatus("ready");
       setDatabaseNotice(
         `Published immutable LunaSphere geography release ${result.release.releaseNumber}. The public Moon Map has not been switched to it.`
@@ -1067,6 +1102,133 @@ export default function LunaSphereDesigner() {
         error instanceof Error
           ? error.message
           : "The LunaSphere geography release could not be published."
+      );
+    }
+  }
+
+  async function previewGeographyRelease(releaseNumber: number) {
+    setDatabaseStatus("previewing");
+
+    try {
+      const response = await fetch(
+        `${GEOGRAPHY_API_PATH}/releases/${releaseNumber}`,
+        { cache: "no-store" }
+      );
+      const result = await readResponseBody<{
+        release: GeographyReleaseDetail;
+      }>(response);
+
+      if (
+        !hasCompatibleTopologyStructure(
+          result.release.topology,
+          baselineTopology
+        )
+      ) {
+        throw new Error(
+          "The selected release is incompatible with this Studio version."
+        );
+      }
+
+      setReleasePreview(result.release);
+      setSelectedNodeId(null);
+      setDatabaseStatus("ready");
+      setDatabaseNotice(
+        `Previewing immutable geography release ${result.release.releaseNumber}. Editing and draft-saving controls are temporarily disabled.`
+      );
+    } catch (error) {
+      setDatabaseStatus("error");
+      setDatabaseNotice(
+        error instanceof Error
+          ? error.message
+          : "The LunaSphere geography release could not be previewed."
+      );
+    }
+  }
+
+  function exitReleasePreview() {
+    if (!releasePreview) {
+      return;
+    }
+
+    const releaseNumber = releasePreview.releaseNumber;
+    setReleasePreview(null);
+    setSelectedNodeId(null);
+    setDatabaseStatus("ready");
+    setDatabaseNotice(
+      `Closed release ${releaseNumber} preview and returned to the open Studio draft.`
+    );
+  }
+
+  function copyReleasePreviewToDraft() {
+    if (!releasePreview) {
+      return;
+    }
+
+    const copiedTopology: LunaSphereTopology = {
+      ...cloneTopology(releasePreview.topology),
+      status: "draft",
+      revision:
+        Math.max(
+          workingTopology.revision,
+          releasePreview.topology.revision
+        ) + 1,
+    };
+    const releaseNumber = releasePreview.releaseNumber;
+
+    dispatchHistory({
+      type: "replace",
+      topology: copiedTopology,
+      recordCurrent: true,
+    });
+    setReleasePreview(null);
+    setSelectedNodeId(null);
+    setDatabaseStatus("ready");
+    setDatabaseNotice(
+      `Copied release ${releaseNumber} into the editable Studio draft. Save it locally or to the shared database when ready.`
+    );
+  }
+
+  async function activateRelease(releaseNumber: number) {
+    const isRollback =
+      activeRelease !== null &&
+      releaseNumber < activeRelease.releaseNumber;
+    const actionLabel = isRollback ? "roll back to" : "activate";
+    const confirmed = window.confirm(
+      `${actionLabel[0].toUpperCase()}${actionLabel.slice(1)} LunaSphere geography release ${releaseNumber}? This records the controlled active release and preserves the previous activation history. The public Moon Map will remain on its current code-based geography until the next integration milestone.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDatabaseStatus("activating");
+
+    try {
+      const response = await fetch(
+        `${GEOGRAPHY_API_PATH}/activate`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ releaseNumber }),
+        }
+      );
+      const result = await readResponseBody<{
+        activeRelease: GeographyActivationMetadata;
+      }>(response);
+
+      setActiveRelease(result.activeRelease);
+      setDatabaseStatus("ready");
+      setDatabaseNotice(
+        `${isRollback ? "Rolled back" : "Activated"} the LunaSphere geography control record to release ${result.activeRelease.releaseNumber}. The public Moon Map is not connected to active releases yet.`
+      );
+    } catch (error) {
+      setDatabaseStatus("error");
+      setDatabaseNotice(
+        error instanceof Error
+          ? error.message
+          : "The LunaSphere geography release could not be activated."
       );
     }
   }
@@ -1124,10 +1286,15 @@ export default function LunaSphereDesigner() {
   const databaseBusy =
     databaseStatus === "loading" ||
     databaseStatus === "saving" ||
-    databaseStatus === "publishing";
+    databaseStatus === "publishing" ||
+    databaseStatus === "previewing" ||
+    databaseStatus === "activating";
   const databaseDraftIsCurrent =
     databaseDraft !== null &&
-    topologiesHaveSameContent(databaseDraft.topology, topology);
+    topologiesHaveSameContent(
+      databaseDraft.topology,
+      workingTopology
+    );
   const databaseStatusLabel =
     databaseStatus === "loading"
       ? "Loading database…"
@@ -1135,6 +1302,10 @@ export default function LunaSphereDesigner() {
         ? "Saving database draft…"
         : databaseStatus === "publishing"
           ? "Publishing release…"
+          : databaseStatus === "previewing"
+            ? "Loading release preview…"
+            : databaseStatus === "activating"
+              ? "Activating release…"
           : databaseStatus === "error"
             ? "Database error"
             : databaseDraft
@@ -1187,7 +1358,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={undo}
-              disabled={history.past.length === 0}
+              disabled={isPreviewingRelease || history.past.length === 0}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Undo
@@ -1196,7 +1367,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={redo}
-              disabled={history.future.length === 0}
+              disabled={isPreviewingRelease || history.future.length === 0}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Redo
@@ -1205,6 +1376,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={saveDraftNow}
+              disabled={isPreviewingRelease}
               className="rounded-xl border border-sky-300/30 bg-sky-400/10 px-4 py-3 text-sm font-black text-sky-100 hover:bg-sky-400/20"
             >
               Save Draft Now
@@ -1219,6 +1391,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={resetSelectedState}
+              disabled={isPreviewingRelease}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold hover:bg-white/10"
             >
               Reset State
@@ -1227,6 +1400,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={resetAllStates}
+              disabled={isPreviewingRelease}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold hover:bg-white/10"
             >
               Reset All
@@ -1235,7 +1409,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={reloadSavedDraft}
-              disabled={!lastSavedAt}
+              disabled={isPreviewingRelease || !lastSavedAt}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Reload Saved Draft
@@ -1276,9 +1450,9 @@ export default function LunaSphereDesigner() {
                   Shared Database Workspace
                 </p>
                 <p className="mt-1 text-sm text-violet-50/75">
-                  Save one cross-device draft and publish immutable,
-                  numbered geography releases. Publishing here does not
-                  activate the release on the public Moon Map.
+                  Save one cross-device draft, publish immutable releases,
+                  preview any release, and choose a controlled active release.
+                  The public Moon Map remains unchanged until the next integration milestone.
                 </p>
               </div>
 
@@ -1291,7 +1465,11 @@ export default function LunaSphereDesigner() {
               <button
                 type="button"
                 onClick={() => void saveDatabaseDraft()}
-                disabled={!validation.valid || databaseBusy}
+                disabled={
+                  isPreviewingRelease ||
+                  !workingValidation.valid ||
+                  databaseBusy
+                }
                 className="rounded-xl bg-violet-200 px-4 py-3 text-sm font-black text-violet-950 enabled:hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
               >
                 Save Database Draft
@@ -1300,7 +1478,11 @@ export default function LunaSphereDesigner() {
               <button
                 type="button"
                 onClick={loadDatabaseDraft}
-                disabled={!databaseDraft || databaseBusy}
+                disabled={
+                  isPreviewingRelease ||
+                  !databaseDraft ||
+                  databaseBusy
+                }
                 className="rounded-xl border border-violet-100/30 px-4 py-3 text-sm font-bold text-violet-50 enabled:hover:bg-violet-100/10 disabled:cursor-not-allowed disabled:opacity-35"
               >
                 Load Database Draft
@@ -1319,7 +1501,8 @@ export default function LunaSphereDesigner() {
                 type="button"
                 onClick={() => void publishDatabaseRelease()}
                 disabled={
-                  !validation.valid ||
+                  isPreviewingRelease ||
+                  !workingValidation.valid ||
                   !databaseDraftIsCurrent ||
                   databaseBusy
                 }
@@ -1341,7 +1524,7 @@ export default function LunaSphereDesigner() {
               </p>
             )}
 
-            <div className="mt-4 grid gap-3 text-xs md:grid-cols-2">
+            <div className="mt-4 grid gap-3 text-xs md:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-violet-50/80">
                 <strong className="text-violet-100">Database draft:</strong>{" "}
                 {databaseDraft
@@ -1359,8 +1542,151 @@ export default function LunaSphereDesigner() {
                     )}`
                   : "No releases published yet"}
               </div>
+
+              <div className="rounded-xl border border-emerald-300/20 bg-emerald-400/10 p-3 text-emerald-50/85">
+                <strong className="text-emerald-100">Controlled active release:</strong>{" "}
+                {activeRelease
+                  ? `Release ${activeRelease.releaseNumber}, activated ${formatDatabaseDate(
+                      activeRelease.activatedAt
+                    )}`
+                  : "No release activated yet"}
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-black uppercase tracking-[0.2em] text-violet-100">
+                    Release Management
+                  </p>
+                  <p className="mt-1 text-xs text-violet-50/65">
+                    Preview an immutable release without changing your draft. Activating an older release creates a safe rollback record.
+                  </p>
+                </div>
+
+                {releasePreview && (
+                  <span className="rounded-lg border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-xs font-black text-amber-100">
+                    Previewing Release {releasePreview.releaseNumber}
+                  </span>
+                )}
+              </div>
+
+              {releases.length === 0 ? (
+                <p className="mt-3 text-sm text-violet-50/60">
+                  Publish a numbered release to begin release management.
+                </p>
+              ) : (
+                <div className="mt-3 max-h-64 space-y-2 overflow-y-auto pr-1">
+                  {releases.map((release) => {
+                    const isActive =
+                      activeRelease?.releaseNumber ===
+                      release.releaseNumber;
+                    const isPreviewed =
+                      releasePreview?.releaseNumber ===
+                      release.releaseNumber;
+                    const isRollback =
+                      activeRelease !== null &&
+                      release.releaseNumber <
+                        activeRelease.releaseNumber;
+
+                    return (
+                      <div
+                        key={release.releaseNumber}
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-zinc-950/80 p-3"
+                      >
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-black text-white">
+                              Release {release.releaseNumber}
+                            </p>
+                            {isActive && (
+                              <span className="rounded-full bg-emerald-300 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-950">
+                                Active
+                              </span>
+                            )}
+                            {isPreviewed && (
+                              <span className="rounded-full bg-amber-300 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-950">
+                                Preview
+                              </span>
+                            )}
+                          </div>
+                          <p className="mt-1 text-xs text-zinc-400">
+                            Revision {release.topologyRevision} · Published {formatDatabaseDate(
+                              release.publishedAt
+                            )}
+                          </p>
+                        </div>
+
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void previewGeographyRelease(
+                                release.releaseNumber
+                              )
+                            }
+                            disabled={databaseBusy || isPreviewed}
+                            className="rounded-lg border border-violet-200/30 px-3 py-2 text-xs font-black text-violet-50 enabled:hover:bg-violet-100/10 disabled:cursor-not-allowed disabled:opacity-35"
+                          >
+                            {isPreviewed ? "Previewing" : "Preview"}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              void activateRelease(
+                                release.releaseNumber
+                              )
+                            }
+                            disabled={databaseBusy || isActive}
+                            className="rounded-lg border border-emerald-300/30 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-100 enabled:hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-35"
+                          >
+                            {isActive
+                              ? "Active"
+                              : isRollback
+                                ? "Roll Back"
+                                : "Activate"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
+
+          {releasePreview && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-amber-300/30 bg-amber-400/10 px-4 py-4 text-amber-50">
+              <div>
+                <p className="text-sm font-black">
+                  Read-only preview: Release {releasePreview.releaseNumber}
+                </p>
+                <p className="mt-1 text-xs text-amber-50/75">
+                  Published {formatDatabaseDate(
+                    releasePreview.publishedAt
+                  )}. Your editable draft remains preserved in memory and browser autosave.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={copyReleasePreviewToDraft}
+                  className="rounded-lg bg-amber-200 px-3 py-2 text-xs font-black text-amber-950 hover:bg-white"
+                >
+                  Copy Release to Draft
+                </button>
+                <button
+                  type="button"
+                  onClick={exitReleasePreview}
+                  className="rounded-lg border border-amber-100/30 px-3 py-2 text-xs font-black text-amber-50 hover:bg-amber-100/10"
+                >
+                  Exit Preview
+                </button>
+              </div>
+            </div>
+          )}
 
           {draftNotice && (
             <div className="mt-4 flex items-start justify-between gap-4 rounded-xl border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
@@ -1462,7 +1788,7 @@ export default function LunaSphereDesigner() {
                 />
               ))}
 
-              {edgeSegmentTargets.map((target) => (
+              {!isPreviewingRelease && edgeSegmentTargets.map((target) => (
                 <Marker
                   key={target.key}
                   position={target.position}
@@ -1484,7 +1810,7 @@ export default function LunaSphereDesigner() {
                       ? selectedVertexIcon
                       : vertexIcon
                   }
-                  draggable
+                  draggable={!isPreviewingRelease}
                   eventHandlers={{
                     click: () => setSelectedNodeId(node.id),
                     dragstart: () => {
@@ -1547,7 +1873,7 @@ export default function LunaSphereDesigner() {
 
           <aside className="rounded-3xl border border-white/10 bg-zinc-950 p-5">
             <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-400">
-              Editing
+              {isPreviewingRelease ? "Release Preview" : "Editing"}
             </p>
 
             <h2 className="mt-2 text-2xl font-black">
@@ -1602,15 +1928,25 @@ export default function LunaSphereDesigner() {
             </div>
 
             <div className="mt-5 space-y-3 text-sm text-zinc-300">
-              <p>
-                Drag a white handle to reshape the selected state.
-                Shared neighbors move with the same border.
-              </p>
+              {isPreviewingRelease ? (
+                <p>
+                  This immutable release is displayed read-only. Exit the
+                  preview to continue editing, or copy the release into a new
+                  draft as a controlled starting point.
+                </p>
+              ) : (
+                <>
+                  <p>
+                    Drag a white handle to reshape the selected state.
+                    Shared neighbors move with the same border.
+                  </p>
 
-              <p>
-                Click a green plus handle to add an editable point.
-                Press Ctrl+Z/Ctrl+Y to undo or redo.
-              </p>
+                  <p>
+                    Click a green plus handle to add an editable point.
+                    Press Ctrl+Z/Ctrl+Y to undo or redo.
+                  </p>
+                </>
+              )}
 
               {selectedNode && (
                 <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-3">
@@ -1641,7 +1977,8 @@ export default function LunaSphereDesigner() {
                       onClick={() =>
                         nudgeSelectedNode(-NUDGE_DISTANCE, 0)
                       }
-                      className="rounded-lg border border-yellow-100/30 px-2 py-2 hover:bg-yellow-100/10"
+                      disabled={isPreviewingRelease}
+                      className="rounded-lg border border-yellow-100/30 px-2 py-2 enabled:hover:bg-yellow-100/10 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Nudge selected handle up"
                     >
                       ↑
@@ -1652,7 +1989,8 @@ export default function LunaSphereDesigner() {
                       onClick={() =>
                         nudgeSelectedNode(0, -NUDGE_DISTANCE)
                       }
-                      className="rounded-lg border border-yellow-100/30 px-2 py-2 hover:bg-yellow-100/10"
+                      disabled={isPreviewingRelease}
+                      className="rounded-lg border border-yellow-100/30 px-2 py-2 enabled:hover:bg-yellow-100/10 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Nudge selected handle left"
                     >
                       ←
@@ -1662,7 +2000,8 @@ export default function LunaSphereDesigner() {
                       onClick={() =>
                         nudgeSelectedNode(NUDGE_DISTANCE, 0)
                       }
-                      className="rounded-lg border border-yellow-100/30 px-2 py-2 hover:bg-yellow-100/10"
+                      disabled={isPreviewingRelease}
+                      className="rounded-lg border border-yellow-100/30 px-2 py-2 enabled:hover:bg-yellow-100/10 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Nudge selected handle down"
                     >
                       ↓
@@ -1672,7 +2011,8 @@ export default function LunaSphereDesigner() {
                       onClick={() =>
                         nudgeSelectedNode(0, NUDGE_DISTANCE)
                       }
-                      className="rounded-lg border border-yellow-100/30 px-2 py-2 hover:bg-yellow-100/10"
+                      disabled={isPreviewingRelease}
+                      className="rounded-lg border border-yellow-100/30 px-2 py-2 enabled:hover:bg-yellow-100/10 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Nudge selected handle right"
                     >
                       →
@@ -1682,7 +2022,7 @@ export default function LunaSphereDesigner() {
                   <button
                     type="button"
                     onClick={removeSelectedControlPoint}
-                    disabled={!removableNodeEdge}
+                    disabled={isPreviewingRelease || !removableNodeEdge}
                     className="mt-3 w-full rounded-lg border border-yellow-100/30 px-3 py-2 text-xs font-black text-yellow-50 enabled:hover:bg-yellow-100/10 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {removableNodeEdge
@@ -1734,7 +2074,8 @@ export default function LunaSphereDesigner() {
                 Browser autosave protects immediate work. Database drafts
                 and numbered releases are shared across devices, but the
                 public Moon Map, parcels, reservations, checkout, and
-                customer records remain unchanged until a later activation.
+                customer records remain unchanged until the active-release
+                integration is deliberately connected and tested.
               </p>
             </div>
           </aside>
