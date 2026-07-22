@@ -164,3 +164,32 @@ model Member {
   userId        String?
   user          User?    @relation(fields: [userId], references: [id])
 }
+model LunaSphereGeographyDraft {
+  id               String   @id @default(cuid())
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  worldId          String
+  worldVersion     String
+  topologyRevision Int
+  topology         Json
+
+  @@unique([worldId, worldVersion])
+  @@index([updatedAt])
+}
+
+model LunaSphereGeographyRelease {
+  id               String   @id @default(cuid())
+  createdAt        DateTime @default(now())
+  publishedAt      DateTime @default(now())
+
+  worldId          String
+  worldVersion     String
+  releaseNumber    Int
+  topologyRevision Int
+  topologyHash     String
+  topology         Json
+
+  @@unique([worldId, worldVersion, releaseNumber], map: "LunaSphereGeoRelease_world_version_number_key")
+  @@index([worldId, worldVersion, publishedAt], map: "LunaSphereGeoRelease_world_version_published_idx")
+}

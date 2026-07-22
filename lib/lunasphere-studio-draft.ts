@@ -56,7 +56,7 @@ function isStringArray(value: unknown): value is string[] {
   );
 }
 
-function hasCompatibleTopologyStructure(
+export function hasCompatibleTopologyStructure(
   value: unknown,
   baselineTopology: LunaSphereTopology
 ): value is LunaSphereTopology {

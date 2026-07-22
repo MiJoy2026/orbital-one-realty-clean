@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  useCallback,
   useEffect,
   useMemo,
   useReducer,
@@ -23,6 +24,7 @@ import LunarTileLayer from "@/components/moon-map/LunarTileLayer";
 import { lunarMapRegions } from "@/lib/lunar-map-regions";
 import {
   clearLunaSphereStudioDraft,
+  hasCompatibleTopologyStructure,
   loadLunaSphereStudioDraft,
   saveLunaSphereStudioDraft,
 } from "@/lib/lunasphere-studio-draft";
@@ -49,6 +51,7 @@ const lunarCoordinateScale = 256 / 1000;
 const HISTORY_LIMIT = 100;
 const AUTOSAVE_DELAY_MS = 900;
 const NUDGE_DISTANCE = 1;
+const GEOGRAPHY_API_PATH = "/admin/api/lunasphere/geography";
 
 const LunarCRS = {
   ...CRS.Simple,
@@ -177,6 +180,32 @@ type DraftStatus =
   | "saved"
   | "not-saved"
   | "error";
+
+type DatabaseStatus =
+  | "loading"
+  | "ready"
+  | "saving"
+  | "publishing"
+  | "error";
+
+type DatabaseDraftMetadata = {
+  savedAt: string;
+  topologyRevision: number;
+  topology: LunaSphereTopology;
+};
+
+type GeographyReleaseMetadata = {
+  releaseNumber: number;
+  publishedAt: string;
+  topologyRevision: number;
+  topologyHash: string;
+};
+
+type GeographyWorkspaceResponse = {
+  draft: DatabaseDraftMetadata | null;
+  latestRelease: GeographyReleaseMetadata | null;
+  error?: string;
+};
 
 function addHistorySnapshot(
   history: LunaSphereTopology[],
@@ -324,6 +353,37 @@ function createEdgePositions(
     .map(([y, x]) => [y, x]);
 }
 
+function formatDatabaseDate(value: string | null): string {
+  if (!value) {
+    return "Not available";
+  }
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime())
+    ? "Saved"
+    : date.toLocaleString();
+}
+
+function topologiesHaveSameContent(
+  first: LunaSphereTopology,
+  second: LunaSphereTopology
+): boolean {
+  return JSON.stringify(first) === JSON.stringify(second);
+}
+
+async function readResponseBody<T>(response: Response): Promise<T> {
+  const body = (await response.json()) as T & { error?: string };
+
+  if (!response.ok) {
+    throw new Error(
+      body.error || "The LunaSphere database request failed."
+    );
+  }
+
+  return body;
+}
+
 function formatSavedAt(savedAt: string | null): string {
   if (!savedAt) {
     return "No local draft saved";
@@ -379,6 +439,15 @@ export default function LunaSphereDesigner() {
     string | null
   >(null);
   const [draftNotice, setDraftNotice] = useState<
+    string | null
+  >(null);
+  const [databaseStatus, setDatabaseStatus] =
+    useState<DatabaseStatus>("loading");
+  const [databaseDraft, setDatabaseDraft] =
+    useState<DatabaseDraftMetadata | null>(null);
+  const [latestRelease, setLatestRelease] =
+    useState<GeographyReleaseMetadata | null>(null);
+  const [databaseNotice, setDatabaseNotice] = useState<
     string | null
   >(null);
 
@@ -534,6 +603,56 @@ export default function LunaSphereDesigner() {
     );
   }, [selectedEdges, selectedNodeId]);
 
+  const refreshDatabaseWorkspace = useCallback(
+    async (announce = false) => {
+      setDatabaseStatus("loading");
+
+      try {
+        const response = await fetch(GEOGRAPHY_API_PATH, {
+          cache: "no-store",
+        });
+        const workspace =
+          await readResponseBody<GeographyWorkspaceResponse>(
+            response
+          );
+
+        if (
+          workspace.draft &&
+          !hasCompatibleTopologyStructure(
+            workspace.draft.topology,
+            baselineTopology
+          )
+        ) {
+          throw new Error(
+            "The database draft is incompatible with this LunaSphere Studio version."
+          );
+        }
+
+        setDatabaseDraft(workspace.draft);
+        setLatestRelease(workspace.latestRelease);
+        setDatabaseStatus("ready");
+
+        if (announce) {
+          setDatabaseNotice(
+            workspace.draft
+              ? `Database draft refreshed. Revision ${workspace.draft.topologyRevision} was saved ${formatDatabaseDate(
+                  workspace.draft.savedAt
+                )}.`
+              : "No shared database draft has been saved yet."
+          );
+        }
+      } catch (error) {
+        setDatabaseStatus("error");
+        setDatabaseNotice(
+          error instanceof Error
+            ? error.message
+            : "The LunaSphere database workspace could not be loaded."
+        );
+      }
+    },
+    []
+  );
+
   useEffect(() => {
     const timeoutId = window.setTimeout(() => {
       const savedDraft = loadLunaSphereStudioDraft(
@@ -566,6 +685,14 @@ export default function LunaSphereDesigner() {
 
     return () => window.clearTimeout(timeoutId);
   }, []);
+
+  useEffect(() => {
+    if (!draftReady) {
+      return;
+    }
+
+    void refreshDatabaseWorkspace();
+  }, [draftReady, refreshDatabaseWorkspace]);
 
   useEffect(() => {
     if (!draftReady) {
@@ -810,6 +937,140 @@ export default function LunaSphereDesigner() {
     }
   }
 
+  async function saveDatabaseDraft() {
+    if (!validation.valid) {
+      setDatabaseNotice(
+        "Fix the topology errors before saving the shared database draft."
+      );
+      return;
+    }
+
+    setDatabaseStatus("saving");
+
+    try {
+      const response = await fetch(GEOGRAPHY_API_PATH, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          topology,
+          expectedSavedAt: databaseDraft?.savedAt ?? null,
+        }),
+      });
+      const result = await readResponseBody<{
+        draft: DatabaseDraftMetadata;
+      }>(response);
+
+      if (
+        !hasCompatibleTopologyStructure(
+          result.draft.topology,
+          baselineTopology
+        )
+      ) {
+        throw new Error(
+          "The saved database draft response was incompatible."
+        );
+      }
+
+      setDatabaseDraft(result.draft);
+      setDatabaseStatus("ready");
+      setDatabaseNotice(
+        `Shared database draft saved at revision ${result.draft.topologyRevision}.`
+      );
+    } catch (error) {
+      setDatabaseStatus("error");
+      setDatabaseNotice(
+        error instanceof Error
+          ? error.message
+          : "The shared database draft could not be saved."
+      );
+    }
+  }
+
+  function loadDatabaseDraft() {
+    if (!databaseDraft) {
+      setDatabaseNotice(
+        "No shared database draft is available to load."
+      );
+      return;
+    }
+
+    if (
+      !hasCompatibleTopologyStructure(
+        databaseDraft.topology,
+        baselineTopology
+      )
+    ) {
+      setDatabaseStatus("error");
+      setDatabaseNotice(
+        "The shared database draft is incompatible with this Studio version."
+      );
+      return;
+    }
+
+    dispatchHistory({
+      type: "replace",
+      topology: databaseDraft.topology,
+      recordCurrent: true,
+    });
+    setSelectedNodeId(null);
+    setDatabaseStatus("ready");
+    setDatabaseNotice(
+      `Loaded shared database draft revision ${databaseDraft.topologyRevision}. Your previous open version can be restored with Undo.`
+    );
+  }
+
+  async function publishDatabaseRelease() {
+    if (!validation.valid) {
+      setDatabaseNotice(
+        "Fix the topology errors before publishing a geography release."
+      );
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Publish this validated topology as the next immutable LunaSphere geography release? This records a release in the database, but the public Moon Map will remain unchanged until a later activation milestone."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    setDatabaseStatus("publishing");
+
+    try {
+      const response = await fetch(
+        `${GEOGRAPHY_API_PATH}/publish`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ topology }),
+        }
+      );
+      const result = await readResponseBody<{
+        draft: DatabaseDraftMetadata;
+        release: GeographyReleaseMetadata;
+      }>(response);
+
+      setDatabaseDraft(result.draft);
+      setLatestRelease(result.release);
+      setDatabaseStatus("ready");
+      setDatabaseNotice(
+        `Published immutable LunaSphere geography release ${result.release.releaseNumber}. The public Moon Map has not been switched to it.`
+      );
+    } catch (error) {
+      setDatabaseStatus("error");
+      setDatabaseNotice(
+        error instanceof Error
+          ? error.message
+          : "The LunaSphere geography release could not be published."
+      );
+    }
+  }
+
   function exportSelectedState() {
     if (
       !validation.valid ||
@@ -860,6 +1121,27 @@ export default function LunaSphereDesigner() {
       : draftStatus === "error"
         ? "Save error"
         : formatSavedAt(lastSavedAt);
+  const databaseBusy =
+    databaseStatus === "loading" ||
+    databaseStatus === "saving" ||
+    databaseStatus === "publishing";
+  const databaseDraftIsCurrent =
+    databaseDraft !== null &&
+    topologiesHaveSameContent(databaseDraft.topology, topology);
+  const databaseStatusLabel =
+    databaseStatus === "loading"
+      ? "Loading database…"
+      : databaseStatus === "saving"
+        ? "Saving database draft…"
+        : databaseStatus === "publishing"
+          ? "Publishing release…"
+          : databaseStatus === "error"
+            ? "Database error"
+            : databaseDraft
+              ? `Database revision ${databaseDraft.topologyRevision}${
+                  databaseDraftIsCurrent ? " · current" : " · differs"
+                }`
+              : "No database draft";
 
   return (
     <main className="min-h-screen bg-black px-4 py-8 text-white">
@@ -875,9 +1157,10 @@ export default function LunaSphereDesigner() {
 
           <p className="mt-2 max-w-4xl text-sm text-zinc-400">
             Every border is stored once. Dragging a white handle
-            updates all states that share it. Drafts save locally,
-            and each drag is one undoable action. Moon-perimeter
-            handles remain locked to the circular saleable boundary.
+            updates all states that share it. Browser autosave protects
+            active work, and the shared database stores team-wide drafts
+            plus immutable numbered releases. Moon-perimeter handles
+            remain locked to the circular saleable boundary.
           </p>
 
           <div className="mt-5 flex flex-wrap items-end gap-3">
@@ -986,6 +1269,99 @@ export default function LunaSphereDesigner() {
             </button>
           </div>
 
+          <div className="mt-4 rounded-2xl border border-violet-400/25 bg-violet-400/10 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-violet-200">
+                  Shared Database Workspace
+                </p>
+                <p className="mt-1 text-sm text-violet-50/75">
+                  Save one cross-device draft and publish immutable,
+                  numbered geography releases. Publishing here does not
+                  activate the release on the public Moon Map.
+                </p>
+              </div>
+
+              <span className="rounded-xl border border-violet-100/20 bg-black/30 px-4 py-2 text-xs font-bold text-violet-50">
+                {databaseStatusLabel}
+              </span>
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => void saveDatabaseDraft()}
+                disabled={!validation.valid || databaseBusy}
+                className="rounded-xl bg-violet-200 px-4 py-3 text-sm font-black text-violet-950 enabled:hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                Save Database Draft
+              </button>
+
+              <button
+                type="button"
+                onClick={loadDatabaseDraft}
+                disabled={!databaseDraft || databaseBusy}
+                className="rounded-xl border border-violet-100/30 px-4 py-3 text-sm font-bold text-violet-50 enabled:hover:bg-violet-100/10 disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                Load Database Draft
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void refreshDatabaseWorkspace(true)}
+                disabled={databaseBusy}
+                className="rounded-xl border border-violet-100/30 px-4 py-3 text-sm font-bold text-violet-50 enabled:hover:bg-violet-100/10 disabled:cursor-not-allowed disabled:opacity-35"
+              >
+                Refresh Database Status
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void publishDatabaseRelease()}
+                disabled={
+                  !validation.valid ||
+                  !databaseDraftIsCurrent ||
+                  databaseBusy
+                }
+                className="rounded-xl border border-emerald-300/40 bg-emerald-400/10 px-4 py-3 text-sm font-black text-emerald-100 enabled:hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-35"
+                title={
+                  databaseDraftIsCurrent
+                    ? "Publish the current database-saved draft"
+                    : "Save the current topology to the database before publishing"
+                }
+              >
+                Publish Numbered Release
+              </button>
+            </div>
+
+            {!databaseDraftIsCurrent && databaseDraft && (
+              <p className="mt-3 text-xs font-bold text-amber-200">
+                The open topology differs from the shared database draft.
+                Save it to the database before publishing a release.
+              </p>
+            )}
+
+            <div className="mt-4 grid gap-3 text-xs md:grid-cols-2">
+              <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-violet-50/80">
+                <strong className="text-violet-100">Database draft:</strong>{" "}
+                {databaseDraft
+                  ? `Revision ${databaseDraft.topologyRevision}, saved ${formatDatabaseDate(
+                      databaseDraft.savedAt
+                    )}`
+                  : "Not saved yet"}
+              </div>
+
+              <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-violet-50/80">
+                <strong className="text-violet-100">Latest release:</strong>{" "}
+                {latestRelease
+                  ? `Release ${latestRelease.releaseNumber}, revision ${latestRelease.topologyRevision}, published ${formatDatabaseDate(
+                      latestRelease.publishedAt
+                    )}`
+                  : "No releases published yet"}
+              </div>
+            </div>
+          </div>
+
           {draftNotice && (
             <div className="mt-4 flex items-start justify-between gap-4 rounded-xl border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
               <p>{draftNotice}</p>
@@ -994,6 +1370,20 @@ export default function LunaSphereDesigner() {
                 onClick={() => setDraftNotice(null)}
                 className="shrink-0 font-black text-sky-50/70 hover:text-white"
                 aria-label="Dismiss draft message"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
+          {databaseNotice && (
+            <div className="mt-4 flex items-start justify-between gap-4 rounded-xl border border-violet-400/20 bg-violet-400/10 px-4 py-3 text-sm text-violet-100">
+              <p>{databaseNotice}</p>
+              <button
+                type="button"
+                onClick={() => setDatabaseNotice(null)}
+                className="shrink-0 font-black text-violet-50/70 hover:text-white"
+                aria-label="Dismiss database message"
               >
                 ×
               </button>
@@ -1341,9 +1731,10 @@ export default function LunaSphereDesigner() {
               )}
 
               <p className="rounded-xl border border-sky-400/30 bg-sky-400/10 p-3 text-sky-100">
-                Drafts are saved only in this browser. The public Moon
-                Map, parcels, reservations, checkout, and customer
-                records remain unchanged.
+                Browser autosave protects immediate work. Database drafts
+                and numbered releases are shared across devices, but the
+                public Moon Map, parcels, reservations, checkout, and
+                customer records remain unchanged until a later activation.
               </p>
             </div>
           </aside>
