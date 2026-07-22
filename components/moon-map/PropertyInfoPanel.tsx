@@ -96,6 +96,11 @@ export default function PropertyInfoPanel({
 
   const parcelStatus = selectedParcelStatus || "Available";
   const canReserve = parcelStatus === "Available";
+  const propertyType = selectedParcel.propertyType ?? "Rural Acre";
+  const isCityBlock = propertyType === "City Block";
+  const propertyPrice = selectedParcel.price ?? (isCityBlock ? 54.95 : 24.95);
+  const sizeLabel = selectedParcel.sizeLabel ?? (isCityBlock ? "1 City Block" : "1 Acre");
+  const propertyNoun = isCityBlock ? "City Block" : "Lunar Parcel";
 
   const nearbyAttractions = getNearbyLunarAttractions(
   selectedParcel.centerX,
@@ -116,11 +121,17 @@ const terrainSummary =
           ? "Historic lunar terrain near a human landing site."
           : "Mixed lunar terrain with nearby natural features.";
 
-const locationSummary = nearestAttraction
-  ? `Located in ${selectedParcel.stateName}, approximately ${nearestAttraction.distanceKilometers.toFixed(
-      0
-    )} km ${nearestAttraction.direction} of ${nearestAttraction.name}.`
-  : `Located within the lunar state of ${selectedParcel.stateName}.`;
+const locationSummary = isCityBlock
+  ? nearestAttraction
+    ? `Located in ${selectedParcel.cityName}, within ${selectedParcel.stateName}, approximately ${nearestAttraction.distanceKilometers.toFixed(
+        0
+      )} km ${nearestAttraction.direction} of ${nearestAttraction.name}.`
+    : `Located in ${selectedParcel.cityName}, within the lunar state of ${selectedParcel.stateName}.`
+  : nearestAttraction
+    ? `Located in ${selectedParcel.stateName}, approximately ${nearestAttraction.distanceKilometers.toFixed(
+        0
+      )} km ${nearestAttraction.direction} of ${nearestAttraction.name}.`
+    : `Located within the lunar state of ${selectedParcel.stateName}.`;
 
 const landmarkProximityScore = nearestAttraction
   ? Math.max(
@@ -137,11 +148,6 @@ const landmarkStars =
   "☆".repeat(5 - landmarkProximityScore);
 
 const parcelHighlights: string[] = [];
-
-const whyThisParcel =
-  parcelHighlights.length > 0
-    ? `${parcelHighlights.slice(0, 3).join(", ")}.`
-    : "A distinctive lunar parcel within the Orbital One atlas.";
 
 if (nearestAttraction) {
   parcelHighlights.push(`Near ${nearestAttraction.name}`);
@@ -171,12 +177,24 @@ if (nearestAttraction?.state === selectedParcel.stateName) {
   parcelHighlights.push("Local State Landmark");
 }
 
+if (isCityBlock) {
+  parcelHighlights.unshift(`Located in ${selectedParcel.cityName}`);
+  parcelHighlights.push("Premium City Property");
+}
+
 parcelHighlights.push("Complimentary HOA Membership");
+
+const whyThisParcel =
+  parcelHighlights.length > 0
+    ? `${parcelHighlights.slice(0, 3).join(", ")}.`
+    : isCityBlock
+      ? `A premium block within ${selectedParcel.cityName}.`
+      : "A distinctive lunar parcel within the Orbital One atlas.";
 
   return (
     <div className="rounded-3xl border border-yellow-400/30 bg-black/70 p-6">
       <p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-400">
-        Lunar Parcel
+        {propertyNoun}
       </p>
 
       <h2 className="mt-4 break-words text-3xl font-black text-yellow-400">
@@ -218,7 +236,7 @@ parcelHighlights.push("Complimentary HOA Membership");
 
       <div className="mt-6 rounded-2xl border border-cyan-400/30 bg-cyan-400/10 p-4">
         <p className="text-sm font-black uppercase tracking-[0.2em] text-cyan-300">
-          Parcel Highlights
+          Property Highlights
         </p>
 
         <div className="mt-4 space-y-2">
@@ -234,7 +252,7 @@ parcelHighlights.push("Complimentary HOA Membership");
       </div>
       <div className="mt-6 rounded-2xl border border-purple-400/30 bg-purple-400/10 p-4">
         <p className="text-sm font-black uppercase tracking-[0.2em] text-purple-300">
-          Why This Parcel?
+          Why This Property?
         </p>
 
         <p className="mt-3 text-sm leading-6 text-gray-300">
@@ -255,16 +273,26 @@ parcelHighlights.push("Complimentary HOA Membership");
 
         <p>
           <span className="font-bold text-gray-400">Property Type:</span>{" "}
-          Rural Acre
+          {propertyType}
         </p>
 
+        {isCityBlock && selectedParcel.cityName && (
+          <p>
+            <span className="font-bold text-gray-400">City:</span>{" "}
+            {selectedParcel.cityName}
+          </p>
+        )}
+
         <p>
-          <span className="font-bold text-gray-400">Acreage:</span> 1 Acre
+          <span className="font-bold text-gray-400">Size:</span>{" "}
+          {sizeLabel}
         </p>
 
         <p>
           <span className="font-bold text-gray-400">Price:</span>{" "}
-          <span className="font-black text-yellow-400">$24.95</span>
+          <span className="font-black text-yellow-400">
+            ${propertyPrice.toFixed(2)}
+          </span>
         </p>
       </div>
 
@@ -328,7 +356,7 @@ parcelHighlights.push("Complimentary HOA Membership");
       {reservationMatches && activeReservation ? (
         <div className="mt-6 rounded-2xl border border-yellow-400 bg-yellow-400/10 p-4">
           <p className="text-sm font-black uppercase tracking-[0.2em] text-yellow-400">
-            Parcel Reserved
+            Property Reserved
           </p>
 
           <p className="mt-3 text-sm font-bold uppercase tracking-[0.2em] text-gray-400">
@@ -357,11 +385,17 @@ parcelHighlights.push("Complimentary HOA Membership");
       ) : (
         <button
           type="button"
-          disabled={reservingParcel}
+          disabled={reservingParcel || !canReserve}
           onClick={() => onReserve(selectedParcel)}
           className="mt-6 w-full rounded-xl bg-yellow-400 px-5 py-3 font-black text-black disabled:cursor-not-allowed disabled:bg-gray-700 disabled:text-gray-400"
         >
-          {reservingParcel ? "Reserving Parcel..." : "Reserve This Parcel"}
+          {reservingParcel
+            ? "Reserving Property..."
+            : parcelStatus === "Sold"
+              ? "Property Sold"
+              : parcelStatus === "Reserved"
+                ? "Property Reserved"
+                : `Reserve This ${propertyType}`}
         </button>
       )}
     </div>

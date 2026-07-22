@@ -69,16 +69,6 @@ export default function PricingPage() {
 
   const products: Product[] = [
     {
-      sku: "rural-half-acre",
-      name: "Half-Acre Lunar Property",
-      category: "Rural Acreage",
-      description:
-        "An affordable introduction to lunar property ownership and a memorable gift for any occasion.",
-      price: 16.95,
-      acres: 0.5,
-      icon: "🌙",
-    },
-    {
       sku: "rural-one-acre",
       name: "One-Acre Lunar Property",
       category: "Rural Acreage",

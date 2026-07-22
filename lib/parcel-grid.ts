@@ -8,6 +8,13 @@ import {
 export interface ParcelCell {
   parcelKey: string;
   stateName: string;
+  propertyType?: "Rural Acre" | "City Block" | "Town Block";
+  price?: number;
+  sizeLabel?: string;
+  cityId?: string;
+  cityName?: string;
+  townId?: string;
+  townName?: string;
 
   /** Actual parcel polygon in Leaflet [y, x] format. */
   positions: [number, number][];
@@ -149,6 +156,9 @@ export function generateParcelGrid(
           selectable,
         }),
         stateName,
+        propertyType: "Rural Acre",
+        price: 24.95,
+        sizeLabel: "1 Acre",
         positions: createRectanglePolygon(
           mapX,
           mapY,
@@ -546,6 +556,9 @@ function generateRuralParcelGrid(
           selectable: resolution.selectable,
         }),
         stateName,
+        propertyType: "Rural Acre",
+        price: 24.95,
+        sizeLabel: "1 Acre",
         positions,
         mapX,
         mapY,

@@ -14,7 +14,10 @@ export async function POST(request: Request) {
   const body = await request.json();
   const propertyId = body.propertyId;
   const deedName = body.deedName || "Deed Recipient";
-  const acres = Number(body.acres || 1);
+  const requestedAcres = Number(body.acres || 1);
+  const acres = Number.isFinite(requestedAcres)
+    ? Math.max(1, Math.floor(requestedAcres))
+    : 1;
   const passportSelected = Boolean(body.passportSelected);
   const isGift = Boolean(body.isGift);
   const recipientEmail = body.recipientEmail || "";
@@ -35,9 +38,7 @@ export async function POST(request: Request) {
   }
    const propertyPrice =
   property.type === "Rural Acre"
-    ? acres === 0.5
-      ? 16.95
-      : 24.95 + Math.max(acres - 1, 0) * 7.95
+    ? 24.95 + Math.max(acres - 1, 0) * 7.95
     : property.price;
 
    const propertySize =

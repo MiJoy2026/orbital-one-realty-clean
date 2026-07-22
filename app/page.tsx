@@ -3,9 +3,9 @@ import Image from "next/image";
 const propertyTypes = [
   {
     title: "Rural Acres",
-    price: "From $16.95",
+    price: "From $24.95",
     image: "/property-images/rural-acre.jpg",
-    details: ["½ Acre — $16.95", "1 Acre — $24.95"],
+    details: ["1 Acre — $24.95", "Additional acres — $7.95 each"],
   },
   {
     title: "Town Blocks",

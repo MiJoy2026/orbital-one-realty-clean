@@ -4,6 +4,7 @@ import { lunarStates } from "@/lib/moon-data";
 import SearchBox from "@/components/moon-map/SearchBox";
 import type { AtlasSearchResult } from "@/lib/search-index";
 import VisibleParcelLayer from "@/components/moon-map/VisibleParcelLayer";
+import VisibleCityBlockLayer from "@/components/moon-map/VisibleCityBlockLayer";
 import StateLayer from "@/components/moon-map/StateLayer";
 import CityLayer from "@/components/moon-map/CityLayer";
 import TownLayer from "@/components/moon-map/TownLayer";
@@ -12,12 +13,17 @@ import PropertyInfoPanel from "@/components/moon-map/PropertyInfoPanel";
 import SettlementInfoPanel from "@/components/moon-map/SettlementInfoPanel";
 import type { ParcelCell } from "@/lib/parcel-grid";
 import {
+  getCityBlockGridForZoom,
+  getSelectableCityBlockByKey,
+  parseCityBlockKey,
+} from "@/lib/city-block-grid";
+import {
   getParcelGridForZoom,
   getSelectableRuralParcelByKey,
 } from "@/lib/parcel-grid";
 import { getVisibleLunarAttractions } from "@/lib/lunar-attractions";
 import ReservationCountdown from "@/components/moon-map/ReservationCountdown";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import "leaflet/dist/leaflet.css";
 import {
   MapContainer,
@@ -147,6 +153,28 @@ function FlyToSelectedState({
   return null;
 }
 
+function FlyToSelectedSettlement({
+  settlement,
+}: {
+  settlement: PublicLunaSphereSettlement | null;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!settlement) {
+      return;
+    }
+
+    map.flyTo(
+      settlement.center,
+      settlement.kind === "city" ? 5 : 6,
+      { duration: 1.2 }
+    );
+  }, [map, settlement]);
+
+  return null;
+}
+
 function MapHomeButton({ onReset }: { onReset: () => void }) {
   const map = useMap();
 
@@ -245,6 +273,9 @@ export default function LunarLeafletMap({
     [publicSettlements, selectedSettlementId]
   );
 
+  const selectedCity =
+    selectedSettlement?.kind === "city" ? selectedSettlement : null;
+
   const visibleAttractions = getVisibleLunarAttractions(zoomLevel);
 
   const selectedStateRegion = useMemo(
@@ -265,7 +296,7 @@ export default function LunarLeafletMap({
   );
 
   const visibleParcels = useMemo(() => {
-    if (!selectedState || !selectedStateRegion) {
+    if (!selectedState || !selectedStateRegion || selectedSettlement) {
       return [];
     }
 
@@ -275,34 +306,116 @@ export default function LunarLeafletMap({
     });
   }, [
     ruralExclusions,
+    selectedSettlement,
     selectedState,
     selectedStateRegion,
     zoomLevel,
   ]);
 
+  const visibleCityBlocks = useMemo(
+    () =>
+      selectedCity
+        ? getCityBlockGridForZoom(selectedCity, zoomLevel)
+        : [],
+    [selectedCity, zoomLevel]
+  );
+
+  const visibleInventoryCells = useMemo(
+    () => [...visibleParcels, ...visibleCityBlocks],
+    [visibleCityBlocks, visibleParcels]
+  );
+
+  const propertyStatusRequestSequence = useRef(0);
+
   useEffect(() => {
-    if (visibleParcels.length === 0) {
+    const parcelKeys = Array.from(
+      new Set(
+        visibleInventoryCells
+          .filter((property) => property.selectable)
+          .map((property) => property.parcelKey)
+      )
+    );
+
+    if (parcelKeys.length === 0) {
       setParcelStatuses({});
       return;
     }
 
-    async function loadParcelStatuses() {
-      const response = await fetch("/api/parcel-status", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          parcelKeys: visibleParcels.map((parcel) => parcel.parcelKey),
-        }),
-      });
+    const requestSequence =
+      propertyStatusRequestSequence.current + 1;
 
-      const data = await response.json();
-      setParcelStatuses(data.statuses || {});
-    }
+    propertyStatusRequestSequence.current = requestSequence;
 
-    loadParcelStatuses();
-  }, [visibleParcels]);
+    const abortController = new AbortController();
+    let retryTimeoutId: number | null = null;
+
+    const loadPropertyStatuses = async (attempt = 0) => {
+      try {
+        const response = await fetch("/api/parcel-status", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            parcelKeys,
+          }),
+          signal: abortController.signal,
+        });
+
+        const responseText = await response.text();
+        const data = responseText
+          ? (JSON.parse(responseText) as {
+              error?: string;
+              statuses?: Record<string, string>;
+            })
+          : {};
+
+        if (!response.ok) {
+          throw new Error(
+            data.error ||
+              `Property status request failed (${response.status}).`
+          );
+        }
+
+        if (
+          propertyStatusRequestSequence.current === requestSequence
+        ) {
+          setParcelStatuses(data.statuses || {});
+        }
+      } catch (error) {
+        if (abortController.signal.aborted) {
+          return;
+        }
+
+        if (attempt < 1) {
+          retryTimeoutId = window.setTimeout(() => {
+            void loadPropertyStatuses(attempt + 1);
+          }, 700);
+
+          return;
+        }
+
+        console.warn(
+          "[LunaSphere] Property statuses could not be refreshed.",
+          error
+        );
+      }
+    };
+
+    const debounceTimeoutId = window.setTimeout(() => {
+      void loadPropertyStatuses();
+    }, 250);
+
+    return () => {
+      window.clearTimeout(debounceTimeoutId);
+
+      if (retryTimeoutId !== null) {
+        window.clearTimeout(retryTimeoutId);
+      }
+
+      abortController.abort();
+    };
+  }, [visibleInventoryCells]);
 
   const selectedPropertyIcon = divIcon({
     className: "",
@@ -318,12 +431,7 @@ export default function LunarLeafletMap({
     ">📍 ${selectedProperty?.id || "Property"}</div>`,
   });
 
-  async function reserveParcel(parcel: {
-    parcelKey: string;
-    stateName: string;
-    centerX: number;
-    centerY: number;
-  }) {
+  async function reserveParcel(parcel: ParcelCell) {
     if (reservingParcel) return;
 
     try {
@@ -337,11 +445,12 @@ export default function LunarLeafletMap({
         },
         body: JSON.stringify({
           stateName: parcel.stateName,
-          propertyType: "Rural Acre",
+          propertyType: parcel.propertyType ?? "Rural Acre",
           parcelKey: parcel.parcelKey,
-          acreage: 1,
-          mapX: parcel.centerX,
-          mapY: parcel.centerY,
+          cityId: parcel.cityId ?? null,
+          cityName: parcel.cityName ?? null,
+          townId: parcel.townId ?? null,
+          townName: parcel.townName ?? null,
         }),
       });
 
@@ -364,7 +473,11 @@ export default function LunarLeafletMap({
 
   function findParcelSearchSelection(
     result: AtlasSearchResult
-  ): { stateName: string; parcel: ParcelCell } | null {
+  ): {
+    stateName: string;
+    parcel: ParcelCell;
+    settlementId: string | null;
+  } | null {
     if (result.type !== "Parcel") {
       return null;
     }
@@ -376,6 +489,28 @@ export default function LunarLeafletMap({
 
     if (!stateName || !stateRegion) {
       return null;
+    }
+
+    const parsedCityBlockKey = parseCityBlockKey(result.id);
+
+    if (parsedCityBlockKey) {
+      const city = publicSettlements.find(
+        (settlement) =>
+          settlement.kind === "city" &&
+          settlement.stateName === stateName &&
+          settlement.territoryNumber === parsedCityBlockKey.cityNumber
+      );
+      const block = city
+        ? getSelectableCityBlockByKey(city, result.id)
+        : null;
+
+      return city && block
+        ? {
+            stateName,
+            parcel: block,
+            settlementId: city.id,
+          }
+        : null;
     }
 
     const excludedTerritories = publicSettlements
@@ -393,7 +528,9 @@ export default function LunarLeafletMap({
       }
     );
 
-    return parcel ? { stateName, parcel } : null;
+    return parcel
+      ? { stateName, parcel, settlementId: null }
+      : null;
   }
 
   function resolveSearchResult(
@@ -433,7 +570,7 @@ export default function LunarLeafletMap({
       ...result,
       x: settlement.center[1],
       y: settlement.center[0],
-      zoom: settlement.kind === "city" ? 4 : 6,
+      zoom: settlement.kind === "city" ? 5 : 6,
     };
   }
 
@@ -572,13 +709,13 @@ export default function LunarLeafletMap({
 
                     if (selection) {
                       setSelectedState(selection.stateName);
-                      setSelectedSettlementId(null);
+                      setSelectedSettlementId(selection.settlementId);
                       setSelectedParcel(selection.parcel);
                       setSelectedParcelKey(selection.parcel.parcelKey);
                     } else {
                       setSelectedSearchResult(null);
                       alert(
-                        "That parcel key is not saleable in the active LunaSphere geography."
+                        "That property key is not saleable in the active LunaSphere geography."
                       );
                     }
                   }
@@ -625,6 +762,7 @@ export default function LunarLeafletMap({
               selectedState={selectedState}
               regions={mapRegions}
             />
+            <FlyToSelectedSettlement settlement={selectedSettlement} />
             <FlyToSearchResult searchResult={selectedSearchResult} />
             <TrackZoomLevel onZoomChange={setZoomLevel} />
             <MapHomeButton
@@ -693,6 +831,18 @@ export default function LunarLeafletMap({
                 setSelectedParcelKey(null);
               }}
             />
+
+            {selectedCity && (
+              <VisibleCityBlockLayer
+                blocks={visibleCityBlocks}
+                propertyStatuses={parcelStatuses}
+                selectedBlockKey={selectedParcelKey}
+                onSelect={(block) => {
+                  setSelectedParcel(block);
+                  setSelectedParcelKey(block.parcelKey);
+                }}
+              />
+            )}
 
             {showAttractions &&
                visibleAttractions.map((attraction) => (

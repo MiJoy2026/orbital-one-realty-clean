@@ -243,13 +243,6 @@ export default async function PropertyExplorerPage({
 
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <a
-                href={`/cart?propertyId=${property.id}&acres=0.5`}
-                className="rounded-xl border border-white/20 p-4 hover:border-yellow-400 hover:bg-yellow-400/10"
-              >
-                1/2 Acre — $16.95
-              </a>
-
-              <a
                 href={`/cart?propertyId=${property.id}&acres=1`}
                 className="rounded-xl border border-white/20 p-4 hover:border-yellow-400 hover:bg-yellow-400/10"
               >

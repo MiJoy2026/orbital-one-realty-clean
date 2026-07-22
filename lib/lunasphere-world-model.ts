@@ -136,7 +136,6 @@ export const TERRITORY_KINDS = [
 export type TerritoryKind = (typeof TERRITORY_KINDS)[number];
 
 export const PROPERTY_TYPES = [
-  "rural-half-acre",
   "rural-acre",
   "town-block",
   "city-block",
@@ -253,7 +252,6 @@ export const TERRITORY_RULES = {
 export const PARCEL_RULES = {
   rural: {
     allowedPropertyTypes: [
-      "rural-half-acre",
       "rural-acre",
     ] as const satisfies readonly PropertyType[],
 

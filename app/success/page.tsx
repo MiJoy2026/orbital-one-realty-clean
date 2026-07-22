@@ -50,7 +50,7 @@ export default async function SuccessPage({
           stripeSessionId: session.id,
           propertyId,
           propertyType,
-          acreagePurchased: acres,
+          acreagePurchased: propertyType === "Rural Acre" ? acres : null,
           lunarState,
           deedName,
           certificateNumber,

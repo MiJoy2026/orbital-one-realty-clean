@@ -103,14 +103,42 @@ function createStateSlug(stateName: string): string {
 function createExactParcelSearchResult(
   query: string
 ): AtlasSearchResult | null {
-  const normalizedParcelKey = query.trim().toUpperCase();
+  const normalizedPropertyKey = query.trim().toUpperCase();
+  const cityBlockMatch = normalizedPropertyKey.match(
+    /^(.*)-CITY-(\d{2})-CB-C\d{3}-R\d{3}$/
+  );
 
-  if (!/^[A-Z0-9-]+-R-C\d{3}-R\d{3}$/.test(normalizedParcelKey)) {
+  if (cityBlockMatch) {
+    const state = lunarStates.find(
+      (candidate) => createStateSlug(candidate.name) === cityBlockMatch[1]
+    );
+    const cityNumber = Number(cityBlockMatch[2]);
+    const cityName = state?.cities[cityNumber - 1];
+
+    if (!state || !cityName) {
+      return null;
+    }
+
+    const stateCenter = getLunarStateCenter(state.name);
+
+    return {
+      id: normalizedPropertyKey,
+      name: normalizedPropertyKey,
+      subtitle: `City Block • ${state.name}`,
+      type: "Parcel",
+      x: stateCenter.x,
+      y: stateCenter.y,
+      zoom: 7,
+      searchTerms: [state.name, cityName, "city block", "block"],
+    };
+  }
+
+  if (!/^[A-Z0-9-]+-R-C\d{3}-R\d{3}$/.test(normalizedPropertyKey)) {
     return null;
   }
 
   const state = lunarStates.find((candidate) =>
-    normalizedParcelKey.startsWith(
+    normalizedPropertyKey.startsWith(
       `${createStateSlug(candidate.name)}-R-C`
     )
   );
@@ -122,8 +150,8 @@ function createExactParcelSearchResult(
   const stateCenter = getLunarStateCenter(state.name);
 
   return {
-    id: normalizedParcelKey,
-    name: normalizedParcelKey,
+    id: normalizedPropertyKey,
+    name: normalizedPropertyKey,
     subtitle: `Rural Acre • ${state.name}`,
     type: "Parcel",
     x: stateCenter.x,
