@@ -29,6 +29,13 @@ import {
   saveLunaSphereStudioDraft,
 } from "@/lib/lunasphere-studio-draft";
 import {
+  createInitialTerritoryLayout,
+  createTerritorySummary,
+  resolveStateTerritories,
+  validateTerritoryLayout,
+  type LunaSphereSettlementKind,
+} from "@/lib/lunasphere-territories";
+import {
   cloneTopology,
   constrainTopologyEdgeCoordinate,
   createTopologyFromRegions,
@@ -74,6 +81,7 @@ const baselineTopology = createTopologyFromRegions(
     status: "draft",
   }
 );
+const baselineTerritoryLayout = createInitialTerritoryLayout();
 
 const vertexIcon = divIcon({
   className: "",
@@ -130,6 +138,8 @@ const addVertexIcon = divIcon({
     ">+</div>
   `,
 });
+
+type TerritoryDisplayMode = "states" | LunaSphereSettlementKind | "all";
 
 type EdgeSegmentTarget = {
   key: string;
@@ -441,6 +451,8 @@ export default function LunaSphereDesigner() {
   const [selectedState, setSelectedState] = useState(
     baselineTopology.states[0]?.name ?? ""
   );
+  const [territoryDisplayMode, setTerritoryDisplayMode] =
+    useState<TerritoryDisplayMode>("all");
   const [selectedNodeId, setSelectedNodeId] = useState<
     string | null
   >(null);
@@ -609,6 +621,38 @@ export default function LunaSphereDesigner() {
   const summary = useMemo(
     () => createTopologySummary(topology),
     [topology]
+  );
+  const resolvedTerritories = useMemo(
+    () =>
+      resolveStateTerritories(
+        topology,
+        baselineTerritoryLayout,
+        selectedState
+      ),
+    [selectedState, topology]
+  );
+  const territorySummary = useMemo(
+    () => createTerritorySummary(resolvedTerritories),
+    [resolvedTerritories]
+  );
+  const territoryValidation = useMemo(
+    () =>
+      validateTerritoryLayout(
+        topology,
+        baselineTerritoryLayout
+      ),
+    [topology]
+  );
+  const selectedTerritoryIssues = useMemo(
+    () =>
+      [
+        ...territoryValidation.errors,
+        ...territoryValidation.warnings,
+        ...territoryValidation.information,
+      ].filter(
+        (issue) => issue.stateName === selectedState
+      ),
+    [selectedState, territoryValidation]
   );
   const removableNodeEdge = useMemo(() => {
     if (!selectedNodeId) {
@@ -1058,7 +1102,7 @@ export default function LunaSphereDesigner() {
     }
 
     const confirmed = window.confirm(
-      "Publish this validated topology as the next immutable LunaSphere geography release? This records a release in the database, but the public Moon Map will remain unchanged until a later activation milestone."
+      "Publish this validated topology as the next immutable LunaSphere geography release? Publishing records the release, but the public Moon Map will not change unless that release is explicitly activated."
     );
 
     if (!confirmed) {
@@ -1094,7 +1138,7 @@ export default function LunaSphereDesigner() {
       ]);
       setDatabaseStatus("ready");
       setDatabaseNotice(
-        `Published immutable LunaSphere geography release ${result.release.releaseNumber}. The public Moon Map has not been switched to it.`
+        `Published immutable LunaSphere geography release ${result.release.releaseNumber}. Activate it separately when it is ready for the public Moon Map.`
       );
     } catch (error) {
       setDatabaseStatus("error");
@@ -1194,7 +1238,7 @@ export default function LunaSphereDesigner() {
       releaseNumber < activeRelease.releaseNumber;
     const actionLabel = isRollback ? "roll back to" : "activate";
     const confirmed = window.confirm(
-      `${actionLabel[0].toUpperCase()}${actionLabel.slice(1)} LunaSphere geography release ${releaseNumber}? This records the controlled active release and preserves the previous activation history. The public Moon Map will remain on its current code-based geography until the next integration milestone.`
+      `${actionLabel[0].toUpperCase()}${actionLabel.slice(1)} LunaSphere geography release ${releaseNumber}? This records the controlled active release, preserves the previous activation history, and changes the public Moon Map on its next refresh.`
     );
 
     if (!confirmed) {
@@ -1221,7 +1265,7 @@ export default function LunaSphereDesigner() {
       setActiveRelease(result.activeRelease);
       setDatabaseStatus("ready");
       setDatabaseNotice(
-        `${isRollback ? "Rolled back" : "Activated"} the LunaSphere geography control record to release ${result.activeRelease.releaseNumber}. The public Moon Map is not connected to active releases yet.`
+        `${isRollback ? "Rolled back" : "Activated"} LunaSphere geography release ${result.activeRelease.releaseNumber}. The public Moon Map will use this state geography on its next refresh.`
       );
     } catch (error) {
       setDatabaseStatus("error");
@@ -1323,15 +1367,16 @@ export default function LunaSphereDesigner() {
           </p>
 
           <h1 className="mt-2 text-3xl font-black">
-            Shared State Geography Editor
+            Shared State and Territory Geography Editor
           </h1>
 
           <p className="mt-2 max-w-4xl text-sm text-zinc-400">
-            Every border is stored once. Dragging a white handle
-            updates all states that share it. Browser autosave protects
-            active work, and the shared database stores team-wide drafts
-            plus immutable numbered releases. Moon-perimeter handles
-            remain locked to the circular saleable boundary.
+            Every state border is stored once. Dragging a white handle
+            updates all states that share it. Cities and towns now use
+            state-relative territory geometry that reflows with the selected
+            state. Browser autosave and database releases protect the state
+            topology while Moon-perimeter handles remain locked to the
+            circular saleable boundary.
           </p>
 
           <div className="mt-5 flex flex-wrap items-end gap-3">
@@ -1354,6 +1399,36 @@ export default function LunaSphereDesigner() {
                 ))}
               </select>
             </label>
+
+            <div>
+              <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-zinc-400">
+                Territory view
+              </span>
+              <div className="flex flex-wrap gap-2">
+                {(
+                  ["states", "city", "town", "all"] as const
+                ).map((mode) => (
+                  <button
+                    key={mode}
+                    type="button"
+                    onClick={() => setTerritoryDisplayMode(mode)}
+                    className={`rounded-xl border px-3 py-3 text-xs font-black uppercase tracking-wider transition ${
+                      territoryDisplayMode === mode
+                        ? "border-cyan-300 bg-cyan-300 text-black"
+                        : "border-white/15 bg-black text-zinc-300 hover:bg-white/10"
+                    }`}
+                  >
+                    {mode === "states"
+                      ? "States"
+                      : mode === "city"
+                        ? "Cities"
+                        : mode === "town"
+                          ? "Towns"
+                          : "All"}
+                  </button>
+                ))}
+              </div>
+            </div>
 
             <button
               type="button"
@@ -1450,9 +1525,10 @@ export default function LunaSphereDesigner() {
                   Shared Database Workspace
                 </p>
                 <p className="mt-1 text-sm text-violet-50/75">
-                  Save one cross-device draft, publish immutable releases,
-                  preview any release, and choose a controlled active release.
-                  The public Moon Map remains unchanged until the next integration milestone.
+                  Save one cross-device state draft, publish immutable
+                  releases, preview any release, and choose the state release
+                  used by the public Moon Map. Nested city and town territory
+                  persistence will be connected in a later controlled milestone.
                 </p>
               </div>
 
@@ -1769,6 +1845,56 @@ export default function LunaSphereDesigner() {
                 );
               })}
 
+              {resolvedTerritories &&
+                (territoryDisplayMode === "city" ||
+                  territoryDisplayMode === "all") &&
+                resolvedTerritories.cities.map((city) => (
+                  <Polygon
+                    key={`territory-${city.id}`}
+                    positions={city.boundary}
+                    pathOptions={{
+                      color: "#22d3ee",
+                      weight: 2,
+                      opacity: 0.95,
+                      fillColor: "#0891b2",
+                      fillOpacity: 0.22,
+                    }}
+                  >
+                    <Popup>
+                      <strong>{city.name}</strong>
+                      <br />
+                      City {city.territoryNumber} · {city.stateName}
+                      <br />
+                      Area {city.area.toFixed(1)}
+                    </Popup>
+                  </Polygon>
+                ))}
+
+              {resolvedTerritories &&
+                (territoryDisplayMode === "town" ||
+                  territoryDisplayMode === "all") &&
+                resolvedTerritories.towns.map((town) => (
+                  <Polygon
+                    key={`territory-${town.id}`}
+                    positions={town.boundary}
+                    pathOptions={{
+                      color: "#f59e0b",
+                      weight: 1.4,
+                      opacity: 0.9,
+                      fillColor: "#d97706",
+                      fillOpacity: 0.2,
+                    }}
+                  >
+                    <Popup>
+                      <strong>{town.name}</strong>
+                      <br />
+                      Town {town.territoryNumber} · {town.stateName}
+                      <br />
+                      Area {town.area.toFixed(1)}
+                    </Popup>
+                  </Polygon>
+                ))}
+
               {selectedEdges.map((edge) => (
                 <Polyline
                   key={`${selectedState}-${edge.id}`}
@@ -1948,6 +2074,80 @@ export default function LunaSphereDesigner() {
                 </>
               )}
 
+              <div className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 p-3 text-cyan-50">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-black">
+                      Nested Territory Foundation
+                    </p>
+                    <p className="mt-1 text-xs text-cyan-50/70">
+                      Cities and towns use stable state-relative geometry,
+                      so they move and resize automatically when this state
+                      boundary changes.
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-lg border px-2 py-1 text-[10px] font-black uppercase tracking-wider ${
+                      territoryValidation.valid
+                        ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100"
+                        : "border-red-300/30 bg-red-400/10 text-red-100"
+                    }`}
+                  >
+                    {territoryValidation.valid ? "Valid" : "Review"}
+                  </span>
+                </div>
+
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg border border-cyan-100/15 bg-black/30 p-2">
+                    <p className="text-lg font-black">
+                      {territorySummary.cityCount}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-cyan-50/60">
+                      Cities
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-amber-100/15 bg-black/30 p-2">
+                    <p className="text-lg font-black text-amber-100">
+                      {territorySummary.townCount}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-amber-50/60">
+                      Towns
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-emerald-100/15 bg-black/30 p-2">
+                    <p className="text-lg font-black text-emerald-100">
+                      {territorySummary.ruralCoveragePercent.toFixed(1)}%
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-emerald-50/60">
+                      Rural
+                    </p>
+                  </div>
+                </div>
+
+                <p className="mt-3 text-xs text-cyan-50/75">
+                  World plan: {territoryValidation.cityCount} cities ·{" "}
+                  {territoryValidation.townCount} towns ·{" "}
+                  {territoryValidation.errors.length} errors ·{" "}
+                  {territoryValidation.warnings.length} warnings
+                </p>
+
+                {selectedTerritoryIssues.length > 0 && (
+                  <div className="mt-3 max-h-28 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-2 text-[11px] text-cyan-50/75">
+                    {selectedTerritoryIssues.slice(0, 4).map((issue) => (
+                      <p key={`${issue.code}-${issue.territoryId ?? issue.stateId ?? issue.message}`}>
+                        <strong>{issue.code}:</strong> {issue.message}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                <p className="mt-3 text-[11px] font-bold text-cyan-100/80">
+                  These overlays are Studio-only in this milestone. They do
+                  not yet replace public city/town markers or generate
+                  saleable blocks.
+                </p>
+              </div>
+
               {selectedNode && (
                 <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-3">
                   <p className="font-bold text-yellow-100">
@@ -2071,11 +2271,11 @@ export default function LunaSphereDesigner() {
               )}
 
               <p className="rounded-xl border border-sky-400/30 bg-sky-400/10 p-3 text-sky-100">
-                Browser autosave protects immediate work. Database drafts
-                and numbered releases are shared across devices, but the
-                public Moon Map, parcels, reservations, checkout, and
-                customer records remain unchanged until the active-release
-                integration is deliberately connected and tested.
+                Browser autosave protects immediate work. The controlled
+                active state release now drives the public Moon Map. Nested
+                city and town territories remain Studio-only in this milestone,
+                and parcels, reservations, checkout, and customer records are
+                unchanged.
               </p>
             </div>
           </aside>
