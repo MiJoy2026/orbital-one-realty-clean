@@ -18,14 +18,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const topology =
-    typeof body === "object" && body !== null && "topology" in body
-      ? (body as { topology: unknown }).topology
-      : null;
+  const geography =
+    typeof body === "object" && body !== null && "geography" in body
+      ? (body as { geography: unknown }).geography
+      : typeof body === "object" && body !== null && "topology" in body
+        ? (body as { topology: unknown }).topology
+        : null;
 
   try {
     return NextResponse.json(
-      await publishGeographyRelease(topology)
+      await publishGeographyRelease(geography)
     );
   } catch (error) {
     if (error instanceof LunaSphereGeographyConflictError) {

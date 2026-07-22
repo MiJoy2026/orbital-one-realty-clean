@@ -695,6 +695,48 @@ function polygonsOverlap(
   );
 }
 
+function polygonSelfIntersects(
+  polygon: LunarPolygon
+): boolean {
+  if (polygon.length < 4) {
+    return false;
+  }
+
+  for (let firstIndex = 0; firstIndex < polygon.length; firstIndex += 1) {
+    const firstNext = (firstIndex + 1) % polygon.length;
+
+    for (
+      let secondIndex = firstIndex + 1;
+      secondIndex < polygon.length;
+      secondIndex += 1
+    ) {
+      const secondNext = (secondIndex + 1) % polygon.length;
+      const sharesEndpoint =
+        firstIndex === secondIndex ||
+        firstIndex === secondNext ||
+        firstNext === secondIndex ||
+        firstNext === secondNext;
+
+      if (sharesEndpoint) {
+        continue;
+      }
+
+      if (
+        segmentsIntersect(
+          polygon[firstIndex],
+          polygon[firstNext],
+          polygon[secondIndex],
+          polygon[secondNext]
+        )
+      ) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
 function createValidationResult(
   issues: TerritoryValidationIssue[],
   layout: LunaSphereTerritoryLayout
@@ -811,6 +853,42 @@ export function validateTerritoryLayout(
         });
       }
 
+      if (settlement.area <= GEOMETRY_EPSILON) {
+        issues.push({
+          severity: "error",
+          code: "SETTLEMENT_ZERO_AREA",
+          message: `${settlement.name} has no usable territory area.`,
+          stateId: resolved.stateId,
+          stateName: resolved.stateName,
+          territoryId: settlement.id,
+          territoryName: settlement.name,
+        });
+      }
+
+      if (polygonSelfIntersects(settlement.boundary)) {
+        issues.push({
+          severity: "error",
+          code: "SETTLEMENT_SELF_INTERSECTION",
+          message: `${settlement.name} contains crossing boundary segments.`,
+          stateId: resolved.stateId,
+          stateName: resolved.stateName,
+          territoryId: settlement.id,
+          territoryName: settlement.name,
+        });
+      }
+
+      if (!isPointInsidePolygon(settlement.center, settlement.boundary)) {
+        issues.push({
+          severity: "error",
+          code: "SETTLEMENT_CENTER_OUTSIDE_BOUNDARY",
+          message: `${settlement.name} has a center point outside its boundary.`,
+          stateId: resolved.stateId,
+          stateName: resolved.stateName,
+          territoryId: settlement.id,
+          territoryName: settlement.name,
+        });
+      }
+
       if (
         settlement.kind === "city" &&
         settlement.area < CITY_RULES.minimumArea
@@ -886,6 +964,396 @@ export function validateTerritoryLayout(
   }
 
   return createValidationResult(issues, layout);
+}
+
+
+type TerritoryEditOptions = {
+  incrementRevision?: boolean;
+};
+
+function coordinatesAreEqual(
+  first: StateRelativeCoordinate,
+  second: StateRelativeCoordinate
+): boolean {
+  return (
+    Math.abs(first[0] - second[0]) <= GEOMETRY_EPSILON &&
+    Math.abs(first[1] - second[1]) <= GEOMETRY_EPSILON
+  );
+}
+
+export function constrainStateRelativeCoordinate(
+  coordinate: StateRelativeCoordinate
+): MutableStateRelativeCoordinate {
+  const [y, x] = coordinate;
+
+  if (!Number.isFinite(y) || !Number.isFinite(x)) {
+    return [0, 0];
+  }
+
+  const magnitude = Math.hypot(y, x);
+
+  if (magnitude <= MAXIMUM_RELATIVE_RADIUS) {
+    return [round(y), round(x)];
+  }
+
+  const scale = MAXIMUM_RELATIVE_RADIUS / magnitude;
+  return [round(y * scale), round(x * scale)];
+}
+
+export function convertLunarCoordinateToStateRelative(
+  coordinate: LunarCoordinate,
+  stateBoundary: LunarPolygon,
+  interiorOrigin: LunarCoordinate
+): MutableStateRelativeCoordinate {
+  const deltaY = coordinate[0] - interiorOrigin[0];
+  const deltaX = coordinate[1] - interiorOrigin[1];
+  const distance = Math.hypot(deltaY, deltaX);
+
+  if (distance <= GEOMETRY_EPSILON) {
+    return [0, 0];
+  }
+
+  const direction: MutableLunarCoordinate = [
+    deltaY / distance,
+    deltaX / distance,
+  ];
+  const boundaryDistance = rayBoundaryDistance(
+    interiorOrigin,
+    direction,
+    stateBoundary
+  );
+
+  if (boundaryDistance <= GEOMETRY_EPSILON) {
+    return [0, 0];
+  }
+
+  return constrainStateRelativeCoordinate([
+    direction[0] * (distance / boundaryDistance),
+    direction[1] * (distance / boundaryDistance),
+  ]);
+}
+
+export function getSettlementDefinition(
+  layout: LunaSphereTerritoryLayout,
+  settlementId: string
+): LunaSphereSettlementDefinition | null {
+  return (
+    layout.settlements.find(
+      (settlement) => settlement.id === settlementId
+    ) ?? null
+  );
+}
+
+function updateSettlement(
+  layout: LunaSphereTerritoryLayout,
+  settlementId: string,
+  update: (
+    settlement: LunaSphereSettlementDefinition
+  ) => LunaSphereSettlementDefinition,
+  options: TerritoryEditOptions = {}
+): LunaSphereTerritoryLayout {
+  let changed = false;
+  const settlements: LunaSphereSettlementDefinition[] =
+    layout.settlements.map((settlement) => {
+      if (settlement.id !== settlementId) {
+        return settlement;
+      }
+
+      const nextSettlement = update(settlement);
+      changed = nextSettlement !== settlement;
+      return nextSettlement;
+    });
+
+  if (!changed) {
+    return layout;
+  }
+
+  return {
+    ...layout,
+    revision:
+      options.incrementRevision === false
+        ? layout.revision
+        : layout.revision + 1,
+    settlements,
+  };
+}
+
+export function moveSettlementBoundaryPoint(
+  layout: LunaSphereTerritoryLayout,
+  settlementId: string,
+  pointIndex: number,
+  coordinate: StateRelativeCoordinate,
+  options: TerritoryEditOptions = {}
+): LunaSphereTerritoryLayout {
+  return updateSettlement(
+    layout,
+    settlementId,
+    (settlement) => {
+      if (
+        pointIndex < 0 ||
+        pointIndex >= settlement.boundary.length
+      ) {
+        return settlement;
+      }
+
+      const normalizedCoordinate =
+        constrainStateRelativeCoordinate(coordinate);
+
+      if (
+        coordinatesAreEqual(
+          settlement.boundary[pointIndex],
+          normalizedCoordinate
+        )
+      ) {
+        return settlement;
+      }
+
+      return {
+        ...settlement,
+        boundary: settlement.boundary.map((point, index) =>
+          index === pointIndex
+            ? normalizedCoordinate
+            : [point[0], point[1]]
+        ),
+      };
+    },
+    options
+  );
+}
+
+function constrainSettlementTranslation(
+  settlement: LunaSphereSettlementDefinition,
+  requestedCenter: StateRelativeCoordinate
+): {
+  center: MutableStateRelativeCoordinate;
+  boundary: MutableStateRelativeCoordinate[];
+} {
+  const targetCenter = constrainStateRelativeCoordinate(requestedCenter);
+  const requestedDelta: MutableStateRelativeCoordinate = [
+    targetCenter[0] - settlement.center[0],
+    targetCenter[1] - settlement.center[1],
+  ];
+
+  function translatedPoint(
+    point: StateRelativeCoordinate,
+    fraction: number
+  ): MutableStateRelativeCoordinate {
+    return [
+      point[0] + requestedDelta[0] * fraction,
+      point[1] + requestedDelta[1] * fraction,
+    ];
+  }
+
+  function translationFits(fraction: number): boolean {
+    return settlement.boundary.every((point) => {
+      const [y, x] = translatedPoint(point, fraction);
+      return Math.hypot(y, x) <= MAXIMUM_RELATIVE_RADIUS;
+    });
+  }
+
+  let fraction = 1;
+
+  if (!translationFits(fraction)) {
+    let lower = 0;
+    let upper = 1;
+
+    for (let iteration = 0; iteration < 30; iteration += 1) {
+      const middle = (lower + upper) / 2;
+
+      if (translationFits(middle)) {
+        lower = middle;
+      } else {
+        upper = middle;
+      }
+    }
+
+    fraction = lower;
+  }
+
+  return {
+    center: [
+      round(
+        settlement.center[0] + requestedDelta[0] * fraction
+      ),
+      round(
+        settlement.center[1] + requestedDelta[1] * fraction
+      ),
+    ],
+    boundary: settlement.boundary.map((point) => {
+      const translated = translatedPoint(point, fraction);
+      return [round(translated[0]), round(translated[1])];
+    }),
+  };
+}
+
+export function moveSettlementCenter(
+  layout: LunaSphereTerritoryLayout,
+  settlementId: string,
+  coordinate: StateRelativeCoordinate,
+  options: TerritoryEditOptions = {}
+): LunaSphereTerritoryLayout {
+  return updateSettlement(
+    layout,
+    settlementId,
+    (settlement) => {
+      const translated = constrainSettlementTranslation(
+        settlement,
+        coordinate
+      );
+
+      if (coordinatesAreEqual(settlement.center, translated.center)) {
+        return settlement;
+      }
+
+      return {
+        ...settlement,
+        center: translated.center,
+        boundary: translated.boundary,
+      };
+    },
+    options
+  );
+}
+
+export function insertSettlementBoundaryPoint(
+  layout: LunaSphereTerritoryLayout,
+  settlementId: string,
+  segmentIndex: number
+): LunaSphereTerritoryLayout {
+  return updateSettlement(layout, settlementId, (settlement) => {
+    if (
+      segmentIndex < 0 ||
+      segmentIndex >= settlement.boundary.length
+    ) {
+      return settlement;
+    }
+
+    const start = settlement.boundary[segmentIndex];
+    const end =
+      settlement.boundary[
+        (segmentIndex + 1) % settlement.boundary.length
+      ];
+    const midpoint = constrainStateRelativeCoordinate([
+      (start[0] + end[0]) / 2,
+      (start[1] + end[1]) / 2,
+    ]);
+
+    return {
+      ...settlement,
+      boundary: [
+        ...settlement.boundary.slice(0, segmentIndex + 1),
+        midpoint,
+        ...settlement.boundary.slice(segmentIndex + 1),
+      ],
+    };
+  });
+}
+
+export function removeSettlementBoundaryPoint(
+  layout: LunaSphereTerritoryLayout,
+  settlementId: string,
+  pointIndex: number
+): LunaSphereTerritoryLayout {
+  return updateSettlement(layout, settlementId, (settlement) => {
+    if (
+      settlement.boundary.length <= 4 ||
+      pointIndex < 0 ||
+      pointIndex >= settlement.boundary.length
+    ) {
+      return settlement;
+    }
+
+    return {
+      ...settlement,
+      boundary: settlement.boundary.filter(
+        (_point, index) => index !== pointIndex
+      ),
+    };
+  });
+}
+
+export function restoreSettlementDefinition(
+  layout: LunaSphereTerritoryLayout,
+  baselineLayout: LunaSphereTerritoryLayout,
+  settlementId: string
+): LunaSphereTerritoryLayout {
+  const baselineSettlement = getSettlementDefinition(
+    baselineLayout,
+    settlementId
+  );
+
+  if (!baselineSettlement) {
+    return layout;
+  }
+
+  return updateSettlement(layout, settlementId, () => ({
+    ...baselineSettlement,
+    center: [
+      baselineSettlement.center[0],
+      baselineSettlement.center[1],
+    ],
+    boundary: baselineSettlement.boundary.map(([y, x]) => [y, x]),
+  }));
+}
+
+export function restoreStateTerritories(
+  layout: LunaSphereTerritoryLayout,
+  baselineLayout: LunaSphereTerritoryLayout,
+  stateName: string
+): LunaSphereTerritoryLayout {
+  const baselineById = new Map(
+    getSettlementDefinitionsForState(
+      baselineLayout,
+      stateName
+    ).map((settlement) => [settlement.id, settlement])
+  );
+  let changed = false;
+  const settlements: LunaSphereSettlementDefinition[] =
+    layout.settlements.map((settlement) => {
+      const baselineSettlement = baselineById.get(settlement.id);
+
+      if (!baselineSettlement) {
+        return settlement;
+      }
+
+      const same =
+        coordinatesAreEqual(
+          settlement.center,
+          baselineSettlement.center
+        ) &&
+        settlement.boundary.length ===
+          baselineSettlement.boundary.length &&
+        settlement.boundary.every((point, index) =>
+          coordinatesAreEqual(
+            point,
+            baselineSettlement.boundary[index]
+          )
+        );
+
+      if (same) {
+        return settlement;
+      }
+
+      changed = true;
+      return {
+        ...baselineSettlement,
+        center: [
+          baselineSettlement.center[0],
+          baselineSettlement.center[1],
+        ] as MutableStateRelativeCoordinate,
+        boundary: baselineSettlement.boundary.map(
+          ([y, x]) => [y, x] as MutableStateRelativeCoordinate
+        ),
+      };
+    });
+
+  return changed
+    ? {
+        ...layout,
+        revision: layout.revision + 1,
+        settlements,
+      }
+    : layout;
 }
 
 export function createTerritorySummary(

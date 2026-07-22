@@ -3,39 +3,47 @@ import { createHash } from "node:crypto";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import {
+  createInitialGeographyDocument,
+  cloneGeographyDocument,
+  normalizeGeographyDocument,
+  setGeographyStatus,
+  validateGeographyDocument,
+  type LunaSphereGeographyDocument,
+} from "./lunasphere-geography-document";
+import {
   lunarMapRegions,
   type LunarMapRegion,
 } from "./lunar-map-regions";
 import { prisma } from "./prisma";
-import { hasCompatibleTopologyStructure } from "./lunasphere-studio-draft";
 import {
-  cloneTopology,
   createTopologyFromRegions,
   topologyToLunarMapRegions,
-  validateTopology,
-  type LunaSphereTopology,
   type LunaSphereTopologyStatus,
 } from "./lunasphere-topology";
 
 const baselineTopology = createTopologyFromRegions(lunarMapRegions, {
   status: "draft",
 });
+const baselineGeography =
+  createInitialGeographyDocument(baselineTopology);
 
 export type GeographyDraftRecord = {
   savedAt: string;
   topologyRevision: number;
-  topology: LunaSphereTopology;
+  territoryRevision: number;
+  geography: LunaSphereGeographyDocument;
 };
 
 export type GeographyReleaseRecord = {
   releaseNumber: number;
   publishedAt: string;
   topologyRevision: number;
+  territoryRevision: number;
   topologyHash: string;
 };
 
 export type GeographyReleaseDetail = GeographyReleaseRecord & {
-  topology: LunaSphereTopology;
+  geography: LunaSphereGeographyDocument;
 };
 
 export type GeographyActivationRecord = GeographyReleaseRecord & {
@@ -87,48 +95,65 @@ export class LunaSphereGeographyNotFoundError extends Error {
   }
 }
 
-function toJsonValue(topology: LunaSphereTopology): Prisma.InputJsonValue {
-  return JSON.parse(JSON.stringify(topology)) as Prisma.InputJsonValue;
+function toJsonValue(
+  geography: LunaSphereGeographyDocument
+): Prisma.InputJsonValue {
+  return JSON.parse(
+    JSON.stringify(geography)
+  ) as Prisma.InputJsonValue;
 }
 
-function parseStoredTopology(value: Prisma.JsonValue): LunaSphereTopology {
-  if (!hasCompatibleTopologyStructure(value, baselineTopology)) {
+function parseStoredGeography(
+  value: Prisma.JsonValue
+): LunaSphereGeographyDocument {
+  const geography = normalizeGeographyDocument(
+    value,
+    baselineGeography
+  );
+
+  if (!geography) {
     throw new LunaSphereGeographyValidationError(
-      "The stored LunaSphere topology is incompatible with this application version."
+      "The stored LunaSphere geography is incompatible with this application version."
     );
   }
 
-  return cloneTopology(value);
+  return geography;
 }
 
-export function parseAndValidateTopology(
+export function parseAndValidateGeography(
   value: unknown,
   status: LunaSphereTopologyStatus
-): LunaSphereTopology {
-  if (!hasCompatibleTopologyStructure(value, baselineTopology)) {
+): LunaSphereGeographyDocument {
+  const normalized = normalizeGeographyDocument(
+    value,
+    baselineGeography
+  );
+
+  if (!normalized) {
     throw new LunaSphereGeographyValidationError(
-      "The submitted LunaSphere topology is incomplete or incompatible."
+      "The submitted LunaSphere geography is incomplete or incompatible."
     );
   }
 
-  const topology: LunaSphereTopology = {
-    ...cloneTopology(value),
-    status,
-  };
-  const validation = validateTopology(topology);
+  const geography = setGeographyStatus(normalized, status);
+  const validation = validateGeographyDocument(geography);
 
   if (!validation.valid) {
-    const firstErrors = validation.errors
+    const firstErrors = [
+      ...validation.topology.errors,
+      ...validation.territories.errors,
+    ]
       .slice(0, 3)
       .map((issue) => issue.message)
       .join(" ");
 
     throw new LunaSphereGeographyValidationError(
-      firstErrors || "The LunaSphere topology contains validation errors."
+      firstErrors ||
+        "The LunaSphere geography contains validation errors."
     );
   }
 
-  return topology;
+  return geography;
 }
 
 function canonicalizeHashValue(value: unknown): unknown {
@@ -150,27 +175,37 @@ function canonicalizeHashValue(value: unknown): unknown {
   return value;
 }
 
-function createTopologyHash(topology: LunaSphereTopology): string {
-  const hashableTopology: LunaSphereTopology = {
-    ...cloneTopology(topology),
-    status: "draft",
-  };
+function createGeographyHash(
+  geography: LunaSphereGeographyDocument
+): string {
+  const hashableGeography = setGeographyStatus(
+    cloneGeographyDocument(geography),
+    "draft"
+  );
 
   return createHash("sha256")
-    .update(JSON.stringify(canonicalizeHashValue(hashableTopology)))
+    .update(JSON.stringify(canonicalizeHashValue(hashableGeography)))
     .digest("hex");
 }
 
-function mapReleaseRecord(record: {
+type ReleaseDatabaseRecord = {
   releaseNumber: number;
   publishedAt: Date;
   topologyRevision: number;
   topologyHash: string;
-}): GeographyReleaseRecord {
+  topology: Prisma.JsonValue;
+};
+
+function mapReleaseRecord(
+  record: ReleaseDatabaseRecord
+): GeographyReleaseRecord {
+  const geography = parseStoredGeography(record.topology);
+
   return {
     releaseNumber: record.releaseNumber,
     publishedAt: record.publishedAt.toISOString(),
     topologyRevision: record.topologyRevision,
+    territoryRevision: geography.territories.revision,
     topologyHash: record.topologyHash,
   };
 }
@@ -212,11 +247,15 @@ export async function getGeographyWorkspace(
 
   return {
     draft: draft
-      ? {
-          savedAt: draft.updatedAt.toISOString(),
-          topologyRevision: draft.topologyRevision,
-          topology: parseStoredTopology(draft.topology),
-        }
+      ? (() => {
+          const geography = parseStoredGeography(draft.topology);
+          return {
+            savedAt: draft.updatedAt.toISOString(),
+            topologyRevision: geography.topology.revision,
+            territoryRevision: geography.territories.revision,
+            geography,
+          };
+        })()
       : null,
     latestRelease: releaseRecords[0] ?? null,
     activeRelease: activeActivation
@@ -257,7 +296,10 @@ export async function getGeographyRelease(
 
   return {
     ...mapReleaseRecord(release),
-    topology: parseAndValidateTopology(release.topology, "published"),
+    geography: parseAndValidateGeography(
+      release.topology,
+      "published"
+    ),
   };
 }
 
@@ -295,11 +337,9 @@ function createBuiltInPublicGeography(
 }
 
 /**
- * Resolves the geography that the customer-facing Moon Map should render.
- *
- * The most recently activated, valid numbered release wins. If no release is
- * active, the database cannot be reached, or stored geography fails current
- * validation, the original built-in 57-state map remains available.
+ * Resolves the state geography that the customer-facing Moon Map renders.
+ * Nested settlement geometry is stored in the same active release but remains
+ * intentionally dormant until the public city/town layer milestone.
  */
 export async function getPublicGeographySnapshot(
   client: PrismaClient = prisma
@@ -322,11 +362,13 @@ export async function getPublicGeographySnapshot(
     }
 
     try {
-      const topology = parseAndValidateTopology(
+      const geography = parseAndValidateGeography(
         activation.release.topology,
         "published"
       );
-      const regions = topologyToLunarMapRegions(topology);
+      const regions = topologyToLunarMapRegions(
+        geography.topology
+      );
 
       return {
         source: "active-release",
@@ -341,7 +383,9 @@ export async function getPublicGeographySnapshot(
         error
       );
 
-      return createBuiltInPublicGeography("invalid-active-release");
+      return createBuiltInPublicGeography(
+        "invalid-active-release"
+      );
     }
   } catch (error) {
     console.error(
@@ -358,15 +402,15 @@ export async function saveGeographyDraft(
   expectedSavedAt: string | null,
   client: PrismaClient = prisma
 ): Promise<GeographyDraftRecord> {
-  const topology = parseAndValidateTopology(value, "draft");
+  const geography = parseAndValidateGeography(value, "draft");
 
   return client.$transaction(async (transaction) => {
     const currentDraft =
       await transaction.lunaSphereGeographyDraft.findUnique({
         where: {
           worldId_worldVersion: {
-            worldId: topology.worldId,
-            worldVersion: topology.worldVersion,
+            worldId: geography.topology.worldId,
+            worldVersion: geography.topology.worldVersion,
           },
         },
         select: {
@@ -386,26 +430,27 @@ export async function saveGeographyDraft(
       await transaction.lunaSphereGeographyDraft.upsert({
         where: {
           worldId_worldVersion: {
-            worldId: topology.worldId,
-            worldVersion: topology.worldVersion,
+            worldId: geography.topology.worldId,
+            worldVersion: geography.topology.worldVersion,
           },
         },
         update: {
-          topologyRevision: topology.revision,
-          topology: toJsonValue(topology),
+          topologyRevision: geography.topology.revision,
+          topology: toJsonValue(geography),
         },
         create: {
-          worldId: topology.worldId,
-          worldVersion: topology.worldVersion,
-          topologyRevision: topology.revision,
-          topology: toJsonValue(topology),
+          worldId: geography.topology.worldId,
+          worldVersion: geography.topology.worldVersion,
+          topologyRevision: geography.topology.revision,
+          topology: toJsonValue(geography),
         },
       });
 
     return {
       savedAt: record.updatedAt.toISOString(),
-      topologyRevision: record.topologyRevision,
-      topology,
+      topologyRevision: geography.topology.revision,
+      territoryRevision: geography.territories.revision,
+      geography,
     };
   });
 }
@@ -417,48 +462,53 @@ export async function publishGeographyRelease(
   draft: GeographyDraftRecord;
   release: GeographyReleaseRecord;
 }> {
-  const publishedTopology = parseAndValidateTopology(value, "published");
-  const draftTopology: LunaSphereTopology = {
-    ...cloneTopology(publishedTopology),
-    status: "draft",
-  };
-  const topologyHash = createTopologyHash(publishedTopology);
+  const publishedGeography = parseAndValidateGeography(
+    value,
+    "published"
+  );
+  const draftGeography = setGeographyStatus(
+    publishedGeography,
+    "draft"
+  );
+  const geographyHash = createGeographyHash(publishedGeography);
 
   return client.$transaction(async (transaction) => {
     const currentDraft =
       await transaction.lunaSphereGeographyDraft.findUnique({
         where: {
           worldId_worldVersion: {
-            worldId: publishedTopology.worldId,
-            worldVersion: publishedTopology.worldVersion,
+            worldId: publishedGeography.topology.worldId,
+            worldVersion:
+              publishedGeography.topology.worldVersion,
           },
         },
       });
 
     if (!currentDraft) {
       throw new LunaSphereGeographyConflictError(
-        "Save the current topology as the shared database draft before publishing it."
+        "Save the current geography as the shared database draft before publishing it."
       );
     }
 
-    const storedDraftTopology = parseStoredTopology(
+    const storedDraftGeography = parseStoredGeography(
       currentDraft.topology
     );
 
     if (
-      createTopologyHash(storedDraftTopology) !==
-      createTopologyHash(publishedTopology)
+      createGeographyHash(storedDraftGeography) !==
+      createGeographyHash(publishedGeography)
     ) {
       throw new LunaSphereGeographyConflictError(
-        "The open topology does not match the shared database draft. Save the database draft before publishing."
+        "The open geography does not match the shared database draft. Save the database draft before publishing."
       );
     }
 
     const latestRelease =
       await transaction.lunaSphereGeographyRelease.findFirst({
         where: {
-          worldId: publishedTopology.worldId,
-          worldVersion: publishedTopology.worldVersion,
+          worldId: publishedGeography.topology.worldId,
+          worldVersion:
+            publishedGeography.topology.worldVersion,
         },
         orderBy: {
           releaseNumber: "desc",
@@ -469,9 +519,9 @@ export async function publishGeographyRelease(
         },
       });
 
-    if (latestRelease?.topologyHash === topologyHash) {
+    if (latestRelease?.topologyHash === geographyHash) {
       throw new LunaSphereGeographyConflictError(
-        "This topology already matches the latest published geography release."
+        "This geography already matches the latest published LunaSphere release."
       );
     }
 
@@ -481,12 +531,14 @@ export async function publishGeographyRelease(
     const release =
       await transaction.lunaSphereGeographyRelease.create({
         data: {
-          worldId: publishedTopology.worldId,
-          worldVersion: publishedTopology.worldVersion,
+          worldId: publishedGeography.topology.worldId,
+          worldVersion:
+            publishedGeography.topology.worldVersion,
           releaseNumber,
-          topologyRevision: publishedTopology.revision,
-          topologyHash,
-          topology: toJsonValue(publishedTopology),
+          topologyRevision:
+            publishedGeography.topology.revision,
+          topologyHash: geographyHash,
+          topology: toJsonValue(publishedGeography),
         },
       });
 
@@ -494,27 +546,28 @@ export async function publishGeographyRelease(
       await transaction.lunaSphereGeographyDraft.upsert({
         where: {
           worldId_worldVersion: {
-            worldId: draftTopology.worldId,
-            worldVersion: draftTopology.worldVersion,
+            worldId: draftGeography.topology.worldId,
+            worldVersion: draftGeography.topology.worldVersion,
           },
         },
         update: {
-          topologyRevision: draftTopology.revision,
-          topology: toJsonValue(draftTopology),
+          topologyRevision: draftGeography.topology.revision,
+          topology: toJsonValue(draftGeography),
         },
         create: {
-          worldId: draftTopology.worldId,
-          worldVersion: draftTopology.worldVersion,
-          topologyRevision: draftTopology.revision,
-          topology: toJsonValue(draftTopology),
+          worldId: draftGeography.topology.worldId,
+          worldVersion: draftGeography.topology.worldVersion,
+          topologyRevision: draftGeography.topology.revision,
+          topology: toJsonValue(draftGeography),
         },
       });
 
     return {
       draft: {
         savedAt: draft.updatedAt.toISOString(),
-        topologyRevision: draft.topologyRevision,
-        topology: draftTopology,
+        topologyRevision: draftGeography.topology.revision,
+        territoryRevision: draftGeography.territories.revision,
+        geography: draftGeography,
       },
       release: mapReleaseRecord(release),
     };
@@ -549,7 +602,7 @@ export async function activateGeographyRelease(
       );
     }
 
-    parseAndValidateTopology(release.topology, "published");
+    parseAndValidateGeography(release.topology, "published");
 
     const currentActivation =
       await transaction.lunaSphereGeographyActivation.findFirst({

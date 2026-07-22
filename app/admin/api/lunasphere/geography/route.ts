@@ -34,10 +34,12 @@ export async function PUT(request: Request) {
     );
   }
 
-  const topology =
-    typeof body === "object" && body !== null && "topology" in body
-      ? (body as { topology: unknown }).topology
-      : null;
+  const geography =
+    typeof body === "object" && body !== null && "geography" in body
+      ? (body as { geography: unknown }).geography
+      : typeof body === "object" && body !== null && "topology" in body
+        ? (body as { topology: unknown }).topology
+        : null;
   const expectedSavedAt =
     typeof body === "object" &&
     body !== null &&
@@ -52,7 +54,7 @@ export async function PUT(request: Request) {
   try {
     return NextResponse.json({
       draft: await saveGeographyDraft(
-        topology,
+        geography,
         expectedSavedAt
       ),
     });

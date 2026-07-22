@@ -24,16 +24,33 @@ import LunarTileLayer from "@/components/moon-map/LunarTileLayer";
 import { lunarMapRegions } from "@/lib/lunar-map-regions";
 import {
   clearLunaSphereStudioDraft,
-  hasCompatibleTopologyStructure,
   loadLunaSphereStudioDraft,
   saveLunaSphereStudioDraft,
 } from "@/lib/lunasphere-studio-draft";
 import {
+  cloneGeographyDocument,
+  createGeographyDocument,
+  hasCompatibleGeographyDocumentStructure,
+  validateGeographyDocument,
+  type LunaSphereGeographyDocument,
+} from "@/lib/lunasphere-geography-document";
+import {
+  cloneTerritoryLayout,
+  convertLunarCoordinateToStateRelative,
   createInitialTerritoryLayout,
   createTerritorySummary,
+  getSettlementDefinition,
+  getSettlementDefinitionsForState,
+  insertSettlementBoundaryPoint,
+  moveSettlementBoundaryPoint,
+  moveSettlementCenter,
+  removeSettlementBoundaryPoint,
   resolveStateTerritories,
+  restoreSettlementDefinition,
+  restoreStateTerritories,
   validateTerritoryLayout,
   type LunaSphereSettlementKind,
+  type ResolvedLunaSphereSettlement,
 } from "@/lib/lunasphere-territories";
 import {
   cloneTopology,
@@ -49,7 +66,6 @@ import {
   restoreTopologyState,
   topologyToLunarMapRegions,
   validateTopology,
-  type LunaSphereTopology,
   type LunaSphereTopologyEdge,
   type LunaSphereTopologyNode,
 } from "@/lib/lunasphere-topology";
@@ -82,6 +98,10 @@ const baselineTopology = createTopologyFromRegions(
   }
 );
 const baselineTerritoryLayout = createInitialTerritoryLayout();
+const baselineGeography = createGeographyDocument(
+  baselineTopology,
+  baselineTerritoryLayout
+);
 
 const vertexIcon = divIcon({
   className: "",
@@ -139,6 +159,100 @@ const addVertexIcon = divIcon({
   `,
 });
 
+function createTerritoryVertexIcon(
+  color: string,
+  selected: boolean
+) {
+  const size = selected ? 20 : 16;
+  const anchor = size / 2;
+
+  return divIcon({
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [anchor, anchor],
+    html: `
+      <div style="
+        width:${size}px;
+        height:${size}px;
+        border-radius:999px;
+        background:${selected ? "#ffffff" : color};
+        border:${selected ? 4 : 3}px solid ${color};
+        box-shadow:0 0 0 2px #020617, 0 3px 12px rgba(0,0,0,0.9);
+        cursor:grab;
+      "></div>
+    `,
+  });
+}
+
+function createTerritoryCenterIcon(color: string) {
+  return divIcon({
+    className: "",
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    html: `
+      <div style="
+        width:24px;
+        height:24px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:6px;
+        background:${color};
+        color:#020617;
+        border:3px solid #ffffff;
+        box-shadow:0 0 0 2px #020617, 0 3px 14px rgba(0,0,0,0.95);
+        cursor:move;
+        font:900 13px/1 Arial,sans-serif;
+      ">◆</div>
+    `,
+  });
+}
+
+function createTerritoryAddIcon(color: string) {
+  return divIcon({
+    className: "",
+    iconSize: [15, 15],
+    iconAnchor: [7.5, 7.5],
+    html: `
+      <div style="
+        width:15px;
+        height:15px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        border-radius:999px;
+        background:#020617;
+        color:${color};
+        border:2px solid ${color};
+        box-shadow:0 2px 10px rgba(0,0,0,0.9);
+        cursor:pointer;
+        font:900 12px/1 Arial,sans-serif;
+      ">+</div>
+    `,
+  });
+}
+
+const cityTerritoryVertexIcon = createTerritoryVertexIcon(
+  "#22d3ee",
+  false
+);
+const selectedCityTerritoryVertexIcon = createTerritoryVertexIcon(
+  "#22d3ee",
+  true
+);
+const townTerritoryVertexIcon = createTerritoryVertexIcon(
+  "#f59e0b",
+  false
+);
+const selectedTownTerritoryVertexIcon = createTerritoryVertexIcon(
+  "#f59e0b",
+  true
+);
+const cityTerritoryCenterIcon = createTerritoryCenterIcon("#22d3ee");
+const townTerritoryCenterIcon = createTerritoryCenterIcon("#f59e0b");
+const cityTerritoryAddIcon = createTerritoryAddIcon("#22d3ee");
+const townTerritoryAddIcon = createTerritoryAddIcon("#f59e0b");
+
 type TerritoryDisplayMode = "states" | LunaSphereSettlementKind | "all";
 
 type EdgeSegmentTarget = {
@@ -148,29 +262,28 @@ type EdgeSegmentTarget = {
   position: [number, number];
 };
 
-type TopologyHistoryState = {
-  past: LunaSphereTopology[];
-  present: LunaSphereTopology;
-  future: LunaSphereTopology[];
+type GeographyHistoryState = {
+  past: LunaSphereGeographyDocument[];
+  present: LunaSphereGeographyDocument;
+  future: LunaSphereGeographyDocument[];
 };
 
-type TopologyHistoryAction =
+type GeographyHistoryAction =
   | {
       type: "apply";
       update: (
-        topology: LunaSphereTopology
-      ) => LunaSphereTopology;
+        geography: LunaSphereGeographyDocument
+      ) => LunaSphereGeographyDocument;
     }
   | {
       type: "preview";
       update: (
-        topology: LunaSphereTopology
-      ) => LunaSphereTopology;
+        geography: LunaSphereGeographyDocument
+      ) => LunaSphereGeographyDocument;
     }
   | {
       type: "commit-preview";
-      baseline: LunaSphereTopology;
-      nodeId: string;
+      baseline: LunaSphereGeographyDocument;
     }
   | {
       type: "undo";
@@ -180,7 +293,7 @@ type TopologyHistoryAction =
     }
   | {
       type: "replace";
-      topology: LunaSphereTopology;
+      geography: LunaSphereGeographyDocument;
       recordCurrent: boolean;
     };
 
@@ -203,13 +316,15 @@ type DatabaseStatus =
 type DatabaseDraftMetadata = {
   savedAt: string;
   topologyRevision: number;
-  topology: LunaSphereTopology;
+  territoryRevision: number;
+  geography: LunaSphereGeographyDocument;
 };
 
 type GeographyReleaseMetadata = {
   releaseNumber: number;
   publishedAt: string;
   topologyRevision: number;
+  territoryRevision: number;
   topologyHash: string;
 };
 
@@ -218,7 +333,7 @@ type GeographyActivationMetadata = GeographyReleaseMetadata & {
 };
 
 type GeographyReleaseDetail = GeographyReleaseMetadata & {
-  topology: LunaSphereTopology;
+  geography: LunaSphereGeographyDocument;
 };
 
 type GeographyWorkspaceResponse = {
@@ -230,101 +345,112 @@ type GeographyWorkspaceResponse = {
 };
 
 function addHistorySnapshot(
-  history: LunaSphereTopology[],
-  topology: LunaSphereTopology
-): LunaSphereTopology[] {
+  history: LunaSphereGeographyDocument[],
+  geography: LunaSphereGeographyDocument
+): LunaSphereGeographyDocument[] {
   return [
     ...history,
-    cloneTopology(topology),
+    cloneGeographyDocument(geography),
   ].slice(-HISTORY_LIMIT);
 }
 
-function topologyHistoryReducer(
-  state: TopologyHistoryState,
-  action: TopologyHistoryAction
-): TopologyHistoryState {
+function geographyHistoryReducer(
+  state: GeographyHistoryState,
+  action: GeographyHistoryAction
+): GeographyHistoryState {
   if (action.type === "apply") {
-    const nextTopology = action.update(state.present);
+    const nextGeography = action.update(state.present);
 
-    if (nextTopology === state.present) {
+    if (nextGeography === state.present) {
       return state;
     }
 
     return {
       past: addHistorySnapshot(state.past, state.present),
-      present: nextTopology,
+      present: nextGeography,
       future: [],
     };
   }
 
   if (action.type === "preview") {
-    const nextTopology = action.update(state.present);
+    const nextGeography = action.update(state.present);
 
-    return nextTopology === state.present
+    return nextGeography === state.present
       ? state
       : {
           ...state,
-          present: nextTopology,
+          present: nextGeography,
         };
   }
 
   if (action.type === "commit-preview") {
-    const baselineNode = action.baseline.nodes.find(
-      (node) => node.id === action.nodeId
-    );
-    const currentNode = state.present.nodes.find(
-      (node) => node.id === action.nodeId
-    );
-
-    if (!baselineNode || !currentNode) {
+    if (geographiesHaveSameContent(action.baseline, state.present)) {
       return state;
     }
 
-    const coordinateChanged =
-      baselineNode.coordinate[0] !== currentNode.coordinate[0] ||
-      baselineNode.coordinate[1] !== currentNode.coordinate[1];
-
-    if (!coordinateChanged) {
-      return state;
-    }
+    const topologyChanged = !geographiesHaveSameContent(
+      createGeographyDocument(
+        action.baseline.topology,
+        state.present.territories
+      ),
+      state.present
+    );
+    const territoriesChanged = !geographiesHaveSameContent(
+      createGeographyDocument(
+        state.present.topology,
+        action.baseline.territories
+      ),
+      state.present
+    );
 
     return {
       past: addHistorySnapshot(state.past, action.baseline),
       present: {
-        ...state.present,
-        revision: action.baseline.revision + 1,
+        ...cloneGeographyDocument(state.present),
+        topology: topologyChanged
+          ? {
+              ...cloneTopology(state.present.topology),
+              revision: action.baseline.topology.revision + 1,
+            }
+          : cloneTopology(state.present.topology),
+        territories: territoriesChanged
+          ? {
+              ...cloneTerritoryLayout(state.present.territories),
+              revision: action.baseline.territories.revision + 1,
+            }
+          : cloneTerritoryLayout(state.present.territories),
       },
       future: [],
     };
   }
 
   if (action.type === "undo") {
-    const previousTopology = state.past.at(-1);
+    const previousGeography = state.past.at(-1);
 
-    if (!previousTopology) {
+    if (!previousGeography) {
       return state;
     }
 
     return {
       past: state.past.slice(0, -1),
-      present: cloneTopology(previousTopology),
+      present: cloneGeographyDocument(previousGeography),
       future: [
-        cloneTopology(state.present),
+        cloneGeographyDocument(state.present),
         ...state.future,
       ].slice(0, HISTORY_LIMIT),
     };
   }
 
   if (action.type === "redo") {
-    const nextTopology = state.future[0];
+    const nextGeography = state.future[0];
 
-    if (!nextTopology) {
+    if (!nextGeography) {
       return state;
     }
 
     return {
       past: addHistorySnapshot(state.past, state.present),
-      present: cloneTopology(nextTopology),
+      present: cloneGeographyDocument(nextGeography),
       future: state.future.slice(1),
     };
   }
@@ -332,14 +458,14 @@ function topologyHistoryReducer(
   if (action.recordCurrent) {
     return {
       past: addHistorySnapshot(state.past, state.present),
-      present: cloneTopology(action.topology),
+      present: cloneGeographyDocument(action.geography),
       future: [],
     };
   }
 
   return {
     past: [],
-    present: cloneTopology(action.topology),
+    present: cloneGeographyDocument(action.geography),
     future: [],
   };
 }
@@ -387,11 +513,32 @@ function formatDatabaseDate(value: string | null): string {
     : date.toLocaleString();
 }
 
-function topologiesHaveSameContent(
-  first: LunaSphereTopology,
-  second: LunaSphereTopology
+function canonicalizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => canonicalizeValue(entry));
+  }
+
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return Object.keys(record)
+      .sort()
+      .reduce<Record<string, unknown>>((result, key) => {
+        result[key] = canonicalizeValue(record[key]);
+        return result;
+      }, {});
+  }
+
+  return value;
+}
+
+function geographiesHaveSameContent(
+  first: LunaSphereGeographyDocument,
+  second: LunaSphereGeographyDocument
 ): boolean {
-  return JSON.stringify(first) === JSON.stringify(second);
+  return (
+    JSON.stringify(canonicalizeValue(first)) ===
+    JSON.stringify(canonicalizeValue(second))
+  );
 }
 
 async function readResponseBody<T>(response: Response): Promise<T> {
@@ -435,18 +582,19 @@ function isTextEntryElement(target: EventTarget | null): boolean {
 
 export default function LunaSphereDesigner() {
   const [history, dispatchHistory] = useReducer(
-    topologyHistoryReducer,
+    geographyHistoryReducer,
     {
       past: [],
-      present: cloneTopology(baselineTopology),
+      present: cloneGeographyDocument(baselineGeography),
       future: [],
     }
   );
-  const workingTopology = history.present;
+  const workingGeography = history.present;
+  const workingTopology = workingGeography.topology;
+  const workingTerritoryLayout = workingGeography.territories;
 
-  const dragBaselineRef = useRef<LunaSphereTopology | null>(
-    null
-  );
+  const dragBaselineRef =
+    useRef<LunaSphereGeographyDocument | null>(null);
   const autosaveTokenRef = useRef(0);
   const [selectedState, setSelectedState] = useState(
     baselineTopology.states[0]?.name ?? ""
@@ -456,6 +604,11 @@ export default function LunaSphereDesigner() {
   const [selectedNodeId, setSelectedNodeId] = useState<
     string | null
   >(null);
+  const [selectedTerritoryId, setSelectedTerritoryId] = useState<
+    string | null
+  >(null);
+  const [selectedTerritoryPointIndex, setSelectedTerritoryPointIndex] =
+    useState<number | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const [draftStatus, setDraftStatus] =
     useState<DraftStatus>("loading");
@@ -482,7 +635,10 @@ export default function LunaSphereDesigner() {
     string | null
   >(null);
 
-  const topology = releasePreview?.topology ?? workingTopology;
+  const geography =
+    releasePreview?.geography ?? workingGeography;
+  const topology = geography.topology;
+  const territoryLayout = geography.territories;
   const isPreviewingRelease = releasePreview !== null;
 
   const regions = useMemo(
@@ -615,8 +771,8 @@ export default function LunaSphereDesigner() {
     [topology]
   );
   const workingValidation = useMemo(
-    () => validateTopology(workingTopology),
-    [workingTopology]
+    () => validateGeographyDocument(workingGeography),
+    [workingGeography]
   );
   const summary = useMemo(
     () => createTopologySummary(topology),
@@ -626,10 +782,10 @@ export default function LunaSphereDesigner() {
     () =>
       resolveStateTerritories(
         topology,
-        baselineTerritoryLayout,
+        territoryLayout,
         selectedState
       ),
-    [selectedState, topology]
+    [selectedState, territoryLayout, topology]
   );
   const territorySummary = useMemo(
     () => createTerritorySummary(resolvedTerritories),
@@ -639,9 +795,9 @@ export default function LunaSphereDesigner() {
     () =>
       validateTerritoryLayout(
         topology,
-        baselineTerritoryLayout
+        territoryLayout
       ),
-    [topology]
+    [territoryLayout, topology]
   );
   const selectedTerritoryIssues = useMemo(
     () =>
@@ -654,6 +810,84 @@ export default function LunaSphereDesigner() {
       ),
     [selectedState, territoryValidation]
   );
+  const selectedTerritoryDefinition = useMemo(
+    () =>
+      selectedTerritoryId
+        ? getSettlementDefinition(
+            territoryLayout,
+            selectedTerritoryId
+          )
+        : null,
+    [selectedTerritoryId, territoryLayout]
+  );
+  const selectedResolvedTerritory = useMemo(() => {
+    if (!selectedTerritoryId || !resolvedTerritories) {
+      return null;
+    }
+
+    return [...resolvedTerritories.cities, ...resolvedTerritories.towns].find(
+      (territory) => territory.id === selectedTerritoryId
+    ) ?? null;
+  }, [resolvedTerritories, selectedTerritoryId]);
+  const selectedTerritoryCanRemovePoint =
+    selectedTerritoryDefinition !== null &&
+    selectedTerritoryPointIndex !== null &&
+    selectedTerritoryDefinition.boundary.length > 4;
+  const visibleSettlementOptions = useMemo(() => {
+    if (!resolvedTerritories) {
+      return [] as ResolvedLunaSphereSettlement[];
+    }
+
+    if (territoryDisplayMode === "city") {
+      return resolvedTerritories.cities;
+    }
+
+    if (territoryDisplayMode === "town") {
+      return resolvedTerritories.towns;
+    }
+
+    return [
+      ...resolvedTerritories.cities,
+      ...resolvedTerritories.towns,
+    ];
+  }, [resolvedTerritories, territoryDisplayMode]);
+
+  const selectedTerritorySegmentTargets = useMemo(() => {
+    if (!selectedResolvedTerritory) {
+      return [] as {
+        key: string;
+        segmentIndex: number;
+        position: [number, number];
+      }[];
+    }
+
+    return selectedResolvedTerritory.boundary.map(
+      (point, segmentIndex) => {
+        const nextPoint =
+          selectedResolvedTerritory.boundary[
+            (segmentIndex + 1) %
+              selectedResolvedTerritory.boundary.length
+          ];
+
+        return {
+          key: `${selectedResolvedTerritory.id}-segment-${segmentIndex}`,
+          segmentIndex,
+          position: [
+            (point[0] + nextPoint[0]) / 2,
+            (point[1] + nextPoint[1]) / 2,
+          ] as [number, number],
+        };
+      }
+    );
+  }, [selectedResolvedTerritory]);
+  const showStateEditingHandles =
+    territoryDisplayMode === "states" ||
+    (territoryDisplayMode === "all" && !selectedTerritoryId);
+  const showTerritoryEditingHandles =
+    selectedResolvedTerritory !== null &&
+    (territoryDisplayMode === "all" ||
+      selectedResolvedTerritory.kind === territoryDisplayMode);
+
   const removableNodeEdge = useMemo(() => {
     if (!selectedNodeId) {
       return null;
@@ -688,9 +922,9 @@ export default function LunaSphereDesigner() {
 
         if (
           workspace.draft &&
-          !hasCompatibleTopologyStructure(
-            workspace.draft.topology,
-            baselineTopology
+          !hasCompatibleGeographyDocumentStructure(
+            workspace.draft.geography,
+            baselineGeography
           )
         ) {
           throw new Error(
@@ -707,7 +941,7 @@ export default function LunaSphereDesigner() {
         if (announce) {
           setDatabaseNotice(
             workspace.draft
-              ? `Database draft refreshed. Revision ${workspace.draft.topologyRevision} was saved ${formatDatabaseDate(
+              ? `Database draft refreshed. State revision ${workspace.draft.topologyRevision}, territory revision ${workspace.draft.territoryRevision}, saved ${formatDatabaseDate(
                   workspace.draft.savedAt
                 )}.`
               : "No shared database draft has been saved yet."
@@ -729,19 +963,19 @@ export default function LunaSphereDesigner() {
     const timeoutId = window.setTimeout(() => {
       const savedDraft = loadLunaSphereStudioDraft(
         window.localStorage,
-        baselineTopology
+        baselineGeography
       );
 
       if (savedDraft.status === "loaded") {
         dispatchHistory({
           type: "replace",
-          topology: savedDraft.topology,
+          geography: savedDraft.geography,
           recordCurrent: false,
         });
         setLastSavedAt(savedDraft.savedAt);
         setDraftStatus("saved");
         setDraftNotice(
-          `Recovered the local Studio draft saved ${new Date(
+          `${savedDraft.migratedLegacyDraft ? "Migrated and recovered" : "Recovered"} the local Studio geography draft saved ${new Date(
             savedDraft.savedAt
           ).toLocaleString()}.`
         );
@@ -787,7 +1021,7 @@ export default function LunaSphereDesigner() {
 
       const result = saveLunaSphereStudioDraft(
         window.localStorage,
-        workingTopology
+        workingGeography
       );
 
       if (result.ok) {
@@ -803,7 +1037,7 @@ export default function LunaSphereDesigner() {
       window.clearTimeout(savingStatusTimeoutId);
       window.clearTimeout(timeoutId);
     };
-  }, [draftReady, workingTopology]);
+  }, [draftReady, workingGeography]);
 
   useEffect(() => {
     function handleKeyboardShortcut(event: KeyboardEvent) {
@@ -820,6 +1054,7 @@ export default function LunaSphereDesigner() {
           type: event.shiftKey ? "redo" : "undo",
         });
         setSelectedNodeId(null);
+        setSelectedTerritoryPointIndex(null);
         return;
       }
 
@@ -827,26 +1062,50 @@ export default function LunaSphereDesigner() {
         event.preventDefault();
         dispatchHistory({ type: "redo" });
         setSelectedNodeId(null);
+        setSelectedTerritoryPointIndex(null);
         return;
       }
 
       if (
-        (event.key === "Delete" ||
-          event.key === "Backspace") &&
-        selectedNodeId &&
-        removableNodeEdge
+        event.key === "Delete" ||
+        event.key === "Backspace"
       ) {
-        event.preventDefault();
-        dispatchHistory({
-          type: "apply",
-          update: (currentTopology) =>
-            removeTopologyEdgeNode(
-              currentTopology,
-              removableNodeEdge.id,
-              selectedNodeId
-            ),
-        });
-        setSelectedNodeId(null);
+        if (
+          selectedTerritoryId &&
+          selectedTerritoryPointIndex !== null &&
+          selectedTerritoryCanRemovePoint
+        ) {
+          event.preventDefault();
+          dispatchHistory({
+            type: "apply",
+            update: (currentGeography) => ({
+              ...currentGeography,
+              territories: removeSettlementBoundaryPoint(
+                currentGeography.territories,
+                selectedTerritoryId,
+                selectedTerritoryPointIndex
+              ),
+            }),
+          });
+          setSelectedTerritoryPointIndex(null);
+          return;
+        }
+
+        if (selectedNodeId && removableNodeEdge) {
+          event.preventDefault();
+          dispatchHistory({
+            type: "apply",
+            update: (currentGeography) => ({
+              ...currentGeography,
+              topology: removeTopologyEdgeNode(
+                currentGeography.topology,
+                removableNodeEdge.id,
+                selectedNodeId
+              ),
+            }),
+          });
+          setSelectedNodeId(null);
+        }
       }
     }
 
@@ -857,23 +1116,287 @@ export default function LunaSphereDesigner() {
         "keydown",
         handleKeyboardShortcut
       );
-  }, [isPreviewingRelease, removableNodeEdge, selectedNodeId]);
+  }, [
+    isPreviewingRelease,
+    removableNodeEdge,
+    selectedNodeId,
+    selectedTerritoryCanRemovePoint,
+    selectedTerritoryId,
+    selectedTerritoryPointIndex,
+  ]);
 
   function selectState(stateName: string) {
     setSelectedState(stateName);
     setSelectedNodeId(null);
+    setSelectedTerritoryId(null);
+    setSelectedTerritoryPointIndex(null);
+  }
+
+  function selectTerritory(territoryId: string) {
+    const definition = getSettlementDefinition(
+      territoryLayout,
+      territoryId
+    );
+
+    if (!definition) {
+      return;
+    }
+
+    setSelectedState(definition.stateName);
+    setSelectedTerritoryId(territoryId);
+    setSelectedTerritoryPointIndex(null);
+    setSelectedNodeId(null);
+  }
+
+  function updateTerritoryBoundaryFromMap(
+    territoryId: string,
+    pointIndex: number,
+    mapCoordinate: [number, number],
+    incrementRevision: boolean
+  ) {
+    dispatchHistory({
+      type: "preview",
+      update: (currentGeography) => {
+        const definition = getSettlementDefinition(
+          currentGeography.territories,
+          territoryId
+        );
+
+        if (!definition) {
+          return currentGeography;
+        }
+
+        const resolved = resolveStateTerritories(
+          currentGeography.topology,
+          currentGeography.territories,
+          definition.stateName
+        );
+
+        if (!resolved) {
+          return currentGeography;
+        }
+
+        const relativeCoordinate =
+          convertLunarCoordinateToStateRelative(
+            mapCoordinate,
+            resolved.stateBoundary,
+            resolved.interiorOrigin
+          );
+        const territories = moveSettlementBoundaryPoint(
+          currentGeography.territories,
+          territoryId,
+          pointIndex,
+          relativeCoordinate,
+          { incrementRevision }
+        );
+
+        return territories === currentGeography.territories
+          ? currentGeography
+          : {
+              ...currentGeography,
+              territories,
+            };
+      },
+    });
+  }
+
+  function updateTerritoryCenterFromMap(
+    territoryId: string,
+    mapCoordinate: [number, number],
+    incrementRevision: boolean
+  ) {
+    dispatchHistory({
+      type: "preview",
+      update: (currentGeography) => {
+        const definition = getSettlementDefinition(
+          currentGeography.territories,
+          territoryId
+        );
+
+        if (!definition) {
+          return currentGeography;
+        }
+
+        const resolved = resolveStateTerritories(
+          currentGeography.topology,
+          currentGeography.territories,
+          definition.stateName
+        );
+
+        if (!resolved) {
+          return currentGeography;
+        }
+
+        const relativeCoordinate =
+          convertLunarCoordinateToStateRelative(
+            mapCoordinate,
+            resolved.stateBoundary,
+            resolved.interiorOrigin
+          );
+        const territories = moveSettlementCenter(
+          currentGeography.territories,
+          territoryId,
+          relativeCoordinate,
+          { incrementRevision }
+        );
+
+        return territories === currentGeography.territories
+          ? currentGeography
+          : {
+              ...currentGeography,
+              territories,
+            };
+      },
+    });
+  }
+
+  function addSelectedTerritoryPoint(segmentIndex: number) {
+    if (!selectedTerritoryId) {
+      return;
+    }
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        territories: insertSettlementBoundaryPoint(
+          currentGeography.territories,
+          selectedTerritoryId,
+          segmentIndex
+        ),
+      }),
+    });
+    setSelectedTerritoryPointIndex(segmentIndex + 1);
+  }
+
+  function removeSelectedTerritoryPoint() {
+    if (
+      !selectedTerritoryId ||
+      selectedTerritoryPointIndex === null ||
+      !selectedTerritoryCanRemovePoint
+    ) {
+      return;
+    }
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        territories: removeSettlementBoundaryPoint(
+          currentGeography.territories,
+          selectedTerritoryId,
+          selectedTerritoryPointIndex
+        ),
+      }),
+    });
+    setSelectedTerritoryPointIndex(null);
+  }
+
+  function resetSelectedTerritory() {
+    if (!selectedTerritoryId) {
+      return;
+    }
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        territories: restoreSettlementDefinition(
+          currentGeography.territories,
+          baselineTerritoryLayout,
+          selectedTerritoryId
+        ),
+      }),
+    });
+    setSelectedTerritoryPointIndex(null);
+  }
+
+  function resetSelectedStateTerritories() {
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        territories: restoreStateTerritories(
+          currentGeography.territories,
+          baselineTerritoryLayout,
+          selectedState
+        ),
+      }),
+    });
+    setSelectedTerritoryPointIndex(null);
+  }
+
+  function nudgeSelectedTerritoryPoint(
+    deltaY: number,
+    deltaX: number
+  ) {
+    if (
+      !selectedTerritoryId ||
+      selectedTerritoryPointIndex === null ||
+      !selectedTerritoryDefinition
+    ) {
+      return;
+    }
+
+    const point =
+      selectedTerritoryDefinition.boundary[
+        selectedTerritoryPointIndex
+      ];
+
+    if (!point) {
+      return;
+    }
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        territories: moveSettlementBoundaryPoint(
+          currentGeography.territories,
+          selectedTerritoryId,
+          selectedTerritoryPointIndex,
+          [point[0] + deltaY, point[1] + deltaX]
+        ),
+      }),
+    });
+  }
+
+  function nudgeSelectedTerritoryCenter(
+    deltaY: number,
+    deltaX: number
+  ) {
+    if (!selectedTerritoryId || !selectedTerritoryDefinition) {
+      return;
+    }
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        territories: moveSettlementCenter(
+          currentGeography.territories,
+          selectedTerritoryId,
+          [
+            selectedTerritoryDefinition.center[0] + deltaY,
+            selectedTerritoryDefinition.center[1] + deltaX,
+          ]
+        ),
+      }),
+    });
   }
 
   function addControlPoint(target: EdgeSegmentTarget) {
     dispatchHistory({
       type: "apply",
-      update: (currentTopology) =>
-        insertTopologyEdgeNode(
-          currentTopology,
+      update: (currentGeography) => ({
+        ...currentGeography,
+        topology: insertTopologyEdgeNode(
+          currentGeography.topology,
           target.edgeId,
           target.segmentIndex,
           target.position
         ),
+      }),
     });
     setSelectedNodeId(null);
   }
@@ -885,12 +1408,14 @@ export default function LunaSphereDesigner() {
 
     dispatchHistory({
       type: "apply",
-      update: (currentTopology) =>
-        removeTopologyEdgeNode(
-          currentTopology,
+      update: (currentGeography) => ({
+        ...currentGeography,
+        topology: removeTopologyEdgeNode(
+          currentGeography.topology,
           removableNodeEdge.id,
           selectedNodeId
         ),
+      }),
     });
     setSelectedNodeId(null);
   }
@@ -902,27 +1427,31 @@ export default function LunaSphereDesigner() {
 
     dispatchHistory({
       type: "apply",
-      update: (currentTopology) =>
-        moveTopologyNode(
-          currentTopology,
+      update: (currentGeography) => ({
+        ...currentGeography,
+        topology: moveTopologyNode(
+          currentGeography.topology,
           selectedNode.id,
           [
             selectedNode.coordinate[0] + deltaY,
             selectedNode.coordinate[1] + deltaX,
           ]
         ),
+      }),
     });
   }
 
   function resetSelectedState() {
     dispatchHistory({
       type: "apply",
-      update: (currentTopology) =>
-        restoreTopologyState(
-          currentTopology,
+      update: (currentGeography) => ({
+        ...currentGeography,
+        topology: restoreTopologyState(
+          currentGeography.topology,
           baselineTopology,
           selectedState
         ),
+      }),
     });
     setSelectedNodeId(null);
   }
@@ -930,7 +1459,10 @@ export default function LunaSphereDesigner() {
   function resetAllStates() {
     dispatchHistory({
       type: "apply",
-      update: () => cloneTopology(baselineTopology),
+      update: (currentGeography) => ({
+        ...currentGeography,
+        topology: cloneTopology(baselineTopology),
+      }),
     });
     setSelectedNodeId(null);
   }
@@ -938,23 +1470,25 @@ export default function LunaSphereDesigner() {
   function undo() {
     dispatchHistory({ type: "undo" });
     setSelectedNodeId(null);
+    setSelectedTerritoryPointIndex(null);
   }
 
   function redo() {
     dispatchHistory({ type: "redo" });
     setSelectedNodeId(null);
+    setSelectedTerritoryPointIndex(null);
   }
 
   function saveDraftNow() {
     const result = saveLunaSphereStudioDraft(
       window.localStorage,
-      workingTopology
+      workingGeography
     );
 
     if (result.ok) {
       setLastSavedAt(result.savedAt);
       setDraftStatus("saved");
-      setDraftNotice("The current topology draft was saved locally.");
+      setDraftNotice("The current geography draft was saved locally.");
     } else {
       setDraftStatus("error");
       setDraftNotice(result.message);
@@ -964,13 +1498,13 @@ export default function LunaSphereDesigner() {
   function reloadSavedDraft() {
     const savedDraft = loadLunaSphereStudioDraft(
       window.localStorage,
-      baselineTopology
+      baselineGeography
     );
 
     if (savedDraft.status === "loaded") {
       dispatchHistory({
         type: "replace",
-        topology: savedDraft.topology,
+        geography: savedDraft.geography,
         recordCurrent: true,
       });
       setLastSavedAt(savedDraft.savedAt);
@@ -1012,7 +1546,7 @@ export default function LunaSphereDesigner() {
   async function saveDatabaseDraft() {
     if (!workingValidation.valid) {
       setDatabaseNotice(
-        "Fix the topology errors before saving the shared database draft."
+        "Fix all state and settlement geography errors before saving the shared database draft."
       );
       return;
     }
@@ -1026,7 +1560,7 @@ export default function LunaSphereDesigner() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          topology: workingTopology,
+          geography: workingGeography,
           expectedSavedAt: databaseDraft?.savedAt ?? null,
         }),
       });
@@ -1035,9 +1569,9 @@ export default function LunaSphereDesigner() {
       }>(response);
 
       if (
-        !hasCompatibleTopologyStructure(
-          result.draft.topology,
-          baselineTopology
+        !hasCompatibleGeographyDocumentStructure(
+          result.draft.geography,
+          baselineGeography
         )
       ) {
         throw new Error(
@@ -1048,7 +1582,7 @@ export default function LunaSphereDesigner() {
       setDatabaseDraft(result.draft);
       setDatabaseStatus("ready");
       setDatabaseNotice(
-        `Shared database draft saved at revision ${result.draft.topologyRevision}.`
+        `Shared database draft saved at state revision ${result.draft.topologyRevision} and territory revision ${result.draft.territoryRevision}.`
       );
     } catch (error) {
       setDatabaseStatus("error");
@@ -1069,9 +1603,9 @@ export default function LunaSphereDesigner() {
     }
 
     if (
-      !hasCompatibleTopologyStructure(
-        databaseDraft.topology,
-        baselineTopology
+      !hasCompatibleGeographyDocumentStructure(
+        databaseDraft.geography,
+        baselineGeography
       )
     ) {
       setDatabaseStatus("error");
@@ -1083,26 +1617,26 @@ export default function LunaSphereDesigner() {
 
     dispatchHistory({
       type: "replace",
-      topology: databaseDraft.topology,
+      geography: databaseDraft.geography,
       recordCurrent: true,
     });
     setSelectedNodeId(null);
     setDatabaseStatus("ready");
     setDatabaseNotice(
-      `Loaded shared database draft revision ${databaseDraft.topologyRevision}. Your previous open version can be restored with Undo.`
+      `Loaded shared database draft state revision ${databaseDraft.topologyRevision} and territory revision ${databaseDraft.territoryRevision}. Your previous open version can be restored with Undo.`
     );
   }
 
   async function publishDatabaseRelease() {
     if (!workingValidation.valid) {
       setDatabaseNotice(
-        "Fix the topology errors before publishing a geography release."
+        "Fix all state and settlement geography errors before publishing a release."
       );
       return;
     }
 
     const confirmed = window.confirm(
-      "Publish this validated topology as the next immutable LunaSphere geography release? Publishing records the release, but the public Moon Map will not change unless that release is explicitly activated."
+      "Publish this validated state, city, and town geography as the next immutable LunaSphere release? Publishing records the release, but the public Moon Map will continue using only the state layer until later settlement activation work."
     );
 
     if (!confirmed) {
@@ -1119,7 +1653,7 @@ export default function LunaSphereDesigner() {
           headers: {
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ topology: workingTopology }),
+          body: JSON.stringify({ geography: workingGeography }),
         }
       );
       const result = await readResponseBody<{
@@ -1163,9 +1697,9 @@ export default function LunaSphereDesigner() {
       }>(response);
 
       if (
-        !hasCompatibleTopologyStructure(
-          result.release.topology,
-          baselineTopology
+        !hasCompatibleGeographyDocumentStructure(
+          result.release.geography,
+          baselineGeography
         )
       ) {
         throw new Error(
@@ -1208,20 +1742,32 @@ export default function LunaSphereDesigner() {
       return;
     }
 
-    const copiedTopology: LunaSphereTopology = {
-      ...cloneTopology(releasePreview.topology),
+    const copiedGeography = cloneGeographyDocument(
+      releasePreview.geography
+    );
+    copiedGeography.topology = {
+      ...copiedGeography.topology,
       status: "draft",
       revision:
         Math.max(
           workingTopology.revision,
-          releasePreview.topology.revision
+          releasePreview.geography.topology.revision
+        ) + 1,
+    };
+    copiedGeography.territories = {
+      ...copiedGeography.territories,
+      status: "draft",
+      revision:
+        Math.max(
+          workingTerritoryLayout.revision,
+          releasePreview.geography.territories.revision
         ) + 1,
     };
     const releaseNumber = releasePreview.releaseNumber;
 
     dispatchHistory({
       type: "replace",
-      topology: copiedTopology,
+      geography: copiedGeography,
       recordCurrent: true,
     });
     setReleasePreview(null);
@@ -1280,6 +1826,7 @@ export default function LunaSphereDesigner() {
   function exportSelectedState() {
     if (
       !validation.valid ||
+      !territoryValidation.valid ||
       !selectedRegion ||
       !selectedTopologyState
     ) {
@@ -1306,18 +1853,22 @@ export default function LunaSphereDesigner() {
             Number(x.toFixed(4)),
           ]),
         },
+        territories: getSettlementDefinitionsForState(
+          territoryLayout,
+          selectedState
+        ),
       }
     );
   }
 
   function exportAllStates() {
-    if (!validation.valid) {
+    if (!validation.valid || !territoryValidation.valid) {
       return;
     }
 
     downloadJson(
-      `lunasphere-topology-draft-r${topology.revision}.json`,
-      topology
+      `lunasphere-geography-draft-state-r${topology.revision}-territory-r${territoryLayout.revision}.json`,
+      geography
     );
   }
 
@@ -1335,9 +1886,9 @@ export default function LunaSphereDesigner() {
     databaseStatus === "activating";
   const databaseDraftIsCurrent =
     databaseDraft !== null &&
-    topologiesHaveSameContent(
-      databaseDraft.topology,
-      workingTopology
+    geographiesHaveSameContent(
+      databaseDraft.geography,
+      workingGeography
     );
   const databaseStatusLabel =
     databaseStatus === "loading"
@@ -1353,7 +1904,7 @@ export default function LunaSphereDesigner() {
           : databaseStatus === "error"
             ? "Database error"
             : databaseDraft
-              ? `Database revision ${databaseDraft.topologyRevision}${
+              ? `State r${databaseDraft.topologyRevision} · Territory r${databaseDraft.territoryRevision}${
                   databaseDraftIsCurrent ? " · current" : " · differs"
                 }`
               : "No database draft";
@@ -1430,6 +1981,37 @@ export default function LunaSphereDesigner() {
               </div>
             </div>
 
+            <label className="min-w-72">
+              <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-zinc-400">
+                Selected city or town
+              </span>
+              <select
+                value={selectedTerritoryId ?? ""}
+                onChange={(event) => {
+                  const territoryId = event.target.value;
+                  if (territoryId) {
+                    selectTerritory(territoryId);
+                  } else {
+                    setSelectedTerritoryId(null);
+                    setSelectedTerritoryPointIndex(null);
+                  }
+                }}
+                disabled={
+                  territoryDisplayMode === "states" ||
+                  visibleSettlementOptions.length === 0
+                }
+                className="w-full rounded-xl border border-white/15 bg-black px-4 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <option value="">Choose a territory</option>
+                {visibleSettlementOptions.map((territory) => (
+                  <option key={territory.id} value={territory.id}>
+                    {territory.kind === "city" ? "City" : "Town"}{" "}
+                    {territory.territoryNumber}: {territory.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
             <button
               type="button"
               onClick={undo}
@@ -1483,6 +2065,24 @@ export default function LunaSphereDesigner() {
 
             <button
               type="button"
+              onClick={resetSelectedTerritory}
+              disabled={isPreviewingRelease || !selectedTerritoryId}
+              className="rounded-xl border border-cyan-300/30 px-4 py-3 text-sm font-bold text-cyan-100 enabled:hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              Reset Selected Territory
+            </button>
+
+            <button
+              type="button"
+              onClick={resetSelectedStateTerritories}
+              disabled={isPreviewingRelease}
+              className="rounded-xl border border-amber-300/30 px-4 py-3 text-sm font-bold text-amber-100 enabled:hover:bg-amber-400/10 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              Reset State Cities & Towns
+            </button>
+
+            <button
+              type="button"
               onClick={reloadSavedDraft}
               disabled={isPreviewingRelease || !lastSavedAt}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
@@ -1502,7 +2102,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={exportSelectedState}
-              disabled={!validation.valid}
+              disabled={!validation.valid || !territoryValidation.valid}
               className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black text-black enabled:hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Export Selected State
@@ -1511,10 +2111,10 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={exportAllStates}
-              disabled={!validation.valid}
+              disabled={!validation.valid || !territoryValidation.valid}
               className="rounded-xl bg-white px-4 py-3 text-sm font-black text-black enabled:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-35"
             >
-              Export Topology Draft
+              Export Geography Draft
             </button>
           </div>
 
@@ -1525,10 +2125,10 @@ export default function LunaSphereDesigner() {
                   Shared Database Workspace
                 </p>
                 <p className="mt-1 text-sm text-violet-50/75">
-                  Save one cross-device state draft, publish immutable
-                  releases, preview any release, and choose the state release
-                  used by the public Moon Map. Nested city and town territory
-                  persistence will be connected in a later controlled milestone.
+                  Save one cross-device geography draft, including states,
+                  cities, and towns. Publish immutable releases, preview any
+                  release, and choose the release whose state layer is used by
+                  the public Moon Map.
                 </p>
               </div>
 
@@ -1595,7 +2195,7 @@ export default function LunaSphereDesigner() {
 
             {!databaseDraftIsCurrent && databaseDraft && (
               <p className="mt-3 text-xs font-bold text-amber-200">
-                The open topology differs from the shared database draft.
+                The open geography differs from the shared database draft.
                 Save it to the database before publishing a release.
               </p>
             )}
@@ -1604,7 +2204,7 @@ export default function LunaSphereDesigner() {
               <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-violet-50/80">
                 <strong className="text-violet-100">Database draft:</strong>{" "}
                 {databaseDraft
-                  ? `Revision ${databaseDraft.topologyRevision}, saved ${formatDatabaseDate(
+                  ? `State r${databaseDraft.topologyRevision} · Territory r${databaseDraft.territoryRevision}, saved ${formatDatabaseDate(
                       databaseDraft.savedAt
                     )}`
                   : "Not saved yet"}
@@ -1613,7 +2213,7 @@ export default function LunaSphereDesigner() {
               <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-violet-50/80">
                 <strong className="text-violet-100">Latest release:</strong>{" "}
                 {latestRelease
-                  ? `Release ${latestRelease.releaseNumber}, revision ${latestRelease.topologyRevision}, published ${formatDatabaseDate(
+                  ? `Release ${latestRelease.releaseNumber}, state r${latestRelease.topologyRevision} · territory r${latestRelease.territoryRevision}, published ${formatDatabaseDate(
                       latestRelease.publishedAt
                     )}`
                   : "No releases published yet"}
@@ -1687,7 +2287,7 @@ export default function LunaSphereDesigner() {
                             )}
                           </div>
                           <p className="mt-1 text-xs text-zinc-400">
-                            Revision {release.topologyRevision} · Published {formatDatabaseDate(
+                            State r{release.topologyRevision} · Territory r{release.territoryRevision} · Published {formatDatabaseDate(
                               release.publishedAt
                             )}
                           </p>
@@ -1848,152 +2448,314 @@ export default function LunaSphereDesigner() {
               {resolvedTerritories &&
                 (territoryDisplayMode === "city" ||
                   territoryDisplayMode === "all") &&
-                resolvedTerritories.cities.map((city) => (
-                  <Polygon
-                    key={`territory-${city.id}`}
-                    positions={city.boundary}
-                    pathOptions={{
-                      color: "#22d3ee",
-                      weight: 2,
-                      opacity: 0.95,
-                      fillColor: "#0891b2",
-                      fillOpacity: 0.22,
-                    }}
-                  >
-                    <Popup>
-                      <strong>{city.name}</strong>
-                      <br />
-                      City {city.territoryNumber} · {city.stateName}
-                      <br />
-                      Area {city.area.toFixed(1)}
-                    </Popup>
-                  </Polygon>
-                ))}
+                resolvedTerritories.cities.map((city) => {
+                  const isSelected = city.id === selectedTerritoryId;
+
+                  return (
+                    <Polygon
+                      key={`territory-${city.id}`}
+                      positions={city.boundary}
+                      pathOptions={{
+                        color: isSelected ? "#ffffff" : "#22d3ee",
+                        weight: isSelected ? 4 : 2,
+                        opacity: 0.95,
+                        fillColor: "#0891b2",
+                        fillOpacity: isSelected ? 0.4 : 0.22,
+                      }}
+                      eventHandlers={{
+                        click: () => selectTerritory(city.id),
+                      }}
+                    >
+                      <Popup>
+                        <strong>{city.name}</strong>
+                        <br />
+                        City {city.territoryNumber} · {city.stateName}
+                        <br />
+                        Area {city.area.toFixed(1)}
+                        <br />
+                        Click to edit
+                      </Popup>
+                    </Polygon>
+                  );
+                })}
 
               {resolvedTerritories &&
                 (territoryDisplayMode === "town" ||
                   territoryDisplayMode === "all") &&
-                resolvedTerritories.towns.map((town) => (
-                  <Polygon
-                    key={`territory-${town.id}`}
-                    positions={town.boundary}
+                resolvedTerritories.towns.map((town) => {
+                  const isSelected = town.id === selectedTerritoryId;
+
+                  return (
+                    <Polygon
+                      key={`territory-${town.id}`}
+                      positions={town.boundary}
+                      pathOptions={{
+                        color: isSelected ? "#ffffff" : "#f59e0b",
+                        weight: isSelected ? 3.5 : 1.4,
+                        opacity: 0.9,
+                        fillColor: "#d97706",
+                        fillOpacity: isSelected ? 0.4 : 0.2,
+                      }}
+                      eventHandlers={{
+                        click: () => selectTerritory(town.id),
+                      }}
+                    >
+                      <Popup>
+                        <strong>{town.name}</strong>
+                        <br />
+                        Town {town.territoryNumber} · {town.stateName}
+                        <br />
+                        Area {town.area.toFixed(1)}
+                        <br />
+                        Click to edit
+                      </Popup>
+                    </Polygon>
+                  );
+                })}
+
+              {showStateEditingHandles &&
+                selectedEdges.map((edge) => (
+                  <Polyline
+                    key={`${selectedState}-${edge.id}`}
+                    positions={createEdgePositions(edge, nodeById)}
                     pathOptions={{
-                      color: "#f59e0b",
-                      weight: 1.4,
+                      color:
+                        edge.kind === "moon-perimeter"
+                          ? "#38bdf8"
+                          : "#facc15",
+                      weight: 4,
                       opacity: 0.9,
-                      fillColor: "#d97706",
-                      fillOpacity: 0.2,
+                      dashArray:
+                        edge.kind === "moon-perimeter"
+                          ? "8 7"
+                          : undefined,
                     }}
-                  >
-                    <Popup>
-                      <strong>{town.name}</strong>
-                      <br />
-                      Town {town.territoryNumber} · {town.stateName}
-                      <br />
-                      Area {town.area.toFixed(1)}
-                    </Popup>
-                  </Polygon>
+                  />
                 ))}
 
-              {selectedEdges.map((edge) => (
-                <Polyline
-                  key={`${selectedState}-${edge.id}`}
-                  positions={createEdgePositions(edge, nodeById)}
-                  pathOptions={{
-                    color:
-                      edge.kind === "moon-perimeter"
-                        ? "#38bdf8"
-                        : "#facc15",
-                    weight: 4,
-                    opacity: 0.9,
-                    dashArray:
-                      edge.kind === "moon-perimeter"
-                        ? "8 7"
-                        : undefined,
-                  }}
-                />
-              ))}
+              {!isPreviewingRelease &&
+                showStateEditingHandles &&
+                edgeSegmentTargets.map((target) => (
+                  <Marker
+                    key={target.key}
+                    position={target.position}
+                    icon={addVertexIcon}
+                    eventHandlers={{
+                      click: () => addControlPoint(target),
+                    }}
+                  >
+                    <Popup>Add a state-border control point</Popup>
+                  </Marker>
+                ))}
 
-              {!isPreviewingRelease && edgeSegmentTargets.map((target) => (
-                <Marker
-                  key={target.key}
-                  position={target.position}
-                  icon={addVertexIcon}
-                  eventHandlers={{
-                    click: () => addControlPoint(target),
-                  }}
-                >
-                  <Popup>Add a border control point</Popup>
-                </Marker>
-              ))}
+              {showStateEditingHandles &&
+                selectedNodes.map((node) => (
+                  <Marker
+                    key={node.id}
+                    position={node.coordinate}
+                    icon={
+                      node.id === selectedNodeId
+                        ? selectedVertexIcon
+                        : vertexIcon
+                    }
+                    draggable={!isPreviewingRelease}
+                    eventHandlers={{
+                      click: () => {
+                        setSelectedNodeId(node.id);
+                        setSelectedTerritoryId(null);
+                        setSelectedTerritoryPointIndex(null);
+                      },
+                      dragstart: () => {
+                        dragBaselineRef.current =
+                          cloneGeographyDocument(geography);
+                        setSelectedNodeId(node.id);
+                        setSelectedTerritoryId(null);
+                        setSelectedTerritoryPointIndex(null);
+                      },
+                      drag: (event) => {
+                        const nextPosition = event.target.getLatLng();
 
-              {selectedNodes.map((node) => (
-                <Marker
-                  key={node.id}
-                  position={node.coordinate}
-                  icon={
-                    node.id === selectedNodeId
-                      ? selectedVertexIcon
-                      : vertexIcon
-                  }
-                  draggable={!isPreviewingRelease}
-                  eventHandlers={{
-                    click: () => setSelectedNodeId(node.id),
-                    dragstart: () => {
-                      dragBaselineRef.current =
-                        cloneTopology(topology);
-                      setSelectedNodeId(node.id);
-                    },
-                    drag: (event) => {
-                      const nextPosition =
-                        event.target.getLatLng();
-
-                      dispatchHistory({
-                        type: "preview",
-                        update: (currentTopology) =>
-                          moveTopologyNode(
-                            currentTopology,
-                            node.id,
-                            [
-                              nextPosition.lat,
-                              nextPosition.lng,
-                            ],
-                            { incrementRevision: false }
-                          ),
-                      });
-                    },
-                    dragend: (event) => {
-                      const baseline = dragBaselineRef.current;
-                      const nextPosition =
-                        event.target.getLatLng();
-
-                      dispatchHistory({
-                        type: "preview",
-                        update: (currentTopology) =>
-                          moveTopologyNode(
-                            currentTopology,
-                            node.id,
-                            [
-                              nextPosition.lat,
-                              nextPosition.lng,
-                            ],
-                            { incrementRevision: false }
-                          ),
-                      });
-
-                      if (baseline) {
                         dispatchHistory({
-                          type: "commit-preview",
-                          baseline,
-                          nodeId: node.id,
+                          type: "preview",
+                          update: (currentGeography) => ({
+                            ...currentGeography,
+                            topology: moveTopologyNode(
+                              currentGeography.topology,
+                              node.id,
+                              [nextPosition.lat, nextPosition.lng],
+                              { incrementRevision: false }
+                            ),
+                          }),
                         });
-                      }
+                      },
+                      dragend: (event) => {
+                        const baseline = dragBaselineRef.current;
+                        const nextPosition = event.target.getLatLng();
 
-                      dragBaselineRef.current = null;
-                    },
-                  }}
-                />
-              ))}
+                        dispatchHistory({
+                          type: "preview",
+                          update: (currentGeography) => ({
+                            ...currentGeography,
+                            topology: moveTopologyNode(
+                              currentGeography.topology,
+                              node.id,
+                              [nextPosition.lat, nextPosition.lng],
+                              { incrementRevision: false }
+                            ),
+                          }),
+                        });
+
+                        if (baseline) {
+                          dispatchHistory({
+                            type: "commit-preview",
+                            baseline,
+                          });
+                        }
+
+                        dragBaselineRef.current = null;
+                      },
+                    }}
+                  />
+                ))}
+
+              {showTerritoryEditingHandles &&
+                selectedResolvedTerritory && (
+                  <>
+                    <Marker
+                      key={`${selectedResolvedTerritory.id}-center`}
+                      position={selectedResolvedTerritory.center}
+                      icon={
+                        selectedResolvedTerritory.kind === "city"
+                          ? cityTerritoryCenterIcon
+                          : townTerritoryCenterIcon
+                      }
+                      draggable={!isPreviewingRelease}
+                      eventHandlers={{
+                        dragstart: () => {
+                          dragBaselineRef.current =
+                            cloneGeographyDocument(geography);
+                          setSelectedTerritoryPointIndex(null);
+                        },
+                        drag: (event) => {
+                          const nextPosition = event.target.getLatLng();
+                          updateTerritoryCenterFromMap(
+                            selectedResolvedTerritory.id,
+                            [nextPosition.lat, nextPosition.lng],
+                            false
+                          );
+                        },
+                        dragend: (event) => {
+                          const baseline = dragBaselineRef.current;
+                          const nextPosition = event.target.getLatLng();
+                          updateTerritoryCenterFromMap(
+                            selectedResolvedTerritory.id,
+                            [nextPosition.lat, nextPosition.lng],
+                            false
+                          );
+
+                          if (baseline) {
+                            dispatchHistory({
+                              type: "commit-preview",
+                              baseline,
+                            });
+                          }
+
+                          dragBaselineRef.current = null;
+                        },
+                      }}
+                    >
+                      <Popup>Drag to move the entire territory</Popup>
+                    </Marker>
+
+                    {!isPreviewingRelease &&
+                      selectedTerritorySegmentTargets.map((target) => (
+                        <Marker
+                          key={target.key}
+                          position={target.position}
+                          icon={
+                            selectedResolvedTerritory.kind === "city"
+                              ? cityTerritoryAddIcon
+                              : townTerritoryAddIcon
+                          }
+                          eventHandlers={{
+                            click: () =>
+                              addSelectedTerritoryPoint(
+                                target.segmentIndex
+                              ),
+                          }}
+                        >
+                          <Popup>Add a territory boundary point</Popup>
+                        </Marker>
+                      ))}
+
+                    {selectedResolvedTerritory.boundary.map(
+                      (position, pointIndex) => (
+                        <Marker
+                          key={`${selectedResolvedTerritory.id}-point-${pointIndex}`}
+                          position={position}
+                          icon={
+                            selectedResolvedTerritory.kind === "city"
+                              ? pointIndex ===
+                                selectedTerritoryPointIndex
+                                ? selectedCityTerritoryVertexIcon
+                                : cityTerritoryVertexIcon
+                              : pointIndex ===
+                                  selectedTerritoryPointIndex
+                                ? selectedTownTerritoryVertexIcon
+                                : townTerritoryVertexIcon
+                          }
+                          draggable={!isPreviewingRelease}
+                          eventHandlers={{
+                            click: () => {
+                              setSelectedTerritoryPointIndex(
+                                pointIndex
+                              );
+                              setSelectedNodeId(null);
+                            },
+                            dragstart: () => {
+                              dragBaselineRef.current =
+                                cloneGeographyDocument(geography);
+                              setSelectedTerritoryPointIndex(
+                                pointIndex
+                              );
+                              setSelectedNodeId(null);
+                            },
+                            drag: (event) => {
+                              const nextPosition =
+                                event.target.getLatLng();
+                              updateTerritoryBoundaryFromMap(
+                                selectedResolvedTerritory.id,
+                                pointIndex,
+                                [nextPosition.lat, nextPosition.lng],
+                                false
+                              );
+                            },
+                            dragend: (event) => {
+                              const baseline = dragBaselineRef.current;
+                              const nextPosition =
+                                event.target.getLatLng();
+                              updateTerritoryBoundaryFromMap(
+                                selectedResolvedTerritory.id,
+                                pointIndex,
+                                [nextPosition.lat, nextPosition.lng],
+                                false
+                              );
+
+                              if (baseline) {
+                                dispatchHistory({
+                                  type: "commit-preview",
+                                  baseline,
+                                });
+                              }
+
+                              dragBaselineRef.current = null;
+                            },
+                          }}
+                        />
+                      )
+                    )}
+                  </>
+                )}
             </MapContainer>
           </div>
 
@@ -2009,10 +2771,10 @@ export default function LunaSphereDesigner() {
             <div className="mt-5 grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-xl border border-white/10 bg-black p-3">
                 <p className="text-xs uppercase tracking-wider text-zinc-500">
-                  Revision
+                  Revisions
                 </p>
-                <p className="mt-1 text-xl font-black">
-                  {topology.revision}
+                <p className="mt-1 text-lg font-black">
+                  State {topology.revision} · Territory {territoryLayout.revision}
                 </p>
               </div>
 
@@ -2039,7 +2801,7 @@ export default function LunaSphereDesigner() {
 
               <div
                 className={`rounded-xl border p-3 ${
-                  validation.valid
+                  workingValidation.valid
                     ? "border-emerald-400/30 bg-emerald-400/10"
                     : "border-red-400/30 bg-red-400/10"
                 }`}
@@ -2048,7 +2810,7 @@ export default function LunaSphereDesigner() {
                   Validation
                 </p>
                 <p className="mt-1 text-xl font-black">
-                  {validation.valid ? "Valid" : "Review"}
+                  {workingValidation.valid ? "Valid" : "Review"}
                 </p>
               </div>
             </div>
@@ -2147,6 +2909,118 @@ export default function LunaSphereDesigner() {
                   saleable blocks.
                 </p>
               </div>
+
+              {selectedResolvedTerritory &&
+                selectedTerritoryDefinition && (
+                  <div
+                    className={`rounded-xl border p-3 ${
+                      selectedResolvedTerritory.kind === "city"
+                        ? "border-cyan-400/30 bg-cyan-400/10 text-cyan-50"
+                        : "border-amber-400/30 bg-amber-400/10 text-amber-50"
+                    }`}
+                  >
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-70">
+                      Selected {selectedResolvedTerritory.kind}
+                    </p>
+                    <p className="mt-1 text-lg font-black">
+                      {selectedResolvedTerritory.name}
+                    </p>
+                    <p className="mt-1 font-mono text-[11px] opacity-70">
+                      {selectedResolvedTerritory.id} · Territory revision{" "}
+                      {territoryLayout.revision}
+                    </p>
+                    <p className="mt-2 text-xs opacity-80">
+                      Drag the diamond to move the entire territory. Drag the
+                      circular handles to reshape its boundary. Plus handles
+                      add detail points.
+                    </p>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-black">
+                      <span />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          selectedTerritoryPointIndex === null
+                            ? nudgeSelectedTerritoryCenter(-0.005, 0)
+                            : nudgeSelectedTerritoryPoint(-0.005, 0)
+                        }
+                        disabled={isPreviewingRelease}
+                        className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
+                      >
+                        ↑
+                      </button>
+                      <span />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          selectedTerritoryPointIndex === null
+                            ? nudgeSelectedTerritoryCenter(0, -0.005)
+                            : nudgeSelectedTerritoryPoint(0, -0.005)
+                        }
+                        disabled={isPreviewingRelease}
+                        className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
+                      >
+                        ←
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          selectedTerritoryPointIndex === null
+                            ? nudgeSelectedTerritoryCenter(0.005, 0)
+                            : nudgeSelectedTerritoryPoint(0.005, 0)
+                        }
+                        disabled={isPreviewingRelease}
+                        className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          selectedTerritoryPointIndex === null
+                            ? nudgeSelectedTerritoryCenter(0, 0.005)
+                            : nudgeSelectedTerritoryPoint(0, 0.005)
+                        }
+                        disabled={isPreviewingRelease}
+                        className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
+                      >
+                        →
+                      </button>
+                    </div>
+
+                    <p className="mt-2 text-[11px] opacity-75">
+                      {selectedTerritoryPointIndex === null
+                        ? "Precision controls move the entire territory."
+                        : `Boundary point ${selectedTerritoryPointIndex + 1} of ${selectedTerritoryDefinition.boundary.length} selected.`}
+                    </p>
+
+                    <div className="mt-3 grid gap-2">
+                      <button
+                        type="button"
+                        onClick={removeSelectedTerritoryPoint}
+                        disabled={
+                          isPreviewingRelease ||
+                          !selectedTerritoryCanRemovePoint
+                        }
+                        className="rounded-lg border border-white/25 px-3 py-2 text-xs font-black enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        {selectedTerritoryPointIndex === null
+                          ? "Select a Boundary Point to Remove"
+                          : selectedTerritoryCanRemovePoint
+                            ? "Remove Selected Boundary Point"
+                            : "Minimum Boundary Detail Reached"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetSelectedTerritory}
+                        disabled={isPreviewingRelease}
+                        className="rounded-lg border border-white/25 px-3 py-2 text-xs font-black enabled:hover:bg-white/10 disabled:opacity-40"
+                      >
+                        Reset This Territory
+                      </button>
+                    </div>
+                  </div>
+                )}
 
               {selectedNode && (
                 <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-3">
