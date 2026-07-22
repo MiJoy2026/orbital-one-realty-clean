@@ -821,20 +821,149 @@ export function restoreTopologyState(
   };
 }
 
+type MoveTopologyNodeOptions = {
+  incrementRevision?: boolean;
+};
+
+function projectCoordinateToRadius(
+  coordinate: LunarCoordinate,
+  radius: number,
+  fallbackCoordinate?: LunarCoordinate
+): MutableLunarCoordinate {
+  const deltaX = coordinate[1] - LUNAR_CANVAS.centerX;
+  const deltaY = coordinate[0] - LUNAR_CANVAS.centerY;
+  const distance = Math.hypot(deltaX, deltaY);
+
+  if (distance > DEFAULT_COMPARISON_TOLERANCE) {
+    const scale = radius / distance;
+
+    return [
+      LUNAR_CANVAS.centerY + deltaY * scale,
+      LUNAR_CANVAS.centerX + deltaX * scale,
+    ];
+  }
+
+  if (fallbackCoordinate) {
+    return projectCoordinateToRadius(
+      fallbackCoordinate,
+      radius
+    );
+  }
+
+  return [
+    LUNAR_CANVAS.centerY,
+    LUNAR_CANVAS.centerX + radius,
+  ];
+}
+
+function constrainCoordinateToSaleableMoon(
+  coordinate: LunarCoordinate,
+  options: {
+    lockToPerimeter: boolean;
+    fallbackCoordinate?: LunarCoordinate;
+  }
+): MutableLunarCoordinate {
+  const deltaX = coordinate[1] - LUNAR_CANVAS.centerX;
+  const deltaY = coordinate[0] - LUNAR_CANVAS.centerY;
+  const distance = Math.hypot(deltaX, deltaY);
+
+  if (options.lockToPerimeter) {
+    return projectCoordinateToRadius(
+      coordinate,
+      LUNAR_CANVAS.saleableRadius,
+      options.fallbackCoordinate
+    );
+  }
+
+  if (distance <= LUNAR_CANVAS.saleableRadius) {
+    return [coordinate[0], coordinate[1]];
+  }
+
+  return projectCoordinateToRadius(
+    coordinate,
+    LUNAR_CANVAS.saleableRadius,
+    options.fallbackCoordinate
+  );
+}
+
+export function constrainTopologyEdgeCoordinate(
+  topology: LunaSphereTopology,
+  edgeId: string,
+  coordinate: LunarCoordinate
+): MutableLunarCoordinate {
+  const edge = topology.edges.find(
+    (candidate) => candidate.id === edgeId
+  );
+
+  const firstNode = edge
+    ? topology.nodes.find(
+        (node) => node.id === edge.nodeIds[0]
+      )
+    : undefined;
+
+  if (!edge || !isFiniteCoordinate(coordinate)) {
+    return firstNode
+      ? [firstNode.coordinate[0], firstNode.coordinate[1]]
+      : [LUNAR_CANVAS.centerY, LUNAR_CANVAS.centerX];
+  }
+
+  return normalizeCoordinate(
+    constrainCoordinateToSaleableMoon(coordinate, {
+      lockToPerimeter: edge.kind === "moon-perimeter",
+      fallbackCoordinate: firstNode?.coordinate,
+    }),
+    topology.coordinatePrecision
+  );
+}
+
+export function constrainTopologyNodeCoordinate(
+  topology: LunaSphereTopology,
+  nodeId: string,
+  coordinate: LunarCoordinate
+): MutableLunarCoordinate {
+  const node = topology.nodes.find(
+    (candidate) => candidate.id === nodeId
+  );
+
+  if (!node || !isFiniteCoordinate(coordinate)) {
+    return node
+      ? [node.coordinate[0], node.coordinate[1]]
+      : [coordinate[0], coordinate[1]];
+  }
+
+  const lockToPerimeter = topology.edges.some(
+    (edge) =>
+      edge.kind === "moon-perimeter" &&
+      edge.nodeIds.includes(nodeId)
+  );
+
+  return normalizeCoordinate(
+    constrainCoordinateToSaleableMoon(coordinate, {
+      lockToPerimeter,
+      fallbackCoordinate: node.coordinate,
+    }),
+    topology.coordinatePrecision
+  );
+}
+
 export function moveTopologyNode(
   topology: LunaSphereTopology,
   nodeId: string,
-  nextCoordinate: LunarCoordinate
+  nextCoordinate: LunarCoordinate,
+  options: MoveTopologyNodeOptions = {}
 ): LunaSphereTopology {
   if (!isFiniteCoordinate(nextCoordinate)) {
     return topology;
   }
 
-  const normalizedCoordinate = normalizeCoordinate(
-    nextCoordinate,
-    topology.coordinatePrecision
-  );
+  const normalizedCoordinate =
+    constrainTopologyNodeCoordinate(
+      topology,
+      nodeId,
+      nextCoordinate
+    );
   let nodeWasFound = false;
+  let coordinateChanged = false;
 
   const nodes = topology.nodes.map((node) => {
     if (node.id !== nodeId) {
@@ -842,20 +971,32 @@ export function moveTopologyNode(
     }
 
     nodeWasFound = true;
+    coordinateChanged = !coordinatesAreEqual(
+      node.coordinate,
+      normalizedCoordinate,
+      10 ** -topology.coordinatePrecision
+    );
 
-    return {
-      ...node,
-      coordinate: normalizedCoordinate,
-    };
+    return coordinateChanged
+      ? {
+          ...node,
+          coordinate: normalizedCoordinate,
+        }
+      : node;
   });
 
-  return nodeWasFound
-    ? {
-        ...topology,
-        revision: topology.revision + 1,
-        nodes,
-      }
-    : topology;
+  if (!nodeWasFound || !coordinateChanged) {
+    return topology;
+  }
+
+  return {
+    ...topology,
+    revision:
+      options.incrementRevision === false
+        ? topology.revision
+        : topology.revision + 1,
+    nodes,
+  };
 }
 
 function getNextNodeId(
@@ -899,10 +1040,12 @@ export function insertTopologyEdgeNode(
     return topology;
   }
 
-  const normalizedCoordinate = normalizeCoordinate(
-    coordinate,
-    topology.coordinatePrecision
-  );
+  const normalizedCoordinate =
+    constrainTopologyEdgeCoordinate(
+      topology,
+      edgeId,
+      coordinate
+    );
   const nodeById = new Map(
     topology.nodes.map((node) => [node.id, node] as const)
   );

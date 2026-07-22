@@ -1,6 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
 import {
   MapContainer,
   Marker,
@@ -16,7 +22,13 @@ import "leaflet/dist/leaflet.css";
 import LunarTileLayer from "@/components/moon-map/LunarTileLayer";
 import { lunarMapRegions } from "@/lib/lunar-map-regions";
 import {
+  clearLunaSphereStudioDraft,
+  loadLunaSphereStudioDraft,
+  saveLunaSphereStudioDraft,
+} from "@/lib/lunasphere-studio-draft";
+import {
   cloneTopology,
+  constrainTopologyEdgeCoordinate,
   createTopologyFromRegions,
   createTopologySummary,
   getStateEdges,
@@ -28,11 +40,15 @@ import {
   restoreTopologyState,
   topologyToLunarMapRegions,
   validateTopology,
+  type LunaSphereTopology,
   type LunaSphereTopologyEdge,
   type LunaSphereTopologyNode,
 } from "@/lib/lunasphere-topology";
 
 const lunarCoordinateScale = 256 / 1000;
+const HISTORY_LIMIT = 100;
+const AUTOSAVE_DELAY_MS = 900;
+const NUDGE_DISTANCE = 1;
 
 const LunarCRS = {
   ...CRS.Simple,
@@ -119,6 +135,164 @@ type EdgeSegmentTarget = {
   position: [number, number];
 };
 
+type TopologyHistoryState = {
+  past: LunaSphereTopology[];
+  present: LunaSphereTopology;
+  future: LunaSphereTopology[];
+};
+
+type TopologyHistoryAction =
+  | {
+      type: "apply";
+      update: (
+        topology: LunaSphereTopology
+      ) => LunaSphereTopology;
+    }
+  | {
+      type: "preview";
+      update: (
+        topology: LunaSphereTopology
+      ) => LunaSphereTopology;
+    }
+  | {
+      type: "commit-preview";
+      baseline: LunaSphereTopology;
+      nodeId: string;
+    }
+  | {
+      type: "undo";
+    }
+  | {
+      type: "redo";
+    }
+  | {
+      type: "replace";
+      topology: LunaSphereTopology;
+      recordCurrent: boolean;
+    };
+
+type DraftStatus =
+  | "loading"
+  | "saving"
+  | "saved"
+  | "not-saved"
+  | "error";
+
+function addHistorySnapshot(
+  history: LunaSphereTopology[],
+  topology: LunaSphereTopology
+): LunaSphereTopology[] {
+  return [
+    ...history,
+    cloneTopology(topology),
+  ].slice(-HISTORY_LIMIT);
+}
+
+function topologyHistoryReducer(
+  state: TopologyHistoryState,
+  action: TopologyHistoryAction
+): TopologyHistoryState {
+  if (action.type === "apply") {
+    const nextTopology = action.update(state.present);
+
+    if (nextTopology === state.present) {
+      return state;
+    }
+
+    return {
+      past: addHistorySnapshot(state.past, state.present),
+      present: nextTopology,
+      future: [],
+    };
+  }
+
+  if (action.type === "preview") {
+    const nextTopology = action.update(state.present);
+
+    return nextTopology === state.present
+      ? state
+      : {
+          ...state,
+          present: nextTopology,
+        };
+  }
+
+  if (action.type === "commit-preview") {
+    const baselineNode = action.baseline.nodes.find(
+      (node) => node.id === action.nodeId
+    );
+    const currentNode = state.present.nodes.find(
+      (node) => node.id === action.nodeId
+    );
+
+    if (!baselineNode || !currentNode) {
+      return state;
+    }
+
+    const coordinateChanged =
+      baselineNode.coordinate[0] !== currentNode.coordinate[0] ||
+      baselineNode.coordinate[1] !== currentNode.coordinate[1];
+
+    if (!coordinateChanged) {
+      return state;
+    }
+
+    return {
+      past: addHistorySnapshot(state.past, action.baseline),
+      present: {
+        ...state.present,
+        revision: action.baseline.revision + 1,
+      },
+      future: [],
+    };
+  }
+
+  if (action.type === "undo") {
+    const previousTopology = state.past.at(-1);
+
+    if (!previousTopology) {
+      return state;
+    }
+
+    return {
+      past: state.past.slice(0, -1),
+      present: cloneTopology(previousTopology),
+      future: [
+        cloneTopology(state.present),
+        ...state.future,
+      ].slice(0, HISTORY_LIMIT),
+    };
+  }
+
+  if (action.type === "redo") {
+    const nextTopology = state.future[0];
+
+    if (!nextTopology) {
+      return state;
+    }
+
+    return {
+      past: addHistorySnapshot(state.past, state.present),
+      present: cloneTopology(nextTopology),
+      future: state.future.slice(1),
+    };
+  }
+
+  if (action.recordCurrent) {
+    return {
+      past: addHistorySnapshot(state.past, state.present),
+      present: cloneTopology(action.topology),
+      future: [],
+    };
+  }
+
+  return {
+    past: [],
+    present: cloneTopology(action.topology),
+    future: [],
+  };
+}
+
 function downloadJson(fileName: string, value: unknown) {
   const fileContents = JSON.stringify(value, null, 2);
   const blob = new Blob([fileContents], {
@@ -150,14 +324,61 @@ function createEdgePositions(
     .map(([y, x]) => [y, x]);
 }
 
-export default function LunaSphereDesigner() {
-  const [topology, setTopology] = useState(() =>
-    cloneTopology(baselineTopology)
+function formatSavedAt(savedAt: string | null): string {
+  if (!savedAt) {
+    return "No local draft saved";
+  }
+
+  const savedDate = new Date(savedAt);
+
+  if (Number.isNaN(savedDate.getTime())) {
+    return "Local draft saved";
+  }
+
+  return `Saved ${savedDate.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+  })}`;
+}
+
+function isTextEntryElement(target: EventTarget | null): boolean {
+  return (
+    target instanceof HTMLInputElement ||
+    target instanceof HTMLTextAreaElement ||
+    target instanceof HTMLSelectElement ||
+    (target instanceof HTMLElement && target.isContentEditable)
   );
+}
+
+export default function LunaSphereDesigner() {
+  const [history, dispatchHistory] = useReducer(
+    topologyHistoryReducer,
+    {
+      past: [],
+      present: cloneTopology(baselineTopology),
+      future: [],
+    }
+  );
+  const topology = history.present;
+
+  const dragBaselineRef = useRef<LunaSphereTopology | null>(
+    null
+  );
+  const autosaveTokenRef = useRef(0);
   const [selectedState, setSelectedState] = useState(
     baselineTopology.states[0]?.name ?? ""
   );
   const [selectedNodeId, setSelectedNodeId] = useState<
+    string | null
+  >(null);
+  const [draftReady, setDraftReady] = useState(false);
+  const [draftStatus, setDraftStatus] =
+    useState<DraftStatus>("loading");
+  const [lastSavedAt, setLastSavedAt] = useState<
+    string | null
+  >(null);
+  const [draftNotice, setDraftNotice] = useState<
     string | null
   >(null);
 
@@ -195,6 +416,15 @@ export default function LunaSphereDesigner() {
       ),
     [topology]
   );
+  const stateById = useMemo(
+    () =>
+      new Map(
+        topology.states.map(
+          (state) => [state.id, state] as const
+        )
+      ),
+    [topology]
+  );
   const selectedEdges = useMemo(
     () => getStateEdges(topology, selectedState),
     [topology, selectedState]
@@ -209,6 +439,36 @@ export default function LunaSphereDesigner() {
         ),
     [nodeById, selectedState, topology]
   );
+  const selectedNode = selectedNodeId
+    ? nodeById.get(selectedNodeId) ?? null
+    : null;
+  const selectedNodeEdges = useMemo(
+    () =>
+      selectedNodeId
+        ? topology.edges.filter((edge) =>
+            edge.nodeIds.includes(selectedNodeId)
+          )
+        : [],
+    [selectedNodeId, topology]
+  );
+  const selectedNodeStateNames = useMemo(
+    () => [
+      ...new Set(
+        selectedNodeEdges.flatMap((edge) =>
+          edge.stateIds
+            .map((stateId) => stateById.get(stateId)?.name)
+            .filter(
+              (stateName): stateName is string =>
+                Boolean(stateName)
+            )
+        )
+      ),
+    ].sort(),
+    [selectedNodeEdges, stateById]
+  );
+  const selectedNodeIsPerimeter = selectedNodeEdges.some(
+    (edge) => edge.kind === "moon-perimeter"
+  );
   const edgeSegmentTargets = useMemo(
     () =>
       selectedEdges.flatMap((edge): EdgeSegmentTarget[] =>
@@ -222,24 +482,30 @@ export default function LunaSphereDesigner() {
             return [];
           }
 
+          const midpoint: [number, number] = [
+            (startNode.coordinate[0] +
+              endNode.coordinate[0]) /
+              2,
+            (startNode.coordinate[1] +
+              endNode.coordinate[1]) /
+              2,
+          ];
+
           return [
             {
               key: `${edge.id}-segment-${index}`,
               edgeId: edge.id,
               segmentIndex: index,
-              position: [
-                (startNode.coordinate[0] +
-                  endNode.coordinate[0]) /
-                  2,
-                (startNode.coordinate[1] +
-                  endNode.coordinate[1]) /
-                  2,
-              ],
+              position: constrainTopologyEdgeCoordinate(
+                topology,
+                edge.id,
+                midpoint
+              ),
             },
           ];
         })
       ),
-    [nodeById, selectedEdges]
+    [nodeById, selectedEdges, topology]
   );
   const validation = useMemo(
     () => validateTopology(topology),
@@ -268,33 +534,148 @@ export default function LunaSphereDesigner() {
     );
   }, [selectedEdges, selectedNodeId]);
 
+  useEffect(() => {
+    const timeoutId = window.setTimeout(() => {
+      const savedDraft = loadLunaSphereStudioDraft(
+        window.localStorage,
+        baselineTopology
+      );
+
+      if (savedDraft.status === "loaded") {
+        dispatchHistory({
+          type: "replace",
+          topology: savedDraft.topology,
+          recordCurrent: false,
+        });
+        setLastSavedAt(savedDraft.savedAt);
+        setDraftStatus("saved");
+        setDraftNotice(
+          `Recovered the local Studio draft saved ${new Date(
+            savedDraft.savedAt
+          ).toLocaleString()}.`
+        );
+      } else if (savedDraft.status === "invalid") {
+        setDraftStatus("error");
+        setDraftNotice(savedDraft.message);
+      } else {
+        setDraftStatus("not-saved");
+      }
+
+      setDraftReady(true);
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, []);
+
+  useEffect(() => {
+    if (!draftReady) {
+      return;
+    }
+
+    const autosaveToken = autosaveTokenRef.current + 1;
+    autosaveTokenRef.current = autosaveToken;
+
+    const savingStatusTimeoutId = window.setTimeout(() => {
+      if (autosaveToken === autosaveTokenRef.current) {
+        setDraftStatus("saving");
+      }
+    }, 0);
+
+    const timeoutId = window.setTimeout(() => {
+      if (autosaveToken !== autosaveTokenRef.current) {
+        return;
+      }
+
+      const result = saveLunaSphereStudioDraft(
+        window.localStorage,
+        topology
+      );
+
+      if (result.ok) {
+        setLastSavedAt(result.savedAt);
+        setDraftStatus("saved");
+      } else {
+        setDraftStatus("error");
+        setDraftNotice(result.message);
+      }
+    }, AUTOSAVE_DELAY_MS);
+
+    return () => {
+      window.clearTimeout(savingStatusTimeoutId);
+      window.clearTimeout(timeoutId);
+    };
+  }, [draftReady, topology]);
+
+  useEffect(() => {
+    function handleKeyboardShortcut(event: KeyboardEvent) {
+      if (isTextEntryElement(event.target)) {
+        return;
+      }
+
+      const commandKey = event.ctrlKey || event.metaKey;
+      const normalizedKey = event.key.toLowerCase();
+
+      if (commandKey && normalizedKey === "z") {
+        event.preventDefault();
+        dispatchHistory({
+          type: event.shiftKey ? "redo" : "undo",
+        });
+        setSelectedNodeId(null);
+        return;
+      }
+
+      if (commandKey && normalizedKey === "y") {
+        event.preventDefault();
+        dispatchHistory({ type: "redo" });
+        setSelectedNodeId(null);
+        return;
+      }
+
+      if (
+        (event.key === "Delete" ||
+          event.key === "Backspace") &&
+        selectedNodeId &&
+        removableNodeEdge
+      ) {
+        event.preventDefault();
+        dispatchHistory({
+          type: "apply",
+          update: (currentTopology) =>
+            removeTopologyEdgeNode(
+              currentTopology,
+              removableNodeEdge.id,
+              selectedNodeId
+            ),
+        });
+        setSelectedNodeId(null);
+      }
+    }
+
+    window.addEventListener("keydown", handleKeyboardShortcut);
+
+    return () =>
+      window.removeEventListener(
+        "keydown",
+        handleKeyboardShortcut
+      );
+  }, [removableNodeEdge, selectedNodeId]);
+
   function selectState(stateName: string) {
     setSelectedState(stateName);
     setSelectedNodeId(null);
   }
 
-  function updateNode(
-    nodeId: string,
-    nextPosition: [number, number]
-  ) {
-    setTopology((currentTopology) =>
-      moveTopologyNode(
-        currentTopology,
-        nodeId,
-        nextPosition
-      )
-    );
-  }
-
   function addControlPoint(target: EdgeSegmentTarget) {
-    setTopology((currentTopology) =>
-      insertTopologyEdgeNode(
-        currentTopology,
-        target.edgeId,
-        target.segmentIndex,
-        target.position
-      )
-    );
+    dispatchHistory({
+      type: "apply",
+      update: (currentTopology) =>
+        insertTopologyEdgeNode(
+          currentTopology,
+          target.edgeId,
+          target.segmentIndex,
+          target.position
+        ),
+    });
     setSelectedNodeId(null);
   }
 
@@ -303,34 +684,138 @@ export default function LunaSphereDesigner() {
       return;
     }
 
-    setTopology((currentTopology) =>
-      removeTopologyEdgeNode(
-        currentTopology,
-        removableNodeEdge.id,
-        selectedNodeId
-      )
-    );
+    dispatchHistory({
+      type: "apply",
+      update: (currentTopology) =>
+        removeTopologyEdgeNode(
+          currentTopology,
+          removableNodeEdge.id,
+          selectedNodeId
+        ),
+    });
     setSelectedNodeId(null);
   }
 
+  function nudgeSelectedNode(deltaY: number, deltaX: number) {
+    if (!selectedNode) {
+      return;
+    }
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentTopology) =>
+        moveTopologyNode(
+          currentTopology,
+          selectedNode.id,
+          [
+            selectedNode.coordinate[0] + deltaY,
+            selectedNode.coordinate[1] + deltaX,
+          ]
+        ),
+    });
+  }
+
   function resetSelectedState() {
-    setTopology((currentTopology) =>
-      restoreTopologyState(
-        currentTopology,
-        baselineTopology,
-        selectedState
-      )
-    );
+    dispatchHistory({
+      type: "apply",
+      update: (currentTopology) =>
+        restoreTopologyState(
+          currentTopology,
+          baselineTopology,
+          selectedState
+        ),
+    });
     setSelectedNodeId(null);
   }
 
   function resetAllStates() {
-    setTopology(cloneTopology(baselineTopology));
+    dispatchHistory({
+      type: "apply",
+      update: () => cloneTopology(baselineTopology),
+    });
     setSelectedNodeId(null);
   }
 
+  function undo() {
+    dispatchHistory({ type: "undo" });
+    setSelectedNodeId(null);
+  }
+
+  function redo() {
+    dispatchHistory({ type: "redo" });
+    setSelectedNodeId(null);
+  }
+
+  function saveDraftNow() {
+    const result = saveLunaSphereStudioDraft(
+      window.localStorage,
+      topology
+    );
+
+    if (result.ok) {
+      setLastSavedAt(result.savedAt);
+      setDraftStatus("saved");
+      setDraftNotice("The current topology draft was saved locally.");
+    } else {
+      setDraftStatus("error");
+      setDraftNotice(result.message);
+    }
+  }
+
+  function reloadSavedDraft() {
+    const savedDraft = loadLunaSphereStudioDraft(
+      window.localStorage,
+      baselineTopology
+    );
+
+    if (savedDraft.status === "loaded") {
+      dispatchHistory({
+        type: "replace",
+        topology: savedDraft.topology,
+        recordCurrent: true,
+      });
+      setLastSavedAt(savedDraft.savedAt);
+      setDraftStatus("saved");
+      setDraftNotice("Reloaded the most recent local draft.");
+      setSelectedNodeId(null);
+      return;
+    }
+
+    setDraftStatus(
+      savedDraft.status === "invalid" ? "error" : "not-saved"
+    );
+    setDraftNotice(
+      savedDraft.status === "invalid"
+        ? savedDraft.message
+        : "No saved local draft is available."
+    );
+  }
+
+  function clearSavedDraft() {
+    autosaveTokenRef.current += 1;
+
+    const cleared = clearLunaSphereStudioDraft(
+      window.localStorage
+    );
+
+    if (cleared) {
+      setLastSavedAt(null);
+      setDraftStatus("not-saved");
+      setDraftNotice(
+        "The browser copy was cleared. Current unsaved map edits remain open."
+      );
+    } else {
+      setDraftStatus("error");
+      setDraftNotice("The browser draft could not be cleared.");
+    }
+  }
+
   function exportSelectedState() {
-    if (!selectedRegion || !selectedTopologyState) {
+    if (
+      !validation.valid ||
+      !selectedRegion ||
+      !selectedTopologyState
+    ) {
       return;
     }
 
@@ -359,11 +844,22 @@ export default function LunaSphereDesigner() {
   }
 
   function exportAllStates() {
+    if (!validation.valid) {
+      return;
+    }
+
     downloadJson(
       `lunasphere-topology-draft-r${topology.revision}.json`,
       topology
     );
   }
+
+  const saveStatusLabel =
+    draftStatus === "saving"
+      ? "Saving…"
+      : draftStatus === "error"
+        ? "Save error"
+        : formatSavedAt(lastSavedAt);
 
   return (
     <main className="min-h-screen bg-black px-4 py-8 text-white">
@@ -379,9 +875,9 @@ export default function LunaSphereDesigner() {
 
           <p className="mt-2 max-w-4xl text-sm text-zinc-400">
             Every border is stored once. Dragging a white handle
-            updates all states that share it. Click a green plus
-            handle to add natural border detail. Changes remain a
-            browser-session draft until exported.
+            updates all states that share it. Drafts save locally,
+            and each drag is one undoable action. Moon-perimeter
+            handles remain locked to the circular saleable boundary.
           </p>
 
           <div className="mt-5 flex flex-wrap items-end gap-3">
@@ -407,6 +903,38 @@ export default function LunaSphereDesigner() {
 
             <button
               type="button"
+              onClick={undo}
+              disabled={history.past.length === 0}
+              className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              Undo
+            </button>
+
+            <button
+              type="button"
+              onClick={redo}
+              disabled={history.future.length === 0}
+              className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              Redo
+            </button>
+
+            <button
+              type="button"
+              onClick={saveDraftNow}
+              className="rounded-xl border border-sky-300/30 bg-sky-400/10 px-4 py-3 text-sm font-black text-sky-100 hover:bg-sky-400/20"
+            >
+              Save Draft Now
+            </button>
+
+            <span className="rounded-xl border border-white/10 bg-black px-4 py-3 text-xs font-bold text-zinc-300">
+              {saveStatusLabel}
+            </span>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-3">
+            <button
+              type="button"
               onClick={resetSelectedState}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold hover:bg-white/10"
             >
@@ -423,8 +951,27 @@ export default function LunaSphereDesigner() {
 
             <button
               type="button"
+              onClick={reloadSavedDraft}
+              disabled={!lastSavedAt}
+              className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              Reload Saved Draft
+            </button>
+
+            <button
+              type="button"
+              onClick={clearSavedDraft}
+              disabled={!lastSavedAt}
+              className="rounded-xl border border-red-300/30 px-4 py-3 text-sm font-bold text-red-100 enabled:hover:bg-red-400/10 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              Clear Browser Draft
+            </button>
+
+            <button
+              type="button"
               onClick={exportSelectedState}
-              className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black text-black hover:bg-yellow-300"
+              disabled={!validation.valid}
+              className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black text-black enabled:hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Export Selected State
             </button>
@@ -432,11 +979,26 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={exportAllStates}
-              className="rounded-xl bg-white px-4 py-3 text-sm font-black text-black hover:bg-zinc-200"
+              disabled={!validation.valid}
+              className="rounded-xl bg-white px-4 py-3 text-sm font-black text-black enabled:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Export Topology Draft
             </button>
           </div>
+
+          {draftNotice && (
+            <div className="mt-4 flex items-start justify-between gap-4 rounded-xl border border-sky-400/20 bg-sky-400/10 px-4 py-3 text-sm text-sky-100">
+              <p>{draftNotice}</p>
+              <button
+                type="button"
+                onClick={() => setDraftNotice(null)}
+                className="shrink-0 font-black text-sky-50/70 hover:text-white"
+                aria-label="Dismiss draft message"
+              >
+                ×
+              </button>
+            </div>
+          )}
         </div>
 
         <div className="grid gap-5 xl:grid-cols-[1fr_340px]">
@@ -535,16 +1097,57 @@ export default function LunaSphereDesigner() {
                   draggable
                   eventHandlers={{
                     click: () => setSelectedNodeId(node.id),
-                    dragstart: () =>
-                      setSelectedNodeId(node.id),
+                    dragstart: () => {
+                      dragBaselineRef.current =
+                        cloneTopology(topology);
+                      setSelectedNodeId(node.id);
+                    },
                     drag: (event) => {
-                      const marker = event.target;
-                      const nextPosition = marker.getLatLng();
+                      const nextPosition =
+                        event.target.getLatLng();
 
-                      updateNode(node.id, [
-                        nextPosition.lat,
-                        nextPosition.lng,
-                      ]);
+                      dispatchHistory({
+                        type: "preview",
+                        update: (currentTopology) =>
+                          moveTopologyNode(
+                            currentTopology,
+                            node.id,
+                            [
+                              nextPosition.lat,
+                              nextPosition.lng,
+                            ],
+                            { incrementRevision: false }
+                          ),
+                      });
+                    },
+                    dragend: (event) => {
+                      const baseline = dragBaselineRef.current;
+                      const nextPosition =
+                        event.target.getLatLng();
+
+                      dispatchHistory({
+                        type: "preview",
+                        update: (currentTopology) =>
+                          moveTopologyNode(
+                            currentTopology,
+                            node.id,
+                            [
+                              nextPosition.lat,
+                              nextPosition.lng,
+                            ],
+                            { incrementRevision: false }
+                          ),
+                      });
+
+                      if (baseline) {
+                        dispatchHistory({
+                          type: "commit-preview",
+                          baseline,
+                          nodeId: node.id,
+                        });
+                      }
+
+                      dragBaselineRef.current = null;
                     },
                   }}
                 />
@@ -582,15 +1185,13 @@ export default function LunaSphereDesigner() {
 
               <div className="rounded-xl border border-white/10 bg-black p-3">
                 <p className="text-xs uppercase tracking-wider text-zinc-500">
-                  Shared borders
+                  History
                 </p>
                 <p className="mt-1 text-xl font-black">
-                  {
-                    selectedEdges.filter(
-                      (edge) =>
-                        edge.kind === "shared-state-border"
-                    ).length
-                  }
+                  {history.past.length}/{history.future.length}
+                </p>
+                <p className="mt-1 text-[10px] uppercase tracking-wider text-zinc-600">
+                  Undo / redo
                 </p>
               </div>
 
@@ -617,23 +1218,76 @@ export default function LunaSphereDesigner() {
               </p>
 
               <p>
-                Click a green plus handle to add an editable point
-                between two existing border points.
+                Click a green plus handle to add an editable point.
+                Press Ctrl+Z/Ctrl+Y to undo or redo.
               </p>
 
-              <p>
-                Select a yellow handle to inspect it. Only interior
-                control points can be removed; junctions stay locked.
-              </p>
-
-              {selectedNodeId && (
+              {selectedNode && (
                 <div className="rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-3">
                   <p className="font-bold text-yellow-100">
                     Selected handle
                   </p>
                   <p className="mt-1 break-all font-mono text-xs text-yellow-50/80">
-                    {selectedNodeId}
+                    {selectedNode.id}
                   </p>
+                  <p className="mt-2 font-mono text-xs text-yellow-50/80">
+                    Y {selectedNode.coordinate[0].toFixed(4)} · X{" "}
+                    {selectedNode.coordinate[1].toFixed(4)}
+                  </p>
+                  <p className="mt-2 text-xs text-yellow-50/70">
+                    {selectedNodeIsPerimeter
+                      ? "Moon perimeter: movement stays locked to the circular saleable boundary."
+                      : `Shared by ${selectedNodeStateNames.length} state${
+                          selectedNodeStateNames.length === 1
+                            ? ""
+                            : "s"
+                        }: ${selectedNodeStateNames.join(", ")}`}
+                  </p>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-black">
+                    <span />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        nudgeSelectedNode(-NUDGE_DISTANCE, 0)
+                      }
+                      className="rounded-lg border border-yellow-100/30 px-2 py-2 hover:bg-yellow-100/10"
+                      aria-label="Nudge selected handle up"
+                    >
+                      ↑
+                    </button>
+                    <span />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        nudgeSelectedNode(0, -NUDGE_DISTANCE)
+                      }
+                      className="rounded-lg border border-yellow-100/30 px-2 py-2 hover:bg-yellow-100/10"
+                      aria-label="Nudge selected handle left"
+                    >
+                      ←
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        nudgeSelectedNode(NUDGE_DISTANCE, 0)
+                      }
+                      className="rounded-lg border border-yellow-100/30 px-2 py-2 hover:bg-yellow-100/10"
+                      aria-label="Nudge selected handle down"
+                    >
+                      ↓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        nudgeSelectedNode(0, NUDGE_DISTANCE)
+                      }
+                      className="rounded-lg border border-yellow-100/30 px-2 py-2 hover:bg-yellow-100/10"
+                      aria-label="Nudge selected handle right"
+                    >
+                      →
+                    </button>
+                  </div>
 
                   <button
                     type="button"
@@ -667,12 +1321,19 @@ export default function LunaSphereDesigner() {
                   nodes · {summary.sharedEdgeCount} shared borders ·{" "}
                   {validation.warnings.length} warnings
                 </p>
+                {!validation.valid && (
+                  <p className="mt-2 text-xs font-bold">
+                    Exports are disabled until all errors are fixed.
+                  </p>
+                )}
               </div>
 
               {!validation.valid && (
                 <div className="max-h-48 space-y-2 overflow-y-auto rounded-xl border border-red-400/20 bg-black p-3 text-xs text-red-100">
                   {validation.errors.slice(0, 8).map((issue) => (
-                    <p key={`${issue.code}-${issue.entityId ?? issue.message}`}>
+                    <p
+                      key={`${issue.code}-${issue.entityId ?? issue.message}`}
+                    >
                       <strong>{issue.code}:</strong> {issue.message}
                     </p>
                   ))}
@@ -680,8 +1341,9 @@ export default function LunaSphereDesigner() {
               )}
 
               <p className="rounded-xl border border-sky-400/30 bg-sky-400/10 p-3 text-sky-100">
-                Draft mode is isolated from the public Moon Map,
-                parcels, reservations, checkout, and customer records.
+                Drafts are saved only in this browser. The public Moon
+                Map, parcels, reservations, checkout, and customer
+                records remain unchanged.
               </p>
             </div>
           </aside>
