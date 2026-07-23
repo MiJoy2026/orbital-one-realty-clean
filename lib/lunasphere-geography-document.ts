@@ -1,4 +1,10 @@
 import {
+  cloneInventoryGridDefinition,
+  hasCompatibleInventoryGridDefinition,
+  LUNASPHERE_INVENTORY_GRID,
+  type LunaSphereInventoryGridDefinition,
+} from "./inventory-grid";
+import {
   cloneProtectedAreaLayout,
   createInitialProtectedAreaLayout,
   validateProtectedAreaLayout,
@@ -19,11 +25,12 @@ import {
 
 export const LUNASPHERE_GEOGRAPHY_DOCUMENT_FORMAT =
   "lunasphere-geography-document";
-export const LUNASPHERE_GEOGRAPHY_DOCUMENT_SCHEMA_VERSION = 2;
+export const LUNASPHERE_GEOGRAPHY_DOCUMENT_SCHEMA_VERSION = 3;
 
 export type LunaSphereGeographyDocument = {
   format: typeof LUNASPHERE_GEOGRAPHY_DOCUMENT_FORMAT;
   schemaVersion: typeof LUNASPHERE_GEOGRAPHY_DOCUMENT_SCHEMA_VERSION;
+  inventory: LunaSphereInventoryGridDefinition;
   topology: LunaSphereTopology;
   territories: LunaSphereTerritoryLayout;
   protectedAreas: LunaSphereProtectedAreaLayout;
@@ -366,11 +373,14 @@ export function createGeographyDocument(
   topology: LunaSphereTopology,
   territories: LunaSphereTerritoryLayout,
   protectedAreas: LunaSphereProtectedAreaLayout =
-    createInitialProtectedAreaLayout(topology)
+    createInitialProtectedAreaLayout(topology),
+  inventory: LunaSphereInventoryGridDefinition =
+    LUNASPHERE_INVENTORY_GRID
 ): LunaSphereGeographyDocument {
   return {
     format: LUNASPHERE_GEOGRAPHY_DOCUMENT_FORMAT,
     schemaVersion: LUNASPHERE_GEOGRAPHY_DOCUMENT_SCHEMA_VERSION,
+    inventory: cloneInventoryGridDefinition(inventory),
     topology: cloneTopology(topology),
     territories: cloneTerritoryLayout(territories),
     protectedAreas: cloneProtectedAreaLayout(protectedAreas),
@@ -393,7 +403,8 @@ export function cloneGeographyDocument(
   return createGeographyDocument(
     geography.topology,
     geography.territories,
-    geography.protectedAreas
+    geography.protectedAreas,
+    geography.inventory
   );
 }
 
@@ -406,6 +417,7 @@ export function hasCompatibleGeographyDocumentStructure(
     value.format === LUNASPHERE_GEOGRAPHY_DOCUMENT_FORMAT &&
     value.schemaVersion ===
       LUNASPHERE_GEOGRAPHY_DOCUMENT_SCHEMA_VERSION &&
+    hasCompatibleInventoryGridDefinition(value.inventory) &&
     hasCompatibleTopologyStructure(
       value.topology,
       baseline.topology
@@ -432,6 +444,28 @@ export function normalizeGeographyDocument(
 ): LunaSphereGeographyDocument | null {
   if (hasCompatibleGeographyDocumentStructure(value, baseline)) {
     return cloneGeographyDocument(value);
+  }
+
+  if (
+    isRecord(value) &&
+    value.format === LUNASPHERE_GEOGRAPHY_DOCUMENT_FORMAT &&
+    value.schemaVersion === 2 &&
+    hasCompatibleTopologyStructure(value.topology, baseline.topology) &&
+    hasCompatibleTerritoryLayoutStructure(
+      value.territories,
+      baseline.territories
+    ) &&
+    hasCompatibleProtectedAreaLayoutStructure(
+      value.protectedAreas,
+      baseline.protectedAreas
+    )
+  ) {
+    return createGeographyDocument(
+      value.topology,
+      value.territories,
+      value.protectedAreas,
+      LUNASPHERE_INVENTORY_GRID
+    );
   }
 
   if (

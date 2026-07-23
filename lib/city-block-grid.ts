@@ -1,4 +1,13 @@
 import {
+  getHierarchicalGridCoordinates,
+  getInventoryGridIndexRange,
+  LUNASPHERE_INVENTORY_GRID,
+  LUNASPHERE_INVENTORY_GRID_VERSION,
+  LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR,
+  LUNASPHERE_SALEABLE_INVENTORY_ZOOM,
+  type InventoryViewportBounds,
+} from "./inventory-grid";
+import {
   parcelPolygonOverlapsExcludedTerritories,
   type ParcelCell,
   type ParcelExclusionTerritory,
@@ -37,8 +46,10 @@ type RectangleBounds = {
 export type ParsedCityBlockKey = {
   stateSlug: string;
   cityNumber: number;
-  column: number;
-  row: number;
+  planningColumn: number;
+  planningRow: number;
+  subdivisionColumn: number;
+  subdivisionRow: number;
 };
 
 const GEOMETRY_EPSILON = 0.000001;
@@ -59,14 +70,32 @@ function createCityBlockKey(input: {
   row: number;
   resolutionLevel: number;
   selectable: boolean;
+  planningColumn?: number;
+  planningRow?: number;
+  subdivisionColumn?: number;
+  subdivisionRow?: number;
 }): string {
   const stateSlug = createStateSlug(input.city.stateName);
   const cityNumber = input.city.territoryNumber.toString().padStart(2, "0");
   const column = input.column.toString().padStart(3, "0");
   const row = input.row.toString().padStart(3, "0");
 
-  if (input.selectable) {
-    return `${stateSlug}-CITY-${cityNumber}-CB-C${column}-R${row}`;
+  if (
+    input.selectable &&
+    input.planningColumn &&
+    input.planningRow &&
+    input.subdivisionColumn &&
+    input.subdivisionRow
+  ) {
+    return `${stateSlug}-CITY-${cityNumber}-CB-C${input.planningColumn
+      .toString()
+      .padStart(3, "0")}-R${input.planningRow
+      .toString()
+      .padStart(3, "0")}-SC${input.subdivisionColumn
+      .toString()
+      .padStart(2, "0")}-SR${input.subdivisionRow
+      .toString()
+      .padStart(2, "0")}`;
   }
 
   return `${stateSlug}-CITY-${cityNumber}-PREVIEW-L${input.resolutionLevel}-C${column}-R${row}`;
@@ -78,18 +107,38 @@ export function parseCityBlockKey(
   const match = blockKey
     .trim()
     .toUpperCase()
-    .match(/^(.*)-CITY-(\d{2})-CB-C(\d{3})-R(\d{3})$/);
+    .match(
+      /^(.*)-CITY-(\d{2})-CB-C(\d{3})-R(\d{3})-SC(\d{2})-SR(\d{2})$/
+    );
 
   if (!match) {
     return null;
   }
 
-  return {
+  const parsed: ParsedCityBlockKey = {
     stateSlug: match[1],
     cityNumber: Number(match[2]),
-    column: Number(match[3]),
-    row: Number(match[4]),
+    planningColumn: Number(match[3]),
+    planningRow: Number(match[4]),
+    subdivisionColumn: Number(match[5]),
+    subdivisionRow: Number(match[6]),
   };
+
+  if (
+    parsed.cityNumber < 1 ||
+    parsed.planningColumn < 1 ||
+    parsed.planningColumn > LUNASPHERE_INVENTORY_GRID.cityPlanningColumns ||
+    parsed.planningRow < 1 ||
+    parsed.planningRow > LUNASPHERE_INVENTORY_GRID.cityPlanningRows ||
+    parsed.subdivisionColumn < 1 ||
+    parsed.subdivisionColumn > LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR ||
+    parsed.subdivisionRow < 1 ||
+    parsed.subdivisionRow > LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR
+  ) {
+    return null;
+  }
+
+  return parsed;
 }
 
 export function cityBlockKeyMatchesSettlement(
@@ -267,18 +316,22 @@ function getGridResolutionForZoom(zoom: number): GridResolution | null {
     };
   }
 
-  if (zoom < 7) {
+  if (zoom < LUNASPHERE_SALEABLE_INVENTORY_ZOOM) {
     return {
-      columns: 10,
-      rows: 10,
+      columns: LUNASPHERE_INVENTORY_GRID.cityPlanningColumns,
+      rows: LUNASPHERE_INVENTORY_GRID.cityPlanningRows,
       resolutionLevel: 2,
       selectable: false,
     };
   }
 
   return {
-    columns: 10,
-    rows: 10,
+    columns:
+      LUNASPHERE_INVENTORY_GRID.cityPlanningColumns *
+      LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR,
+    rows:
+      LUNASPHERE_INVENTORY_GRID.cityPlanningRows *
+      LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR,
     resolutionLevel: 3,
     selectable: true,
   };
@@ -322,7 +375,8 @@ function rememberCachedGrid(
 function generateCityBlockGrid(
   city: PublicLunaSphereSettlement,
   resolution: GridResolution,
-  excludedTerritories: readonly ParcelExclusionTerritory[]
+  excludedTerritories: readonly ParcelExclusionTerritory[],
+  viewportBounds?: InventoryViewportBounds | null
 ): CityBlockCell[] {
   if (city.kind !== "city" || city.boundary.length < 3) {
     return [];
@@ -343,11 +397,24 @@ function generateCityBlockGrid(
     (cityBounds.minimumY + cityBounds.maximumY - gridSize) / 2;
   const cellSize = gridSize / resolution.columns;
   const blocks: CityBlockCell[] = [];
+  const indexRange = getInventoryGridIndexRange({
+    gridStartX,
+    gridStartY,
+    cellWidth: cellSize,
+    cellHeight: cellSize,
+    columns: resolution.columns,
+    rows: resolution.rows,
+    viewportBounds,
+  });
 
-  for (let rowIndex = 0; rowIndex < resolution.rows; rowIndex += 1) {
+  for (
+    let rowIndex = indexRange.startRowIndex;
+    rowIndex <= indexRange.endRowIndex;
+    rowIndex += 1
+  ) {
     for (
-      let columnIndex = 0;
-      columnIndex < resolution.columns;
+      let columnIndex = indexRange.startColumnIndex;
+      columnIndex <= indexRange.endColumnIndex;
       columnIndex += 1
     ) {
       const mapX = gridStartX + columnIndex * cellSize;
@@ -380,6 +447,12 @@ function generateCityBlockGrid(
 
       const column = columnIndex + 1;
       const row = rowIndex + 1;
+      const columnHierarchy = resolution.selectable
+        ? getHierarchicalGridCoordinates(columnIndex)
+        : null;
+      const rowHierarchy = resolution.selectable
+        ? getHierarchicalGridCoordinates(rowIndex)
+        : null;
 
       blocks.push({
         parcelKey: createCityBlockKey({
@@ -388,6 +461,10 @@ function generateCityBlockGrid(
           row,
           resolutionLevel: resolution.resolutionLevel,
           selectable: resolution.selectable,
+          planningColumn: columnHierarchy?.planningIndex,
+          planningRow: rowHierarchy?.planningIndex,
+          subdivisionColumn: columnHierarchy?.subdivisionIndex,
+          subdivisionRow: rowHierarchy?.subdivisionIndex,
         }),
         stateName: city.stateName,
         positions,
@@ -399,6 +476,13 @@ function generateCityBlockGrid(
         centerY: mapY + cellSize / 2,
         column,
         row,
+        gridVersion: resolution.selectable
+          ? LUNASPHERE_INVENTORY_GRID_VERSION
+          : undefined,
+        planningColumn: columnHierarchy?.planningIndex,
+        planningRow: rowHierarchy?.planningIndex,
+        subdivisionColumn: columnHierarchy?.subdivisionIndex,
+        subdivisionRow: rowHierarchy?.subdivisionIndex,
         resolutionLevel: resolution.resolutionLevel,
         selectable: resolution.selectable,
         propertyType: "City Block",
@@ -417,7 +501,8 @@ function generateCityBlockGrid(
 export function getCityBlockGridForZoom(
   city: PublicLunaSphereSettlement,
   zoom: number,
-  excludedTerritories: readonly ParcelExclusionTerritory[] = []
+  excludedTerritories: readonly ParcelExclusionTerritory[] = [],
+  viewportBounds?: InventoryViewportBounds | null
 ): CityBlockCell[] {
   const resolution = getGridResolutionForZoom(zoom);
 
@@ -430,7 +515,10 @@ export function getCityBlockGridForZoom(
     resolution.resolutionLevel,
     createGeometrySignature(city, excludedTerritories),
   ].join(":");
-  const cachedGrid = cityBlockGridCache.get(cacheKey);
+  const shouldCache = !viewportBounds && !resolution.selectable;
+  const cachedGrid = shouldCache
+    ? cityBlockGridCache.get(cacheKey)
+    : undefined;
 
   if (cachedGrid) {
     cityBlockGridCache.delete(cacheKey);
@@ -441,9 +529,14 @@ export function getCityBlockGridForZoom(
   const generatedGrid = generateCityBlockGrid(
     city,
     resolution,
-    excludedTerritories
+    excludedTerritories,
+    viewportBounds
   );
-  rememberCachedGrid(cacheKey, generatedGrid);
+
+  if (shouldCache) {
+    rememberCachedGrid(cacheKey, generatedGrid);
+  }
+
   return generatedGrid;
 }
 
@@ -452,16 +545,173 @@ export function getSelectableCityBlockByKey(
   blockKey: string,
   excludedTerritories: readonly ParcelExclusionTerritory[] = []
 ): CityBlockCell | null {
-  if (!cityBlockKeyMatchesSettlement(blockKey, city)) {
+  const parsed = parseCityBlockKey(blockKey);
+
+  if (
+    !parsed ||
+    parsed.stateSlug !== createStateSlug(city.stateName) ||
+    parsed.cityNumber !== city.territoryNumber ||
+    city.kind !== "city"
+  ) {
     return null;
   }
 
-  return (
-    getCityBlockGridForZoom(city, 7, excludedTerritories).find(
-      (block) => block.parcelKey === blockKey
-    ) ?? null
+  const fineColumnIndex =
+    (parsed.planningColumn - 1) *
+      LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR +
+    (parsed.subdivisionColumn - 1);
+  const fineRowIndex =
+    (parsed.planningRow - 1) *
+      LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR +
+    (parsed.subdivisionRow - 1);
+  const cityBounds = calculateBoundingBox(city.boundary);
+  const gridSize = Math.max(
+    cityBounds.maximumX - cityBounds.minimumX,
+    cityBounds.maximumY - cityBounds.minimumY
   );
+
+  if (gridSize <= GEOMETRY_EPSILON) {
+    return null;
+  }
+
+  const columns =
+    LUNASPHERE_INVENTORY_GRID.cityPlanningColumns *
+    LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR;
+  const rows = columns;
+  const gridStartX =
+    (cityBounds.minimumX + cityBounds.maximumX - gridSize) / 2;
+  const gridStartY =
+    (cityBounds.minimumY + cityBounds.maximumY - gridSize) / 2;
+  const cellSize = gridSize / columns;
+  const mapX = gridStartX + fineColumnIndex * cellSize;
+  const mapY = gridStartY + fineRowIndex * cellSize;
+  const rectangleBounds: RectangleBounds = {
+    minimumX: mapX,
+    minimumY: mapY,
+    maximumX: mapX + cellSize,
+    maximumY: mapY + cellSize,
+  };
+  const positions = createRectanglePolygon(mapX, mapY, cellSize, cellSize);
+
+  if (
+    fineColumnIndex < 0 ||
+    fineColumnIndex >= columns ||
+    fineRowIndex < 0 ||
+    fineRowIndex >= rows ||
+    !rectangleIsFullyInsideCity(
+      positions,
+      rectangleBounds,
+      city.boundary
+    ) ||
+    parcelPolygonOverlapsExcludedTerritories(
+      positions,
+      excludedTerritories
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    parcelKey: blockKey.trim().toUpperCase(),
+    stateName: city.stateName,
+    positions,
+    mapX,
+    mapY,
+    width: cellSize,
+    height: cellSize,
+    centerX: mapX + cellSize / 2,
+    centerY: mapY + cellSize / 2,
+    column: fineColumnIndex + 1,
+    row: fineRowIndex + 1,
+    gridVersion: LUNASPHERE_INVENTORY_GRID_VERSION,
+    planningColumn: parsed.planningColumn,
+    planningRow: parsed.planningRow,
+    subdivisionColumn: parsed.subdivisionColumn,
+    subdivisionRow: parsed.subdivisionRow,
+    resolutionLevel: 3,
+    selectable: true,
+    propertyType: "City Block",
+    cityId: city.id,
+    cityName: city.name,
+    cityNumber: city.territoryNumber,
+    price: 54.95,
+    sizeLabel: "1 City Block",
+  };
 }
+
+export function countSelectableCityBlocks(
+  city: PublicLunaSphereSettlement,
+  excludedTerritories: readonly ParcelExclusionTerritory[] = []
+): number {
+  if (city.kind !== "city" || city.boundary.length < 3) {
+    return 0;
+  }
+
+  const resolution = getGridResolutionForZoom(
+    LUNASPHERE_SALEABLE_INVENTORY_ZOOM
+  );
+
+  if (!resolution) {
+    return 0;
+  }
+
+  const cityBounds = calculateBoundingBox(city.boundary);
+  const gridSize = Math.max(
+    cityBounds.maximumX - cityBounds.minimumX,
+    cityBounds.maximumY - cityBounds.minimumY
+  );
+
+  if (gridSize <= GEOMETRY_EPSILON) {
+    return 0;
+  }
+
+  const gridStartX =
+    (cityBounds.minimumX + cityBounds.maximumX - gridSize) / 2;
+  const gridStartY =
+    (cityBounds.minimumY + cityBounds.maximumY - gridSize) / 2;
+  const cellSize = gridSize / resolution.columns;
+  let count = 0;
+
+  for (let rowIndex = 0; rowIndex < resolution.rows; rowIndex += 1) {
+    for (
+      let columnIndex = 0;
+      columnIndex < resolution.columns;
+      columnIndex += 1
+    ) {
+      const mapX = gridStartX + columnIndex * cellSize;
+      const mapY = gridStartY + rowIndex * cellSize;
+      const rectangleBounds: RectangleBounds = {
+        minimumX: mapX,
+        minimumY: mapY,
+        maximumX: mapX + cellSize,
+        maximumY: mapY + cellSize,
+      };
+      const positions = createRectanglePolygon(
+        mapX,
+        mapY,
+        cellSize,
+        cellSize
+      );
+
+      if (
+        rectangleIsFullyInsideCity(
+          positions,
+          rectangleBounds,
+          city.boundary
+        ) &&
+        !parcelPolygonOverlapsExcludedTerritories(
+          positions,
+          excludedTerritories
+        )
+      ) {
+        count += 1;
+      }
+    }
+  }
+
+  return count;
+}
+
 
 export function clearCityBlockGridCache(): void {
   cityBlockGridCache.clear();

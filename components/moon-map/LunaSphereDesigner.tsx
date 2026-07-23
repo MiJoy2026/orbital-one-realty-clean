@@ -35,6 +35,12 @@ import {
   type LunaSphereGeographyDocument,
 } from "@/lib/lunasphere-geography-document";
 import {
+  geographyReadinessReportMatchesDocument,
+  runGeographyReadinessAuditAsync,
+  type GeographyReadinessAuditProgress,
+  type GeographyReadinessReport,
+} from "@/lib/lunasphere-geography-diagnostics";
+import {
   PROTECTED_AREA_CATEGORIES,
   addProtectedArea,
   cloneProtectedAreaLayout,
@@ -82,8 +88,10 @@ import {
   getTopologyState,
   insertTopologyEdgeNode,
   moveTopologyNode,
+  naturalizeTopologyStateBorders,
   removeTopologyEdgeNode,
   restoreTopologyState,
+  smoothTopologyStateBorders,
   topologyToLunarMapRegions,
   validateTopology,
   type LunaSphereTopologyEdge,
@@ -690,6 +698,16 @@ export default function LunaSphereDesigner() {
   const [databaseNotice, setDatabaseNotice] = useState<
     string | null
   >(null);
+  const [readinessReport, setReadinessReport] = useState<
+    GeographyReadinessReport | null
+  >(null);
+  const [readinessBusy, setReadinessBusy] = useState(false);
+  const [readinessProgress, setReadinessProgress] = useState<
+    GeographyReadinessAuditProgress | null
+  >(null);
+  const [readinessNotice, setReadinessNotice] = useState<
+    string | null
+  >(null);
 
   const geography =
     releasePreview?.geography ?? workingGeography;
@@ -830,6 +848,23 @@ export default function LunaSphereDesigner() {
   const workingValidation = useMemo(
     () => validateGeographyDocument(workingGeography),
     [workingGeography]
+  );
+  const workingValidationIssues = useMemo(
+    () => [
+      ...workingValidation.topology.errors.map((issue) => ({
+        ...issue,
+        source: "State topology",
+      })),
+      ...workingValidation.territories.errors.map((issue) => ({
+        ...issue,
+        source: "Cities and towns",
+      })),
+      ...workingValidation.protectedAreas.errors.map((issue) => ({
+        ...issue,
+        source: "Protected areas",
+      })),
+    ],
+    [workingValidation]
   );
   const summary = useMemo(
     () => createTopologySummary(topology),
@@ -1031,6 +1066,22 @@ export default function LunaSphereDesigner() {
     selectedResolvedProtectedArea !== null &&
     (territoryDisplayMode === "all" ||
       territoryDisplayMode === "protected");
+  const readinessReportIsCurrent = useMemo(
+    () =>
+      readinessReport !== null &&
+      geographyReadinessReportMatchesDocument(
+        readinessReport,
+        workingGeography
+      ),
+    [readinessReport, workingGeography]
+  );
+  const selectedReadinessDiagnostic = useMemo(
+    () =>
+      readinessReport?.states.find(
+        (state) => state.stateName === selectedState
+      ) ?? null,
+    [readinessReport, selectedState]
+  );
 
   const removableNodeEdge = useMemo(() => {
     if (!selectedNodeId) {
@@ -1931,6 +1982,40 @@ export default function LunaSphereDesigner() {
     });
   }
 
+  function naturalizeSelectedStateBorders() {
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        topology: naturalizeTopologyStateBorders(
+          currentGeography.topology,
+          selectedState
+        ),
+      }),
+    });
+    setSelectedNodeId(null);
+    setReadinessNotice(
+      `Added gentle shared-border detail around ${selectedState}. Run the Geography 1.0 audit after reviewing the shape.`
+    );
+  }
+
+  function smoothSelectedStateBorders() {
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        topology: smoothTopologyStateBorders(
+          currentGeography.topology,
+          selectedState
+        ),
+      }),
+    });
+    setSelectedNodeId(null);
+    setReadinessNotice(
+      `Smoothed existing control points around ${selectedState}.`
+    );
+  }
+
   function resetSelectedState() {
     dispatchHistory({
       type: "apply",
@@ -2382,6 +2467,56 @@ export default function LunaSphereDesigner() {
     );
   }
 
+  async function runReadinessReport() {
+    if (isPreviewingRelease) {
+      return;
+    }
+
+    setReadinessBusy(true);
+    setReadinessNotice(
+      "Auditing all 57 states, 171 cities, 1,140 towns, protected zones, and saleable inventory…"
+    );
+
+    await new Promise<void>((resolve) => {
+      window.setTimeout(resolve, 30);
+    });
+
+    try {
+      const report = await runGeographyReadinessAuditAsync(
+        workingGeography,
+        setReadinessProgress
+      );
+      setReadinessReport(report);
+      setReadinessNotice(
+        report.status === "ready"
+          ? "Geography 1.0 audit passed. All states are ready for final review and freeze."
+          : report.status === "blocked"
+            ? `Geography 1.0 audit found ${report.blockedStateCount} blocked state${report.blockedStateCount === 1 ? "" : "s"}.`
+            : `Geography 1.0 audit completed with ${report.reviewStateCount} state${report.reviewStateCount === 1 ? "" : "s"} needing design review.`
+      );
+    } catch (error) {
+      setReadinessNotice(
+        error instanceof Error
+          ? error.message
+          : "The Geography 1.0 audit could not be completed."
+      );
+    } finally {
+      setReadinessBusy(false);
+      setReadinessProgress(null);
+    }
+  }
+
+  function exportReadinessReport() {
+    if (!readinessReport) {
+      return;
+    }
+
+    downloadJson(
+      `lunasphere-geography-1-readiness-r${readinessReport.topologyRevision}.json`,
+      readinessReport
+    );
+  }
+
   const saveStatusLabel =
     draftStatus === "saving"
       ? "Saving…"
@@ -2609,6 +2744,34 @@ export default function LunaSphereDesigner() {
 
             <button
               type="button"
+              onClick={naturalizeSelectedStateBorders}
+              disabled={
+                isPreviewingRelease ||
+                selectedEdges.every(
+                  (edge) =>
+                    edge.kind !== "shared-state-border" ||
+                    edge.nodeIds.length > 2
+                )
+              }
+              className="rounded-xl border border-fuchsia-300/30 bg-fuchsia-400/10 px-4 py-3 text-sm font-bold text-fuchsia-100 enabled:hover:bg-fuchsia-400/20 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              Naturalize Straight Borders
+            </button>
+
+            <button
+              type="button"
+              onClick={smoothSelectedStateBorders}
+              disabled={
+                isPreviewingRelease ||
+                selectedEdges.every((edge) => edge.nodeIds.length <= 2)
+              }
+              className="rounded-xl border border-indigo-300/30 bg-indigo-400/10 px-4 py-3 text-sm font-bold text-indigo-100 enabled:hover:bg-indigo-400/20 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              Smooth State Borders
+            </button>
+
+            <button
+              type="button"
               onClick={resetSelectedTerritory}
               disabled={isPreviewingRelease || !selectedTerritoryId}
               className="rounded-xl border border-cyan-300/30 px-4 py-3 text-sm font-bold text-cyan-100 enabled:hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-35"
@@ -2678,6 +2841,205 @@ export default function LunaSphereDesigner() {
             >
               Export Geography Draft
             </button>
+
+            <button
+              type="button"
+              onClick={() => void runReadinessReport()}
+              disabled={isPreviewingRelease || readinessBusy}
+              title={
+                workingValidation.valid
+                  ? "Audit the current working geography"
+                  : "Audit the current geography and identify its validation errors"
+              }
+              className="rounded-xl bg-emerald-300 px-4 py-3 text-sm font-black text-emerald-950 enabled:hover:bg-emerald-200 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              {readinessBusy
+                ? readinessProgress
+                  ? `Auditing ${readinessProgress.completedStateCount}/${readinessProgress.totalStateCount}: ${readinessProgress.stateName}`
+                  : "Starting Geography Audit…"
+                : "Run Geography 1.0 Audit"}
+            </button>
+
+            <button
+              type="button"
+              onClick={exportReadinessReport}
+              disabled={!readinessReport}
+              className="rounded-xl border border-emerald-300/30 px-4 py-3 text-sm font-bold text-emerald-100 enabled:hover:bg-emerald-400/10 disabled:cursor-not-allowed disabled:opacity-35"
+            >
+              Export Readiness Report
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-emerald-400/25 bg-emerald-400/10 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.2em] text-emerald-200">
+                  Geography 1.0 Readiness
+                </p>
+                <p className="mt-1 max-w-4xl text-sm text-emerald-50/75">
+                  The audit counts saleable Rural Acres, City Blocks, and Town Blocks, checks settlement and protected-area health, and identifies states whose borders still need professional shaping.
+                </p>
+              </div>
+
+              <span
+                className={`rounded-xl border px-4 py-2 text-xs font-black uppercase tracking-wider ${
+                  !readinessReport
+                    ? "border-white/15 bg-black/30 text-zinc-300"
+                    : readinessReport.status === "ready"
+                      ? "border-emerald-200/40 bg-emerald-200 text-emerald-950"
+                      : readinessReport.status === "blocked"
+                        ? "border-red-300/40 bg-red-300 text-red-950"
+                        : "border-amber-300/40 bg-amber-300 text-amber-950"
+                }`}
+              >
+                {!readinessReport
+                  ? "Not audited"
+                  : `${readinessReport.status}${
+                      readinessReportIsCurrent ? " · current" : " · stale"
+                    }`}
+              </span>
+            </div>
+
+            {readinessNotice && (
+              <p className="mt-3 rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-emerald-50">
+                {readinessNotice}
+              </p>
+            )}
+
+            {readinessReport && (
+              <>
+                <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-purple-300/25 bg-purple-400/10 px-4 py-3">
+                  <p className="text-sm font-black text-purple-100">
+                    Inventory Grid V{readinessReport.inventoryGridVersion} · {readinessReport.inventorySubdivisionFactor}×{readinessReport.inventorySubdivisionFactor} saleable subcells
+                  </p>
+                  <p className="text-sm text-purple-100/80">
+                    Total saleable properties: <strong className="text-white">{readinessReport.totalSaleableProperties.toLocaleString()}</strong>
+                  </p>
+                </div>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+                  <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                    <p className="text-xs uppercase tracking-wider text-zinc-400">Ready</p>
+                    <p className="mt-1 text-2xl font-black text-emerald-200">{readinessReport.readyStateCount}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                    <p className="text-xs uppercase tracking-wider text-zinc-400">Review</p>
+                    <p className="mt-1 text-2xl font-black text-amber-200">{readinessReport.reviewStateCount}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                    <p className="text-xs uppercase tracking-wider text-zinc-400">Blocked</p>
+                    <p className="mt-1 text-2xl font-black text-red-200">{readinessReport.blockedStateCount}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                    <p className="text-xs uppercase tracking-wider text-zinc-400">Rural Acres</p>
+                    <p className="mt-1 text-2xl font-black">{readinessReport.totalRuralParcels.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                    <p className="text-xs uppercase tracking-wider text-zinc-400">City Blocks</p>
+                    <p className="mt-1 text-2xl font-black">{readinessReport.totalCityBlocks.toLocaleString()}</p>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                    <p className="text-xs uppercase tracking-wider text-zinc-400">Town Blocks</p>
+                    <p className="mt-1 text-2xl font-black">{readinessReport.totalTownBlocks.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                {readinessReport.globalIssues.length > 0 && (
+                  <div className="mt-4 rounded-xl border border-red-300/30 bg-red-400/10 p-4 text-red-50">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-black">Global geography blockers</p>
+                      <span className="rounded-lg bg-red-300 px-3 py-1 text-xs font-black uppercase text-red-950">
+                        {readinessReport.globalIssues.length}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-xs text-red-50/75">
+                      These document-wide errors can keep the Validation badge at Review even when no individual state shows a red issue box.
+                    </p>
+                    <div className="mt-3 max-h-40 space-y-2 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-3 text-xs">
+                      {readinessReport.globalIssues.map((issue, index) => (
+                        <p key={`${issue.code}-${index}`}>
+                          <strong>{issue.code}:</strong> {issue.message}
+                        </p>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedReadinessDiagnostic && (
+                  <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="font-black">{selectedReadinessDiagnostic.stateName} readiness</p>
+                      <span className={`rounded-lg px-3 py-1 text-xs font-black uppercase ${
+                        selectedReadinessDiagnostic.status === "ready"
+                          ? "bg-emerald-300 text-emerald-950"
+                          : selectedReadinessDiagnostic.status === "blocked"
+                            ? "bg-red-300 text-red-950"
+                            : "bg-amber-300 text-amber-950"
+                      }`}>
+                        {selectedReadinessDiagnostic.status}
+                      </span>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+                      <p>Rural Acres: <strong>{selectedReadinessDiagnostic.ruralParcelCount.toLocaleString()}</strong></p>
+                      <p>City Blocks: <strong>{selectedReadinessDiagnostic.cityBlockCount.toLocaleString()}</strong></p>
+                      <p>Town Blocks: <strong>{selectedReadinessDiagnostic.townBlockCount.toLocaleString()}</strong></p>
+                      <p>Protected Areas: <strong>{selectedReadinessDiagnostic.protectedAreaCount}</strong></p>
+                      <p>Smallest City: <strong>{selectedReadinessDiagnostic.minimumCityBlockCount} blocks</strong></p>
+                      <p>Smallest Town: <strong>{selectedReadinessDiagnostic.minimumTownBlockCount} blocks</strong></p>
+                      <p>Straight Borders: <strong>{selectedReadinessDiagnostic.straightSharedBorderCount}</strong></p>
+                      <p>Border Detail Points: <strong>{selectedReadinessDiagnostic.borderControlPointCount}</strong></p>
+                    </div>
+                    {selectedReadinessDiagnostic.issues.length > 0 ? (
+                      <div className="mt-3 max-h-36 space-y-2 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-3 text-xs">
+                        {selectedReadinessDiagnostic.issues.map((issue, index) => (
+                          <p key={`${issue.code}-${index}`} className={issue.severity === "error" ? "text-red-200" : issue.severity === "warning" ? "text-amber-200" : "text-sky-200"}>
+                            <strong>{issue.code}:</strong> {issue.message}
+                          </p>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-3 text-sm font-bold text-emerald-200">No readiness issues were found for this state.</p>
+                    )}
+                  </div>
+                )}
+
+                <div className="mt-4 rounded-xl border border-white/10 bg-black/30 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-black">States needing attention</p>
+                    <p className="text-xs text-zinc-400">Click a state to review it in the Studio.</p>
+                  </div>
+                  <div className="mt-3 grid max-h-56 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">
+                    {readinessReport.states
+                      .filter((state) => state.status !== "ready")
+                      .map((state) => (
+                        <button
+                          key={`readiness-${state.stateId}`}
+                          type="button"
+                          onClick={() => selectState(state.stateName)}
+                          className={`flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left text-xs transition ${
+                            state.stateName === selectedState
+                              ? "border-white bg-white/10"
+                              : state.status === "blocked"
+                                ? "border-red-300/25 bg-red-400/10 hover:bg-red-400/20"
+                                : "border-amber-300/25 bg-amber-400/10 hover:bg-amber-400/20"
+                          }`}
+                        >
+                          <span>
+                            <strong className="block text-white">{state.stateName}</strong>
+                            <span className="text-zinc-400">{state.issues[0]?.message ?? "Review required"}</span>
+                          </span>
+                          <span className={`rounded-md px-2 py-1 font-black uppercase ${
+                            state.status === "blocked"
+                              ? "bg-red-300 text-red-950"
+                              : "bg-amber-300 text-amber-950"
+                          }`}>
+                            {state.status}
+                          </span>
+                        </button>
+                      ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
           <div className="mt-4 rounded-2xl border border-violet-400/25 bg-violet-400/10 p-4">
@@ -3549,8 +3911,36 @@ export default function LunaSphereDesigner() {
                 <p className="mt-1 text-xl font-black">
                   {workingValidation.valid ? "Valid" : "Review"}
                 </p>
+                {!workingValidation.valid && (
+                  <p className="mt-1 text-xs font-bold text-red-100/80">
+                    {workingValidationIssues.length} global error{workingValidationIssues.length === 1 ? "" : "s"}
+                  </p>
+                )}
               </div>
             </div>
+
+            {workingValidationIssues.length > 0 && (
+              <div className="mt-4 rounded-xl border border-red-400/30 bg-red-400/10 p-3 text-red-50">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-black uppercase tracking-wider">
+                    Global validation errors
+                  </p>
+                  <span className="rounded-lg border border-red-200/25 bg-black/25 px-2 py-1 text-[10px] font-black uppercase tracking-wider">
+                    {workingValidationIssues.length} found
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-red-50/75">
+                  These errors may not belong to the selected state. Run the Geography 1.0 audit to diagnose the entire working draft. Saving and publishing remain disabled until they are corrected.
+                </p>
+                <div className="mt-3 max-h-44 space-y-2 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-3 text-xs">
+                  {workingValidationIssues.map((issue, index) => (
+                    <p key={`${issue.source}-${issue.code}-${index}`}>
+                      <strong>{issue.source} · {issue.code}:</strong> {issue.message}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div className="mt-5 space-y-3 text-sm text-zinc-300">
               {isPreviewingRelease ? (

@@ -45,6 +45,11 @@ import {
 } from "react-leaflet";
 import { CRS, Transformation, divIcon } from "leaflet";
 import type { LunarMapRegion } from "@/lib/lunar-map-regions";
+import {
+  LUNASPHERE_PROPERTY_DETAIL_ZOOM,
+  LUNASPHERE_SALEABLE_INVENTORY_ZOOM,
+  type InventoryViewportBounds,
+} from "@/lib/inventory-grid";
 import type {
   PublicLunaSphereProtectedArea,
   PublicLunaSphereSettlement,
@@ -97,6 +102,40 @@ function TrackZoomLevel({
       map.off("zoomend", handleZoom);
     };
   }, [map, onZoomChange]);
+
+  return null;
+}
+
+function TrackMapViewport({
+  onViewportChange,
+}: {
+  onViewportChange: (bounds: InventoryViewportBounds) => void;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    const updateViewport = () => {
+      const bounds = map.getBounds();
+
+      onViewportChange({
+        south: bounds.getSouth(),
+        west: bounds.getWest(),
+        north: bounds.getNorth(),
+        east: bounds.getEast(),
+      });
+    };
+
+    updateViewport();
+    map.on("moveend", updateViewport);
+    map.on("zoomend", updateViewport);
+    map.on("resize", updateViewport);
+
+    return () => {
+      map.off("moveend", updateViewport);
+      map.off("zoomend", updateViewport);
+      map.off("resize", updateViewport);
+    };
+  }, [map, onViewportChange]);
 
   return null;
 }
@@ -178,7 +217,7 @@ function FlyToSelectedSettlement({
 
     map.flyTo(
       settlement.center,
-      settlement.kind === "city" ? 5 : 6,
+      LUNASPHERE_SALEABLE_INVENTORY_ZOOM,
       { duration: 1.2 }
     );
   }, [map, settlement]);
@@ -231,6 +270,8 @@ export default function LunarLeafletMap({
   publicSettlements,
   publicProtectedAreas,
   activeGeographyReleaseNumber = null,
+  inventoryGridVersion = 2,
+  inventorySubdivisionFactor = 5,
   selectedProperty,
   nearbyProperties = [],
   ownedProperties = [],
@@ -239,6 +280,8 @@ export default function LunarLeafletMap({
   publicSettlements: PublicLunaSphereSettlement[];
   publicProtectedAreas: PublicLunaSphereProtectedArea[];
   activeGeographyReleaseNumber?: number | null;
+  inventoryGridVersion?: number;
+  inventorySubdivisionFactor?: number;
   selectedProperty?: SelectedProperty | null;
   nearbyProperties?: SelectedProperty[];
   ownedProperties?: SelectedProperty[];
@@ -254,6 +297,8 @@ export default function LunarLeafletMap({
   const [selectedProtectedAreaId, setSelectedProtectedAreaId] =
     useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(0);
+  const [mapViewportBounds, setMapViewportBounds] =
+    useState<InventoryViewportBounds | null>(null);
   const [selectedSearchResult, setSelectedSearchResult] =
      useState<AtlasSearchResult | null>(null);
   const [showStates, setShowStates] = useState(true);
@@ -390,8 +435,9 @@ export default function LunarLeafletMap({
     return getParcelGridForZoom(selectedState, zoomLevel, {
       stateBoundary: selectedStateRegion.positions,
       excludedTerritories: ruralExclusions,
-    });
+    }, mapViewportBounds);
   }, [
+    mapViewportBounds,
     ruralExclusions,
     selectedProtectedArea,
     selectedSettlement,
@@ -409,10 +455,11 @@ export default function LunarLeafletMap({
             visibleProtectedAreas.map((area) => ({
               id: area.id,
               boundary: area.boundary,
-            }))
+            })),
+            mapViewportBounds
           )
         : [],
-    [selectedCity, visibleProtectedAreas, zoomLevel]
+    [mapViewportBounds, selectedCity, visibleProtectedAreas, zoomLevel]
   );
 
   const visibleTownBlocks = useMemo(
@@ -424,10 +471,11 @@ export default function LunarLeafletMap({
             visibleProtectedAreas.map((area) => ({
               id: area.id,
               boundary: area.boundary,
-            }))
+            })),
+            mapViewportBounds
           )
         : [],
-    [selectedTown, visibleProtectedAreas, zoomLevel]
+    [mapViewportBounds, selectedTown, visibleProtectedAreas, zoomLevel]
   );
 
   const visibleInventoryCells = useMemo(
@@ -703,7 +751,7 @@ export default function LunarLeafletMap({
             ...result,
             x: selection.parcel.centerX,
             y: selection.parcel.centerY,
-            zoom: 7,
+            zoom: LUNASPHERE_PROPERTY_DETAIL_ZOOM,
           }
         : result;
     }
@@ -729,7 +777,7 @@ export default function LunarLeafletMap({
       ...result,
       x: settlement.center[1],
       y: settlement.center[0],
-      zoom: settlement.kind === "city" ? 5 : 6,
+      zoom: LUNASPHERE_SALEABLE_INVENTORY_ZOOM,
     };
   }
 
@@ -762,6 +810,9 @@ export default function LunarLeafletMap({
               Geography R{activeGeographyReleaseNumber}
             </span>
           )}
+          <span className="rounded-full border border-cyan-400/60 px-3 py-1 text-cyan-300">
+            Grid V{inventoryGridVersion} · {inventorySubdivisionFactor}×{inventorySubdivisionFactor}
+          </span>
           <span className="rounded-full border border-green-500 px-3 py-1 text-green-400">
             Available
           </span>
@@ -936,7 +987,7 @@ export default function LunarLeafletMap({
             center={[500, 500]}
             zoom={0}
             minZoom={-2}
-            maxZoom={7}
+            maxZoom={9}
             zoomControl={false}
             preferCanvas={true}
             zoomSnap={1}
@@ -968,6 +1019,9 @@ export default function LunarLeafletMap({
             <FlyToSelectedProtectedArea area={selectedProtectedArea} />
             <FlyToSearchResult searchResult={selectedSearchResult} />
             <TrackZoomLevel onZoomChange={setZoomLevel} />
+            <TrackMapViewport
+              onViewportChange={setMapViewportBounds}
+            />
             <MapHomeButton
               onReset={() => {
                 setSelectedState(null);

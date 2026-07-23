@@ -86,9 +86,9 @@ const ownedProperties = (
           </div>
 
           <div className="rounded-2xl border border-white/20 bg-white/5 p-6 text-center">
-            <p className="text-4xl font-black">2.85M</p>
+            <p className="text-4xl font-black">Grid V2</p>
             <p className="mt-2 text-sm uppercase text-gray-400">
-              Rural Acres
+              5×5 Property Subdivision
             </p>
           </div>
         </div>
@@ -167,6 +167,10 @@ const ownedProperties = (
         activeGeographyReleaseNumber={
           publicGeography.activeReleaseNumber
         }
+        inventoryGridVersion={publicGeography.inventoryGridVersion}
+        inventorySubdivisionFactor={
+          publicGeography.inventorySubdivisionFactor
+        }
         selectedProperty={selectedPropertyWithCoordinates}
         nearbyProperties={nearbyProperties}
         ownedProperties={ownedProperties}
@@ -207,12 +211,12 @@ const ownedProperties = (
 
         <div className="mt-10 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-6 text-center">
           <p className="font-bold text-yellow-400">
-            Phase 1 Atlas Active
+            Inventory Grid V2 Active
           </p>
           <p className="mt-2 text-gray-300">
-            57 clickable lunar state zones are live. Future upgrades will add
-            deeper zoom, parcel overlays, acreage highlighting, and direct
-            property selection.
+            Zoom into a state, city, or town to move from planning cells to
+            the permanent 5×5 saleable property grid. Only properties in the
+            visible map area are generated for fast browsing.
           </p>
         </div>
       </div>

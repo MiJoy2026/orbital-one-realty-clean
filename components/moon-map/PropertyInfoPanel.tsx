@@ -3,6 +3,10 @@
 import { getNearbyLunarAttractions } from "@/lib/lunar-attractions";
 import type { ParcelCell } from "@/lib/parcel-grid";
 import ReservationCountdown from "@/components/moon-map/ReservationCountdown";
+import {
+  LUNASPHERE_INVENTORY_GRID_VERSION,
+  LUNASPHERE_SALEABLE_INVENTORY_ZOOM,
+} from "@/lib/inventory-grid";
 
 type ActiveReservation = {
   reservationId: string;
@@ -44,12 +48,12 @@ export default function PropertyInfoPanel({
               {selectedState}
             </h2>
 
-            {zoomLevel < 7 ? (
+            {zoomLevel < LUNASPHERE_SALEABLE_INVENTORY_ZOOM ? (
               <div className="mt-6 rounded-2xl border border-blue-400/30 bg-blue-400/10 p-4">
                 <p className="font-black text-blue-300">🔍 Zoom in further</p>
                 <p className="mt-2 text-sm text-gray-300">
-                  Individual properties become selectable at the deepest zoom
-                  level.
+                  Inventory Grid V2 properties become selectable at zoom level
+                  {LUNASPHERE_SALEABLE_INVENTORY_ZOOM} and above.
                 </p>
                 <p className="mt-4 text-yellow-400">
                   Current Zoom Level: {zoomLevel}
@@ -178,6 +182,15 @@ export default function PropertyInfoPanel({
             <p className="mt-2 text-sm text-gray-400">
               {locationName} · {selectedParcel.stateName}
             </p>
+            {selectedParcel.gridVersion ===
+              LUNASPHERE_INVENTORY_GRID_VERSION && (
+              <p className="mt-2 text-xs font-bold uppercase tracking-wide text-purple-300">
+                Inventory Grid V{selectedParcel.gridVersion} · Planning cell C
+                {String(selectedParcel.planningColumn ?? 0).padStart(3, "0")} / R
+                {String(selectedParcel.planningRow ?? 0).padStart(3, "0")} · Subcell 
+                {selectedParcel.subdivisionColumn}×{selectedParcel.subdivisionRow}
+              </p>
+            )}
           </div>
           <span
             className={`shrink-0 rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wide ${

@@ -13,7 +13,7 @@ export default function LunarTileLayer() {
       url="/atlas/lroc-tiles/{z}/{x}/{y}.jpg?v=lroc-aligned-1"
       bounds={lunarBounds}
       minZoom={0}
-      maxZoom={7}
+      maxZoom={9}
       minNativeZoom={0}
       maxNativeZoom={5}
       tileSize={256}

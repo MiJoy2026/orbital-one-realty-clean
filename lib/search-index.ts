@@ -3,6 +3,7 @@ import { lunarStates } from "@/lib/moon-data";
 import { getLunarStateCenter } from "@/lib/lunar-map-regions";
 import { lunarStateDetails } from "@/lib/lunar-state-details";
 import { getLocationCoordinates } from "@/lib/lunar-location-service";
+import { LUNASPHERE_PROPERTY_DETAIL_ZOOM } from "@/lib/inventory-grid";
 
 
 export type AtlasSearchResultType =
@@ -106,7 +107,7 @@ function createExactParcelSearchResult(
 ): AtlasSearchResult | null {
   const normalizedPropertyKey = query.trim().toUpperCase();
   const cityBlockMatch = normalizedPropertyKey.match(
-    /^(.*)-CITY-(\d{2})-CB-C\d{3}-R\d{3}$/
+    /^(.*)-CITY-(\d{2})-CB-C\d{3}-R\d{3}-SC\d{2}-SR\d{2}$/
   );
 
   if (cityBlockMatch) {
@@ -129,13 +130,13 @@ function createExactParcelSearchResult(
       type: "Parcel",
       x: stateCenter.x,
       y: stateCenter.y,
-      zoom: 7,
+      zoom: LUNASPHERE_PROPERTY_DETAIL_ZOOM,
       searchTerms: [state.name, cityName, "city block", "block"],
     };
   }
 
   const townBlockMatch = normalizedPropertyKey.match(
-    /^(.*)-TOWN-(\d{2})-TB-C\d{3}-R\d{3}$/
+    /^(.*)-TOWN-(\d{2})-TB-C\d{3}-R\d{3}-SC\d{2}-SR\d{2}$/
   );
 
   if (townBlockMatch) {
@@ -158,12 +159,12 @@ function createExactParcelSearchResult(
       type: "Parcel",
       x: stateCenter.x,
       y: stateCenter.y,
-      zoom: 7,
+      zoom: LUNASPHERE_PROPERTY_DETAIL_ZOOM,
       searchTerms: [state.name, townName, "town block", "block"],
     };
   }
 
-  if (!/^[A-Z0-9-]+-R-C\d{3}-R\d{3}$/.test(normalizedPropertyKey)) {
+  if (!/^[A-Z0-9-]+-R-C\d{3}-R\d{3}-SC\d{2}-SR\d{2}$/.test(normalizedPropertyKey)) {
     return null;
   }
 
@@ -186,7 +187,7 @@ function createExactParcelSearchResult(
     type: "Parcel",
     x: stateCenter.x,
     y: stateCenter.y,
-    zoom: 7,
+    zoom: LUNASPHERE_PROPERTY_DETAIL_ZOOM,
     searchTerms: [state.name, "rural acre", "parcel"],
   };
 }

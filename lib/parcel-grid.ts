@@ -1,4 +1,13 @@
 import {
+  getHierarchicalGridCoordinates,
+  getInventoryGridIndexRange,
+  LUNASPHERE_INVENTORY_GRID,
+  LUNASPHERE_INVENTORY_GRID_VERSION,
+  LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR,
+  LUNASPHERE_SALEABLE_INVENTORY_ZOOM,
+  type InventoryViewportBounds,
+} from "./inventory-grid";
+import {
   calculateBoundingBox,
   isPointInsidePolygon,
   type LunarCoordinate,
@@ -29,9 +38,16 @@ export interface ParcelCell {
   centerX: number;
   centerY: number;
 
-  /** Stable logical position within the state grid. */
+  /** Stable logical position within the active grid. */
   column: number;
   row: number;
+
+  /** Inventory Grid V2 hierarchy for selectable properties. */
+  gridVersion?: number;
+  planningColumn?: number;
+  planningRow?: number;
+  subdivisionColumn?: number;
+  subdivisionRow?: number;
 
   resolutionLevel: number;
   selectable: boolean;
@@ -59,6 +75,14 @@ type GridResolution = {
   selectable: boolean;
 };
 
+export type ParsedRuralParcelKey = {
+  stateSlug: string;
+  planningColumn: number;
+  planningRow: number;
+  subdivisionColumn: number;
+  subdivisionRow: number;
+};
+
 type RectangleBounds = {
   minimumX: number;
   minimumY: number;
@@ -84,29 +108,82 @@ function createParcelKey({
   row,
   resolutionLevel,
   selectable,
+  planningColumn,
+  planningRow,
+  subdivisionColumn,
+  subdivisionRow,
 }: {
   stateName: string;
   column: number;
   row: number;
   resolutionLevel: number;
   selectable: boolean;
+  planningColumn?: number;
+  planningRow?: number;
+  subdivisionColumn?: number;
+  subdivisionRow?: number;
 }): string {
   const stateSlug = createStateSlug(stateName);
   const formattedColumn = column.toString().padStart(3, "0");
   const formattedRow = row.toString().padStart(3, "0");
 
-  /*
-   * Purchasable rural parcel:
-   * TYCHO-R-C001-R001
-   *
-   * Non-purchasable preview region:
-   * TYCHO-PREVIEW-L2-C001-R001
-   */
-  if (selectable) {
-    return `${stateSlug}-R-C${formattedColumn}-R${formattedRow}`;
+  if (
+    selectable &&
+    planningColumn &&
+    planningRow &&
+    subdivisionColumn &&
+    subdivisionRow
+  ) {
+    return `${stateSlug}-R-C${planningColumn
+      .toString()
+      .padStart(3, "0")}-R${planningRow
+      .toString()
+      .padStart(3, "0")}-SC${subdivisionColumn
+      .toString()
+      .padStart(2, "0")}-SR${subdivisionRow
+      .toString()
+      .padStart(2, "0")}`;
   }
 
   return `${stateSlug}-PREVIEW-L${resolutionLevel}-C${formattedColumn}-R${formattedRow}`;
+}
+
+export function parseRuralParcelKey(
+  parcelKey: string
+): ParsedRuralParcelKey | null {
+  const match = parcelKey
+    .trim()
+    .toUpperCase()
+    .match(
+      /^(.*)-R-C(\d{3})-R(\d{3})-SC(\d{2})-SR(\d{2})$/
+    );
+
+  if (!match) {
+    return null;
+  }
+
+  const parsed: ParsedRuralParcelKey = {
+    stateSlug: match[1],
+    planningColumn: Number(match[2]),
+    planningRow: Number(match[3]),
+    subdivisionColumn: Number(match[4]),
+    subdivisionRow: Number(match[5]),
+  };
+
+  if (
+    parsed.planningColumn < 1 ||
+    parsed.planningColumn > LUNASPHERE_INVENTORY_GRID.ruralPlanningColumns ||
+    parsed.planningRow < 1 ||
+    parsed.planningRow > LUNASPHERE_INVENTORY_GRID.ruralPlanningRows ||
+    parsed.subdivisionColumn < 1 ||
+    parsed.subdivisionColumn > LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR ||
+    parsed.subdivisionRow < 1 ||
+    parsed.subdivisionRow > LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR
+  ) {
+    return null;
+  }
+
+  return parsed;
 }
 
 function createRectanglePolygon(
@@ -417,10 +494,23 @@ function getGridResolutionForZoom(
     };
   }
 
+  if (zoom < LUNASPHERE_SALEABLE_INVENTORY_ZOOM) {
+    return {
+      columns: LUNASPHERE_INVENTORY_GRID.ruralPlanningColumns,
+      rows: LUNASPHERE_INVENTORY_GRID.ruralPlanningRows,
+      resolutionLevel: 4,
+      selectable: false,
+    };
+  }
+
   return {
-    columns: 64,
-    rows: 64,
-    resolutionLevel: 4,
+    columns:
+      LUNASPHERE_INVENTORY_GRID.ruralPlanningColumns *
+      LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR,
+    rows:
+      LUNASPHERE_INVENTORY_GRID.ruralPlanningRows *
+      LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR,
+    resolutionLevel: 5,
     selectable: true,
   };
 }
@@ -466,7 +556,8 @@ function generateRuralParcelGrid(
   stateName: string,
   stateBoundary: LunarPolygon,
   excludedTerritories: readonly ParcelExclusionTerritory[],
-  resolution: GridResolution
+  resolution: GridResolution,
+  viewportBounds?: InventoryViewportBounds | null
 ): ParcelCell[] {
   if (stateBoundary.length < 3) {
     return [];
@@ -498,11 +589,24 @@ function generateRuralParcelGrid(
       bounds: calculateBoundingBox(territory.boundary),
     }));
   const parcels: ParcelCell[] = [];
+  const indexRange = getInventoryGridIndexRange({
+    gridStartX,
+    gridStartY,
+    cellWidth: cellSize,
+    cellHeight: cellSize,
+    columns: resolution.columns,
+    rows: resolution.rows,
+    viewportBounds,
+  });
 
-  for (let rowIndex = 0; rowIndex < resolution.rows; rowIndex += 1) {
+  for (
+    let rowIndex = indexRange.startRowIndex;
+    rowIndex <= indexRange.endRowIndex;
+    rowIndex += 1
+  ) {
     for (
-      let columnIndex = 0;
-      columnIndex < resolution.columns;
+      let columnIndex = indexRange.startColumnIndex;
+      columnIndex <= indexRange.endColumnIndex;
       columnIndex += 1
     ) {
       const mapX = gridStartX + columnIndex * cellSize;
@@ -546,6 +650,12 @@ function generateRuralParcelGrid(
 
       const column = columnIndex + 1;
       const row = rowIndex + 1;
+      const columnHierarchy = resolution.selectable
+        ? getHierarchicalGridCoordinates(columnIndex)
+        : null;
+      const rowHierarchy = resolution.selectable
+        ? getHierarchicalGridCoordinates(rowIndex)
+        : null;
 
       parcels.push({
         parcelKey: createParcelKey({
@@ -554,6 +664,10 @@ function generateRuralParcelGrid(
           row,
           resolutionLevel: resolution.resolutionLevel,
           selectable: resolution.selectable,
+          planningColumn: columnHierarchy?.planningIndex,
+          planningRow: rowHierarchy?.planningIndex,
+          subdivisionColumn: columnHierarchy?.subdivisionIndex,
+          subdivisionRow: rowHierarchy?.subdivisionIndex,
         }),
         stateName,
         propertyType: "Rural Acre",
@@ -568,6 +682,13 @@ function generateRuralParcelGrid(
         centerY: mapY + cellSize / 2,
         column,
         row,
+        gridVersion: resolution.selectable
+          ? LUNASPHERE_INVENTORY_GRID_VERSION
+          : undefined,
+        planningColumn: columnHierarchy?.planningIndex,
+        planningRow: rowHierarchy?.planningIndex,
+        subdivisionColumn: columnHierarchy?.subdivisionIndex,
+        subdivisionRow: rowHierarchy?.subdivisionIndex,
         resolutionLevel: resolution.resolutionLevel,
         selectable: resolution.selectable,
       });
@@ -580,7 +701,8 @@ function generateRuralParcelGrid(
 export function getParcelGridForZoom(
   stateName: string,
   zoom: number,
-  geometry: ParcelGridGeometry
+  geometry: ParcelGridGeometry,
+  viewportBounds?: InventoryViewportBounds | null
 ): ParcelCell[] {
   const resolution = getGridResolutionForZoom(zoom);
 
@@ -598,7 +720,8 @@ export function getParcelGridForZoom(
     resolution.resolutionLevel,
     geometrySignature,
   ].join(":");
-  const cachedGrid = parcelGridCache.get(cacheKey);
+  const shouldCache = !viewportBounds && !resolution.selectable;
+  const cachedGrid = shouldCache ? parcelGridCache.get(cacheKey) : undefined;
 
   if (cachedGrid) {
     /* Refresh insertion order so frequently used states remain cached. */
@@ -611,10 +734,14 @@ export function getParcelGridForZoom(
     stateName,
     geometry.stateBoundary,
     excludedTerritories,
-    resolution
+    resolution,
+    viewportBounds
   );
 
-  rememberCachedGrid(cacheKey, generatedGrid);
+  if (shouldCache) {
+    rememberCachedGrid(cacheKey, generatedGrid);
+  }
+
   return generatedGrid;
 }
 
@@ -623,11 +750,183 @@ export function getSelectableRuralParcelByKey(
   parcelKey: string,
   geometry: ParcelGridGeometry
 ): ParcelCell | null {
-  return (
-    getParcelGridForZoom(stateName, 7, geometry).find(
-      (parcel) => parcel.parcelKey === parcelKey
-    ) ?? null
+  const parsed = parseRuralParcelKey(parcelKey);
+
+  if (!parsed || parsed.stateSlug !== createStateSlug(stateName)) {
+    return null;
+  }
+
+  const fineColumnIndex =
+    (parsed.planningColumn - 1) *
+      LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR +
+    (parsed.subdivisionColumn - 1);
+  const fineRowIndex =
+    (parsed.planningRow - 1) *
+      LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR +
+    (parsed.subdivisionRow - 1);
+  const stateBounds = calculateBoundingBox(geometry.stateBoundary);
+  const gridSize = Math.max(
+    stateBounds.maximumX - stateBounds.minimumX,
+    stateBounds.maximumY - stateBounds.minimumY
   );
+
+  if (gridSize <= GEOMETRY_EPSILON) {
+    return null;
+  }
+
+  const columns =
+    LUNASPHERE_INVENTORY_GRID.ruralPlanningColumns *
+    LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR;
+  const rows =
+    LUNASPHERE_INVENTORY_GRID.ruralPlanningRows *
+    LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR;
+  const gridStartX =
+    (stateBounds.minimumX + stateBounds.maximumX - gridSize) / 2;
+  const gridStartY =
+    (stateBounds.minimumY + stateBounds.maximumY - gridSize) / 2;
+  const cellSize = gridSize / columns;
+  const mapX = gridStartX + fineColumnIndex * cellSize;
+  const mapY = gridStartY + fineRowIndex * cellSize;
+  const rectangleBounds: RectangleBounds = {
+    minimumX: mapX,
+    minimumY: mapY,
+    maximumX: mapX + cellSize,
+    maximumY: mapY + cellSize,
+  };
+  const positions = createRectanglePolygon(mapX, mapY, cellSize, cellSize);
+
+  if (
+    fineColumnIndex < 0 ||
+    fineColumnIndex >= columns ||
+    fineRowIndex < 0 ||
+    fineRowIndex >= rows ||
+    !rectangleIsFullyInsideState(
+      positions,
+      rectangleBounds,
+      geometry.stateBoundary
+    ) ||
+    parcelPolygonOverlapsExcludedTerritories(
+      positions,
+      geometry.excludedTerritories ?? []
+    )
+  ) {
+    return null;
+  }
+
+  return {
+    parcelKey: parcelKey.trim().toUpperCase(),
+    stateName,
+    propertyType: "Rural Acre",
+    price: 24.95,
+    sizeLabel: "1 Acre",
+    positions,
+    mapX,
+    mapY,
+    width: cellSize,
+    height: cellSize,
+    centerX: mapX + cellSize / 2,
+    centerY: mapY + cellSize / 2,
+    column: fineColumnIndex + 1,
+    row: fineRowIndex + 1,
+    gridVersion: LUNASPHERE_INVENTORY_GRID_VERSION,
+    planningColumn: parsed.planningColumn,
+    planningRow: parsed.planningRow,
+    subdivisionColumn: parsed.subdivisionColumn,
+    subdivisionRow: parsed.subdivisionRow,
+    resolutionLevel: 5,
+    selectable: true,
+  };
+}
+
+export function countSelectableRuralParcels(
+  stateName: string,
+  geometry: ParcelGridGeometry
+): number {
+  void stateName;
+
+  if (geometry.stateBoundary.length < 3) {
+    return 0;
+  }
+
+  const resolution = getGridResolutionForZoom(
+    LUNASPHERE_SALEABLE_INVENTORY_ZOOM
+  );
+
+  if (!resolution) {
+    return 0;
+  }
+
+  const stateBounds = calculateBoundingBox(geometry.stateBoundary);
+  const gridSize = Math.max(
+    stateBounds.maximumX - stateBounds.minimumX,
+    stateBounds.maximumY - stateBounds.minimumY
+  );
+
+  if (gridSize <= GEOMETRY_EPSILON) {
+    return 0;
+  }
+
+  const gridStartX =
+    (stateBounds.minimumX + stateBounds.maximumX - gridSize) / 2;
+  const gridStartY =
+    (stateBounds.minimumY + stateBounds.maximumY - gridSize) / 2;
+  const cellSize = gridSize / resolution.columns;
+  const exclusionGeometry = (geometry.excludedTerritories ?? [])
+    .filter((territory) => territory.boundary.length >= 3)
+    .map((territory) => ({
+      territory,
+      bounds: calculateBoundingBox(territory.boundary),
+    }));
+  let count = 0;
+
+  for (let rowIndex = 0; rowIndex < resolution.rows; rowIndex += 1) {
+    for (
+      let columnIndex = 0;
+      columnIndex < resolution.columns;
+      columnIndex += 1
+    ) {
+      const mapX = gridStartX + columnIndex * cellSize;
+      const mapY = gridStartY + rowIndex * cellSize;
+      const rectangleBounds: RectangleBounds = {
+        minimumX: mapX,
+        minimumY: mapY,
+        maximumX: mapX + cellSize,
+        maximumY: mapY + cellSize,
+      };
+      const positions = createRectanglePolygon(
+        mapX,
+        mapY,
+        cellSize,
+        cellSize
+      );
+
+      if (
+        !rectangleIsFullyInsideState(
+          positions,
+          rectangleBounds,
+          geometry.stateBoundary
+        )
+      ) {
+        continue;
+      }
+
+      const overlapsExcludedTerritory = exclusionGeometry.some(
+        ({ territory, bounds }) =>
+          rectangleOverlapsExcludedTerritory(
+            positions,
+            rectangleBounds,
+            territory.boundary,
+            bounds
+          )
+      );
+
+      if (!overlapsExcludedTerritory) {
+        count += 1;
+      }
+    }
+  }
+
+  return count;
 }
 
 

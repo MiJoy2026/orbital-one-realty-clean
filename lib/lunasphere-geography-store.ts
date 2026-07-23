@@ -41,6 +41,8 @@ const baselineGeography =
 
 export type GeographyDraftRecord = {
   savedAt: string;
+  inventoryGridVersion: number;
+  inventorySubdivisionFactor: number;
   topologyRevision: number;
   territoryRevision: number;
   protectedAreaRevision: number;
@@ -50,6 +52,8 @@ export type GeographyDraftRecord = {
 export type GeographyReleaseRecord = {
   releaseNumber: number;
   publishedAt: string;
+  inventoryGridVersion: number;
+  inventorySubdivisionFactor: number;
   topologyRevision: number;
   territoryRevision: number;
   protectedAreaRevision: number;
@@ -78,6 +82,8 @@ export type PublicGeographySnapshot = {
   regions: LunarMapRegion[];
   settlements: PublicLunaSphereSettlement[];
   protectedAreas: PublicLunaSphereProtectedArea[];
+  inventoryGridVersion: number;
+  inventorySubdivisionFactor: number;
   activeReleaseNumber: number | null;
   activatedAt: string | null;
   fallbackReason: PublicGeographyFallbackReason | null;
@@ -221,6 +227,8 @@ function mapReleaseRecord(
   return {
     releaseNumber: record.releaseNumber,
     publishedAt: record.publishedAt.toISOString(),
+    inventoryGridVersion: geography.inventory.version,
+    inventorySubdivisionFactor: geography.inventory.subdivisionFactor,
     topologyRevision: record.topologyRevision,
     territoryRevision: geography.territories.revision,
     protectedAreaRevision: geography.protectedAreas.revision,
@@ -269,6 +277,8 @@ export async function getGeographyWorkspace(
           const geography = parseStoredGeography(draft.topology);
           return {
             savedAt: draft.updatedAt.toISOString(),
+            inventoryGridVersion: geography.inventory.version,
+            inventorySubdivisionFactor: geography.inventory.subdivisionFactor,
             topologyRevision: geography.topology.revision,
             territoryRevision: geography.territories.revision,
             protectedAreaRevision: geography.protectedAreas.revision,
@@ -418,6 +428,9 @@ function createBuiltInPublicGeography(
     regions: cloneMapRegions(lunarMapRegions),
     settlements: resolvePublicSettlements(baselineGeography),
     protectedAreas: resolvePublicProtectedAreas(baselineGeography),
+    inventoryGridVersion: baselineGeography.inventory.version,
+    inventorySubdivisionFactor:
+      baselineGeography.inventory.subdivisionFactor,
     activeReleaseNumber: null,
     activatedAt: null,
     fallbackReason,
@@ -462,6 +475,8 @@ export async function getPublicGeographySnapshot(
         regions: cloneMapRegions(regions),
         settlements: resolvePublicSettlements(geography),
         protectedAreas: resolvePublicProtectedAreas(geography),
+        inventoryGridVersion: geography.inventory.version,
+        inventorySubdivisionFactor: geography.inventory.subdivisionFactor,
         activeReleaseNumber: activation.release.releaseNumber,
         activatedAt: activation.createdAt.toISOString(),
         fallbackReason: null,
@@ -537,6 +552,8 @@ export async function saveGeographyDraft(
 
     return {
       savedAt: record.updatedAt.toISOString(),
+      inventoryGridVersion: geography.inventory.version,
+      inventorySubdivisionFactor: geography.inventory.subdivisionFactor,
       topologyRevision: geography.topology.revision,
       territoryRevision: geography.territories.revision,
       protectedAreaRevision: geography.protectedAreas.revision,
@@ -655,6 +672,9 @@ export async function publishGeographyRelease(
     return {
       draft: {
         savedAt: draft.updatedAt.toISOString(),
+        inventoryGridVersion: draftGeography.inventory.version,
+        inventorySubdivisionFactor:
+          draftGeography.inventory.subdivisionFactor,
         topologyRevision: draftGeography.topology.revision,
         territoryRevision: draftGeography.territories.revision,
         protectedAreaRevision: draftGeography.protectedAreas.revision,

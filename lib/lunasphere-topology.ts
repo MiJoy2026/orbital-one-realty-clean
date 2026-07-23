@@ -1141,6 +1141,221 @@ export function removeTopologyEdgeNode(
   };
 }
 
+
+export type NaturalizeTopologyEdgeOptions = {
+  detailPointCount?: 1 | 2 | 3;
+  amplitudeRatio?: number;
+};
+
+function createDeterministicEdgeDirection(edgeId: string): number {
+  let hash = 0;
+
+  for (let index = 0; index < edgeId.length; index += 1) {
+    hash = (hash * 31 + edgeId.charCodeAt(index)) >>> 0;
+  }
+
+  return hash % 2 === 0 ? 1 : -1;
+}
+
+/**
+ * Adds gentle, deterministic detail to an otherwise straight shared border.
+ * Endpoints and junctions remain fixed, and the shared edge continues to be
+ * referenced by both neighboring states.
+ */
+export function naturalizeTopologyEdge(
+  topology: LunaSphereTopology,
+  edgeId: string,
+  options: NaturalizeTopologyEdgeOptions = {}
+): LunaSphereTopology {
+  const edge = topology.edges.find(
+    (candidate) => candidate.id === edgeId
+  );
+
+  if (!edge || edge.nodeIds.length !== 2) {
+    return topology;
+  }
+
+  const nodeById = new Map(
+    topology.nodes.map((node) => [node.id, node] as const)
+  );
+  const startNode = nodeById.get(edge.nodeIds[0]);
+  const endNode = nodeById.get(edge.nodeIds[1]);
+
+  if (!startNode || !endNode) {
+    return topology;
+  }
+
+  const detailPointCount = options.detailPointCount ?? 2;
+  const amplitudeRatio = Math.max(
+    0.015,
+    Math.min(0.14, options.amplitudeRatio ?? 0.065)
+  );
+  const deltaY = endNode.coordinate[0] - startNode.coordinate[0];
+  const deltaX = endNode.coordinate[1] - startNode.coordinate[1];
+  const length = Math.hypot(deltaY, deltaX);
+
+  if (length <= DEFAULT_COMPARISON_TOLERANCE) {
+    return topology;
+  }
+
+  const perpendicularY = -deltaX / length;
+  const perpendicularX = deltaY / length;
+  const direction = createDeterministicEdgeDirection(edge.id);
+  const amplitude = Math.min(18, Math.max(2.25, length * amplitudeRatio));
+  let result = topology;
+
+  for (let index = 0; index < detailPointCount; index += 1) {
+    const progress = (index + 1) / (detailPointCount + 1);
+    const wave = Math.sin(progress * Math.PI);
+    const alternatingDirection = index % 2 === 0 ? direction : -direction;
+    const coordinate: MutableLunarCoordinate = [
+      startNode.coordinate[0] + deltaY * progress +
+        perpendicularY * amplitude * wave * alternatingDirection,
+      startNode.coordinate[1] + deltaX * progress +
+        perpendicularX * amplitude * wave * alternatingDirection,
+    ];
+
+    result = insertTopologyEdgeNode(
+      result,
+      edgeId,
+      index,
+      coordinate
+    );
+  }
+
+  return result === topology
+    ? topology
+    : {
+        ...result,
+        revision: topology.revision + 1,
+      };
+}
+
+/**
+ * Smooths only interior shape-control points. Shared-edge endpoints and state
+ * junctions remain fixed, preventing topology gaps while reducing sharp kinks.
+ */
+export function smoothTopologyEdge(
+  topology: LunaSphereTopology,
+  edgeId: string,
+  strength = 0.45
+): LunaSphereTopology {
+  const edge = topology.edges.find(
+    (candidate) => candidate.id === edgeId
+  );
+
+  if (!edge || edge.nodeIds.length <= 2) {
+    return topology;
+  }
+
+  const normalizedStrength = Math.max(0.05, Math.min(0.8, strength));
+  const nodeById = new Map(
+    topology.nodes.map((node) => [node.id, node] as const)
+  );
+  const replacements = new Map<string, MutableLunarCoordinate>();
+
+  for (let index = 1; index < edge.nodeIds.length - 1; index += 1) {
+    const previous = nodeById.get(edge.nodeIds[index - 1]);
+    const current = nodeById.get(edge.nodeIds[index]);
+    const next = nodeById.get(edge.nodeIds[index + 1]);
+
+    if (!previous || !current || !next) {
+      continue;
+    }
+
+    const neighborAverage: MutableLunarCoordinate = [
+      (previous.coordinate[0] + next.coordinate[0]) / 2,
+      (previous.coordinate[1] + next.coordinate[1]) / 2,
+    ];
+    const target: MutableLunarCoordinate = [
+      current.coordinate[0] +
+        (neighborAverage[0] - current.coordinate[0]) * normalizedStrength,
+      current.coordinate[1] +
+        (neighborAverage[1] - current.coordinate[1]) * normalizedStrength,
+    ];
+
+    replacements.set(
+      current.id,
+      constrainTopologyEdgeCoordinate(topology, edgeId, target)
+    );
+  }
+
+  if (replacements.size === 0) {
+    return topology;
+  }
+
+  let changed = false;
+  const nodes = topology.nodes.map((node) => {
+    const replacement = replacements.get(node.id);
+
+    if (!replacement) {
+      return node;
+    }
+
+    if (coordinatesAreEqual(node.coordinate, replacement)) {
+      return node;
+    }
+
+    changed = true;
+    return {
+      ...node,
+      coordinate: replacement,
+    };
+  });
+
+  return changed
+    ? {
+        ...topology,
+        revision: topology.revision + 1,
+        nodes,
+      }
+    : topology;
+}
+
+/** Adds natural detail to every still-straight shared border of one state. */
+export function naturalizeTopologyStateBorders(
+  topology: LunaSphereTopology,
+  stateName: string
+): LunaSphereTopology {
+  const stateEdges = getStateEdges(topology, stateName).filter(
+    (edge) =>
+      edge.kind === "shared-state-border" && edge.nodeIds.length === 2
+  );
+  let result = topology;
+
+  for (const edge of stateEdges) {
+    result = naturalizeTopologyEdge(result, edge.id);
+  }
+
+  return result === topology
+    ? topology
+    : {
+        ...result,
+        revision: topology.revision + 1,
+      };
+}
+
+/** Smooths all existing interior control points around one state. */
+export function smoothTopologyStateBorders(
+  topology: LunaSphereTopology,
+  stateName: string,
+  strength = 0.45
+): LunaSphereTopology {
+  const stateEdges = getStateEdges(topology, stateName);
+  let result = topology;
+
+  for (const edge of stateEdges) {
+    result = smoothTopologyEdge(result, edge.id, strength);
+  }
+
+  return result === topology
+    ? topology
+    : {
+        ...result,
+        revision: topology.revision + 1,
+      };
+}
+
 function isInsideSaleableMoonWithTolerance(
   coordinate: LunarCoordinate
 ): boolean {
