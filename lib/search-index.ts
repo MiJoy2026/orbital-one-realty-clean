@@ -10,6 +10,7 @@ export type AtlasSearchResultType =
   | "State"
   | "City"
   | "Town"
+  | "Protected Area"
   | "Parcel";
 
 export type AtlasSearchResult = {
@@ -199,7 +200,8 @@ export const atlasSearchIndex: AtlasSearchResult[] = [
 
 export function searchAtlas(
   query: string,
-  limit = 8
+  limit = 8,
+  additionalResults: AtlasSearchResult[] = []
 ): AtlasSearchResult[] {
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -208,9 +210,10 @@ export function searchAtlas(
   }
 
   const exactParcelResult = createExactParcelSearchResult(query);
+  const baseIndex = [...additionalResults, ...atlasSearchIndex];
   const searchIndex = exactParcelResult
-    ? [exactParcelResult, ...atlasSearchIndex]
-    : atlasSearchIndex;
+    ? [exactParcelResult, ...baseIndex]
+    : baseIndex;
 
   return searchIndex
     .map((result) => {

@@ -8,15 +8,17 @@ import {
 
 export default function SearchBox({
   onSelectResult,
+  additionalResults = [],
 }: {
   onSelectResult: (result: AtlasSearchResult) => void;
+  additionalResults?: AtlasSearchResult[];
 }) {
   const [query, setQuery] = useState("");
   const [isOpen, setIsOpen] = useState(false);
 
   const results = useMemo(() => {
-    return searchAtlas(query);
-  }, [query]);
+    return searchAtlas(query, 8, additionalResults);
+  }, [additionalResults, query]);
 
   function selectResult(result: AtlasSearchResult) {
     setQuery(result.name);
@@ -35,7 +37,7 @@ export default function SearchBox({
             setIsOpen(true);
           }}
           onFocus={() => setIsOpen(true)}
-          placeholder="Search attractions, states, cities, towns, or parcels..."
+          placeholder="Search protected areas, attractions, states, cities, towns, or parcels..."
           className="w-full rounded-xl border border-white/10 bg-white/5 px-5 py-4 text-white outline-none placeholder:text-gray-500 focus:border-yellow-400"
         />
       </div>

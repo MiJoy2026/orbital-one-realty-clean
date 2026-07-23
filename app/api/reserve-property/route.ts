@@ -106,16 +106,28 @@ export async function POST(request: NextRequest) {
     let inventoryProperty: ValidatedInventoryProperty | null = null;
 
     if (propertyType === "Rural Acre") {
-      const excludedTerritories = publicGeography.settlements
-        .filter(
-          (settlement) =>
-            settlement.stateName.toLowerCase() ===
-            stateRegion.name.toLowerCase()
-        )
-        .map((settlement) => ({
-          id: settlement.id,
-          boundary: settlement.boundary,
-        }));
+      const excludedTerritories = [
+        ...publicGeography.settlements
+          .filter(
+            (settlement) =>
+              settlement.stateName.toLowerCase() ===
+              stateRegion.name.toLowerCase()
+          )
+          .map((settlement) => ({
+            id: settlement.id,
+            boundary: settlement.boundary,
+          })),
+        ...publicGeography.protectedAreas
+          .filter(
+            (area) =>
+              area.stateName.toLowerCase() ===
+              stateRegion.name.toLowerCase()
+          )
+          .map((area) => ({
+            id: area.id,
+            boundary: area.boundary,
+          })),
+      ];
       const parcel = getSelectableRuralParcelByKey(
         stateRegion.name,
         propertyKey,
@@ -152,8 +164,19 @@ export async function POST(request: NextRequest) {
               settlement.territoryNumber === parsedKey.cityNumber
           )
         : null;
+      const protectedExclusions = publicGeography.protectedAreas
+        .filter(
+          (area) =>
+            area.stateName.toLowerCase() ===
+            stateRegion.name.toLowerCase()
+        )
+        .map((area) => ({ id: area.id, boundary: area.boundary }));
       const block = city
-        ? getSelectableCityBlockByKey(city, propertyKey)
+        ? getSelectableCityBlockByKey(
+            city,
+            propertyKey,
+            protectedExclusions
+          )
         : null;
 
       if (city && block) {
@@ -183,8 +206,19 @@ export async function POST(request: NextRequest) {
               settlement.territoryNumber === parsedKey.townNumber
           )
         : null;
+      const protectedExclusions = publicGeography.protectedAreas
+        .filter(
+          (area) =>
+            area.stateName.toLowerCase() ===
+            stateRegion.name.toLowerCase()
+        )
+        .map((area) => ({ id: area.id, boundary: area.boundary }));
       const block = town
-        ? getSelectableTownBlockByKey(town, propertyKey)
+        ? getSelectableTownBlockByKey(
+            town,
+            propertyKey,
+            protectedExclusions
+          )
         : null;
 
       if (town && block) {

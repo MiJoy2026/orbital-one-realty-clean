@@ -14,3 +14,18 @@ export type PublicLunaSphereSettlement = {
   center: [number, number];
   boundary: [number, number][];
 };
+
+export type PublicLunaSphereProtectedArea = {
+  id: string;
+  stateId: string;
+  stateName: string;
+  stateNumber: number;
+  name: string;
+  slug: string;
+  category: "Historic Site" | "Landmark" | "Scientific Preserve" | "Reserved Area";
+  description: string;
+  attractionId: string | null;
+  center: [number, number];
+  boundary: [number, number][];
+  minZoom: number;
+};

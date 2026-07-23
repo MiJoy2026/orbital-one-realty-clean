@@ -12,6 +12,8 @@ import TownLayer from "@/components/moon-map/TownLayer";
 import LunarTileLayer from "@/components/moon-map/LunarTileLayer";
 import PropertyInfoPanel from "@/components/moon-map/PropertyInfoPanel";
 import SettlementInfoPanel from "@/components/moon-map/SettlementInfoPanel";
+import ProtectedAreaLayer from "@/components/moon-map/ProtectedAreaLayer";
+import ProtectedAreaInfoPanel from "@/components/moon-map/ProtectedAreaInfoPanel";
 import type { ParcelCell } from "@/lib/parcel-grid";
 import {
   getCityBlockGridForZoom,
@@ -43,7 +45,10 @@ import {
 } from "react-leaflet";
 import { CRS, Transformation, divIcon } from "leaflet";
 import type { LunarMapRegion } from "@/lib/lunar-map-regions";
-import type { PublicLunaSphereSettlement } from "@/lib/lunasphere-public-geography";
+import type {
+  PublicLunaSphereProtectedArea,
+  PublicLunaSphereSettlement,
+} from "@/lib/lunasphere-public-geography";
 
 type SelectedProperty = {
   id: string;
@@ -181,6 +186,26 @@ function FlyToSelectedSettlement({
   return null;
 }
 
+function FlyToSelectedProtectedArea({
+  area,
+}: {
+  area: PublicLunaSphereProtectedArea | null;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!area) {
+      return;
+    }
+
+    map.flyTo(area.center, Math.max(area.minZoom, 5), {
+      duration: 1.2,
+    });
+  }, [area, map]);
+
+  return null;
+}
+
 function MapHomeButton({ onReset }: { onReset: () => void }) {
   const map = useMap();
 
@@ -204,6 +229,7 @@ function MapHomeButton({ onReset }: { onReset: () => void }) {
 export default function LunarLeafletMap({
   mapRegions,
   publicSettlements,
+  publicProtectedAreas,
   activeGeographyReleaseNumber = null,
   selectedProperty,
   nearbyProperties = [],
@@ -211,6 +237,7 @@ export default function LunarLeafletMap({
 }: {
   mapRegions: LunarMapRegion[];
   publicSettlements: PublicLunaSphereSettlement[];
+  publicProtectedAreas: PublicLunaSphereProtectedArea[];
   activeGeographyReleaseNumber?: number | null;
   selectedProperty?: SelectedProperty | null;
   nearbyProperties?: SelectedProperty[];
@@ -224,6 +251,8 @@ export default function LunarLeafletMap({
   const [selectedState, setSelectedState] = useState<string | null>(null);
   const [selectedSettlementId, setSelectedSettlementId] =
     useState<string | null>(null);
+  const [selectedProtectedAreaId, setSelectedProtectedAreaId] =
+    useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState(0);
   const [selectedSearchResult, setSelectedSearchResult] =
      useState<AtlasSearchResult | null>(null);
@@ -232,6 +261,7 @@ export default function LunarLeafletMap({
   const [showTowns, setShowTowns] = useState(false);
   const [showProperties, setShowProperties] = useState(true);
   const [showAttractions, setShowAttractions] = useState(true);
+  const [showProtectedAreas, setShowProtectedAreas] = useState(true);
   const [reservingParcel, setReservingParcel] = useState(false);
   const [selectedParcelKey, setSelectedParcelKey] = useState<string | null>(null);
   const [selectedParcel, setSelectedParcel] = useState<ParcelCell | null>(null);
@@ -283,6 +313,44 @@ export default function LunarLeafletMap({
     selectedSettlement?.kind === "city" ? selectedSettlement : null;
   const selectedTown =
     selectedSettlement?.kind === "town" ? selectedSettlement : null;
+  const selectedProtectedArea = useMemo(
+    () =>
+      selectedProtectedAreaId
+        ? publicProtectedAreas.find(
+            (area) => area.id === selectedProtectedAreaId
+          ) ?? null
+        : null,
+    [publicProtectedAreas, selectedProtectedAreaId]
+  );
+  const visibleProtectedAreas = useMemo(
+    () =>
+      selectedState
+        ? publicProtectedAreas.filter(
+            (area) => area.stateName === selectedState
+          )
+        : publicProtectedAreas,
+    [publicProtectedAreas, selectedState]
+  );
+  const protectedAreaSearchResults = useMemo<AtlasSearchResult[]>(
+    () =>
+      publicProtectedAreas.map((area) => ({
+        id: area.id,
+        name: area.name,
+        subtitle: `${area.category} • ${area.stateName}`,
+        type: "Protected Area",
+        x: area.center[1],
+        y: area.center[0],
+        zoom: Math.max(area.minZoom, 5),
+        searchTerms: [
+          area.stateName,
+          area.category,
+          "protected",
+          "historic",
+          area.attractionId ?? "",
+        ].filter(Boolean),
+      })),
+    [publicProtectedAreas]
+  );
 
   const visibleAttractions = getVisibleLunarAttractions(zoomLevel);
 
@@ -296,15 +364,26 @@ export default function LunarLeafletMap({
 
   const ruralExclusions = useMemo(
     () =>
-      [...visibleCities, ...visibleTowns].map((settlement) => ({
-        id: settlement.id,
-        boundary: settlement.boundary,
-      })),
-    [visibleCities, visibleTowns]
+      [
+        ...[...visibleCities, ...visibleTowns].map((settlement) => ({
+          id: settlement.id,
+          boundary: settlement.boundary,
+        })),
+        ...visibleProtectedAreas.map((area) => ({
+          id: area.id,
+          boundary: area.boundary,
+        })),
+      ],
+    [visibleCities, visibleProtectedAreas, visibleTowns]
   );
 
   const visibleParcels = useMemo(() => {
-    if (!selectedState || !selectedStateRegion || selectedSettlement) {
+    if (
+      !selectedState ||
+      !selectedStateRegion ||
+      selectedSettlement ||
+      selectedProtectedArea
+    ) {
       return [];
     }
 
@@ -314,6 +393,7 @@ export default function LunarLeafletMap({
     });
   }, [
     ruralExclusions,
+    selectedProtectedArea,
     selectedSettlement,
     selectedState,
     selectedStateRegion,
@@ -323,17 +403,31 @@ export default function LunarLeafletMap({
   const visibleCityBlocks = useMemo(
     () =>
       selectedCity
-        ? getCityBlockGridForZoom(selectedCity, zoomLevel)
+        ? getCityBlockGridForZoom(
+            selectedCity,
+            zoomLevel,
+            visibleProtectedAreas.map((area) => ({
+              id: area.id,
+              boundary: area.boundary,
+            }))
+          )
         : [],
-    [selectedCity, zoomLevel]
+    [selectedCity, visibleProtectedAreas, zoomLevel]
   );
 
   const visibleTownBlocks = useMemo(
     () =>
       selectedTown
-        ? getTownBlockGridForZoom(selectedTown, zoomLevel)
+        ? getTownBlockGridForZoom(
+            selectedTown,
+            zoomLevel,
+            visibleProtectedAreas.map((area) => ({
+              id: area.id,
+              boundary: area.boundary,
+            }))
+          )
         : [],
-    [selectedTown, zoomLevel]
+    [selectedTown, visibleProtectedAreas, zoomLevel]
   );
 
   const visibleInventoryCells = useMemo(
@@ -521,8 +615,15 @@ export default function LunarLeafletMap({
           settlement.stateName === stateName &&
           settlement.territoryNumber === parsedCityBlockKey.cityNumber
       );
+      const protectedExclusions = publicProtectedAreas
+        .filter((area) => area.stateName === stateName)
+        .map((area) => ({ id: area.id, boundary: area.boundary }));
       const block = city
-        ? getSelectableCityBlockByKey(city, result.id)
+        ? getSelectableCityBlockByKey(
+            city,
+            result.id,
+            protectedExclusions
+          )
         : null;
 
       return city && block
@@ -543,8 +644,15 @@ export default function LunarLeafletMap({
           settlement.stateName === stateName &&
           settlement.territoryNumber === parsedTownBlockKey.townNumber
       );
+      const protectedExclusions = publicProtectedAreas
+        .filter((area) => area.stateName === stateName)
+        .map((area) => ({ id: area.id, boundary: area.boundary }));
       const block = town
-        ? getSelectableTownBlockByKey(town, result.id)
+        ? getSelectableTownBlockByKey(
+            town,
+            result.id,
+            protectedExclusions
+          )
         : null;
 
       return town && block
@@ -556,12 +664,20 @@ export default function LunarLeafletMap({
         : null;
     }
 
-    const excludedTerritories = publicSettlements
-      .filter((settlement) => settlement.stateName === stateName)
-      .map((settlement) => ({
-        id: settlement.id,
-        boundary: settlement.boundary,
-      }));
+    const excludedTerritories = [
+      ...publicSettlements
+        .filter((settlement) => settlement.stateName === stateName)
+        .map((settlement) => ({
+          id: settlement.id,
+          boundary: settlement.boundary,
+        })),
+      ...publicProtectedAreas
+        .filter((area) => area.stateName === stateName)
+        .map((area) => ({
+          id: area.id,
+          boundary: area.boundary,
+        })),
+    ];
     const parcel = getSelectableRuralParcelByKey(
       stateName,
       result.id,
@@ -695,6 +811,15 @@ export default function LunarLeafletMap({
           <label className="flex items-center gap-1 rounded-full border border-white/20 px-3 py-1">
             <input
               type="checkbox"
+              checked={showProtectedAreas}
+              onChange={() => setShowProtectedAreas(!showProtectedAreas)}
+            />
+            Protected Areas
+          </label>
+
+          <label className="flex items-center gap-1 rounded-full border border-white/20 px-3 py-1">
+            <input
+              type="checkbox"
               checked={showAttractions}
               onChange={() => setShowAttractions(!showAttractions)}
             />
@@ -704,6 +829,7 @@ export default function LunarLeafletMap({
       </div>
             <div className="mb-4">
               <SearchBox
+                additionalResults={protectedAreaSearchResults}
                 onSelectResult={(result) => {
                   const resolvedResult = resolveSearchResult(result);
 
@@ -714,6 +840,7 @@ export default function LunarLeafletMap({
                   if (result.type === "State") {
                     setSelectedState(result.name);
                     setSelectedSettlementId(null);
+                    setSelectedProtectedAreaId(null);
                     setSelectedParcel(null);
                     setSelectedParcelKey(null);
                   }
@@ -737,6 +864,7 @@ export default function LunarLeafletMap({
                     }
 
                     setSelectedSettlementId(settlement?.id ?? null);
+                    setSelectedProtectedAreaId(null);
                     setSelectedParcel(null);
                     setSelectedParcelKey(null);
 
@@ -753,6 +881,7 @@ export default function LunarLeafletMap({
                     if (selection) {
                       setSelectedState(selection.stateName);
                       setSelectedSettlementId(selection.settlementId);
+                      setSelectedProtectedAreaId(null);
                       setSelectedParcel(selection.parcel);
                       setSelectedParcelKey(selection.parcel.parcelKey);
 
@@ -775,6 +904,21 @@ export default function LunarLeafletMap({
                       alert(
                         "That property key is not saleable in the active LunaSphere geography."
                       );
+                    }
+                  }
+
+                  if (result.type === "Protected Area") {
+                    const area = publicProtectedAreas.find(
+                      (candidate) => candidate.id === result.id
+                    );
+
+                    if (area) {
+                      setSelectedState(area.stateName);
+                      setSelectedSettlementId(null);
+                      setSelectedProtectedAreaId(area.id);
+                      setSelectedParcel(null);
+                      setSelectedParcelKey(null);
+                      setShowProtectedAreas(true);
                     }
                   }
 
@@ -821,12 +965,14 @@ export default function LunarLeafletMap({
               regions={mapRegions}
             />
             <FlyToSelectedSettlement settlement={selectedSettlement} />
+            <FlyToSelectedProtectedArea area={selectedProtectedArea} />
             <FlyToSearchResult searchResult={selectedSearchResult} />
             <TrackZoomLevel onZoomChange={setZoomLevel} />
             <MapHomeButton
               onReset={() => {
                 setSelectedState(null);
                 setSelectedSettlementId(null);
+                setSelectedProtectedAreaId(null);
                 setSelectedParcel(null);
                 setSelectedParcelKey(null);
                 setShowTowns(false);
@@ -846,6 +992,7 @@ export default function LunarLeafletMap({
               onSelectState={(stateName) => {
                 setSelectedState(stateName);
                 setSelectedSettlementId(null);
+                setSelectedProtectedAreaId(null);
                 setSelectedParcel(null);
                 setSelectedParcelKey(null);
               }}
@@ -858,6 +1005,7 @@ export default function LunarLeafletMap({
                  selectedParcelKey={selectedParcelKey}
                  onSelect={(parcel) => {
                  setSelectedSettlementId(null);
+                 setSelectedProtectedAreaId(null);
                  setSelectedParcel(parcel);
                  setSelectedParcelKey(parcel.parcelKey);
                 }}
@@ -872,6 +1020,7 @@ export default function LunarLeafletMap({
               onSelectCity={(city) => {
                 setSelectedState(city.stateName);
                 setSelectedSettlementId(city.id);
+                setSelectedProtectedAreaId(null);
                 setSelectedParcel(null);
                 setSelectedParcelKey(null);
               }}
@@ -885,6 +1034,7 @@ export default function LunarLeafletMap({
               onSelectTown={(town) => {
                 setSelectedState(town.stateName);
                 setSelectedSettlementId(town.id);
+                setSelectedProtectedAreaId(null);
                 setSelectedParcel(null);
                 setSelectedParcelKey(null);
               }}
@@ -913,6 +1063,20 @@ export default function LunarLeafletMap({
                 }}
               />
             )}
+
+            <ProtectedAreaLayer
+              showProtectedAreas={showProtectedAreas}
+              zoomLevel={zoomLevel}
+              areas={visibleProtectedAreas}
+              selectedAreaId={selectedProtectedAreaId}
+              onSelectArea={(area) => {
+                setSelectedState(area.stateName);
+                setSelectedSettlementId(null);
+                setSelectedProtectedAreaId(area.id);
+                setSelectedParcel(null);
+                setSelectedParcelKey(null);
+              }}
+            />
 
             {showAttractions &&
                visibleAttractions.map((attraction) => (
@@ -1132,6 +1296,8 @@ export default function LunarLeafletMap({
       window.dispatchEvent(new Event("orbital-cart-updated"));
     }}
   />
+) : selectedProtectedArea ? (
+  <ProtectedAreaInfoPanel area={selectedProtectedArea} />
 ) : selectedSettlement ? (
   <SettlementInfoPanel settlement={selectedSettlement} />
 ) : (

@@ -35,6 +35,26 @@ import {
   type LunaSphereGeographyDocument,
 } from "@/lib/lunasphere-geography-document";
 import {
+  PROTECTED_AREA_CATEGORIES,
+  addProtectedArea,
+  cloneProtectedAreaLayout,
+  createInitialProtectedAreaLayout,
+  deleteProtectedArea,
+  getProtectedAreaDefinition,
+  getProtectedAreasForState,
+  insertProtectedAreaBoundaryPoint,
+  moveProtectedAreaBoundaryPoint,
+  moveProtectedAreaCenter,
+  removeProtectedAreaBoundaryPoint,
+  resolveProtectedAreasForState,
+  restoreProtectedArea,
+  restoreStateProtectedAreas,
+  updateProtectedAreaMetadata,
+  validateProtectedAreaLayout,
+  type LunaSphereProtectedAreaCategory,
+  type ResolvedLunaSphereProtectedArea,
+} from "@/lib/lunasphere-protected-areas";
+import {
   cloneTerritoryLayout,
   convertLunarCoordinateToStateRelative,
   createInitialTerritoryLayout,
@@ -98,9 +118,13 @@ const baselineTopology = createTopologyFromRegions(
   }
 );
 const baselineTerritoryLayout = createInitialTerritoryLayout();
+const baselineProtectedAreaLayout = createInitialProtectedAreaLayout(
+  baselineTopology
+);
 const baselineGeography = createGeographyDocument(
   baselineTopology,
-  baselineTerritoryLayout
+  baselineTerritoryLayout,
+  baselineProtectedAreaLayout
 );
 
 const vertexIcon = divIcon({
@@ -252,8 +276,16 @@ const cityTerritoryCenterIcon = createTerritoryCenterIcon("#22d3ee");
 const townTerritoryCenterIcon = createTerritoryCenterIcon("#f59e0b");
 const cityTerritoryAddIcon = createTerritoryAddIcon("#22d3ee");
 const townTerritoryAddIcon = createTerritoryAddIcon("#f59e0b");
+const protectedAreaVertexIcon = createTerritoryVertexIcon("#f43f5e", false);
+const selectedProtectedAreaVertexIcon = createTerritoryVertexIcon("#f43f5e", true);
+const protectedAreaCenterIcon = createTerritoryCenterIcon("#f43f5e");
+const protectedAreaAddIcon = createTerritoryAddIcon("#f43f5e");
 
-type TerritoryDisplayMode = "states" | LunaSphereSettlementKind | "all";
+type TerritoryDisplayMode =
+  | "states"
+  | LunaSphereSettlementKind
+  | "protected"
+  | "all";
 
 type EdgeSegmentTarget = {
   key: string;
@@ -317,6 +349,7 @@ type DatabaseDraftMetadata = {
   savedAt: string;
   topologyRevision: number;
   territoryRevision: number;
+  protectedAreaRevision: number;
   geography: LunaSphereGeographyDocument;
 };
 
@@ -325,6 +358,7 @@ type GeographyReleaseMetadata = {
   publishedAt: string;
   topologyRevision: number;
   territoryRevision: number;
+  protectedAreaRevision: number;
   topologyHash: string;
 };
 
@@ -391,14 +425,24 @@ function geographyHistoryReducer(
     const topologyChanged = !geographiesHaveSameContent(
       createGeographyDocument(
         action.baseline.topology,
-        state.present.territories
+        state.present.territories,
+        state.present.protectedAreas
       ),
       state.present
     );
     const territoriesChanged = !geographiesHaveSameContent(
       createGeographyDocument(
         state.present.topology,
-        action.baseline.territories
+        action.baseline.territories,
+        state.present.protectedAreas
+      ),
+      state.present
+    );
+    const protectedAreasChanged = !geographiesHaveSameContent(
+      createGeographyDocument(
+        state.present.topology,
+        state.present.territories,
+        action.baseline.protectedAreas
       ),
       state.present
     );
@@ -419,6 +463,12 @@ function geographyHistoryReducer(
               revision: action.baseline.territories.revision + 1,
             }
           : cloneTerritoryLayout(state.present.territories),
+        protectedAreas: protectedAreasChanged
+          ? {
+              ...cloneProtectedAreaLayout(state.present.protectedAreas),
+              revision: action.baseline.protectedAreas.revision + 1,
+            }
+          : cloneProtectedAreaLayout(state.present.protectedAreas),
       },
       future: [],
     };
@@ -592,6 +642,7 @@ export default function LunaSphereDesigner() {
   const workingGeography = history.present;
   const workingTopology = workingGeography.topology;
   const workingTerritoryLayout = workingGeography.territories;
+  const workingProtectedAreaLayout = workingGeography.protectedAreas;
 
   const dragBaselineRef =
     useRef<LunaSphereGeographyDocument | null>(null);
@@ -608,6 +659,11 @@ export default function LunaSphereDesigner() {
     string | null
   >(null);
   const [selectedTerritoryPointIndex, setSelectedTerritoryPointIndex] =
+    useState<number | null>(null);
+  const [selectedProtectedAreaId, setSelectedProtectedAreaId] = useState<
+    string | null
+  >(null);
+  const [selectedProtectedAreaPointIndex, setSelectedProtectedAreaPointIndex] =
     useState<number | null>(null);
   const [draftReady, setDraftReady] = useState(false);
   const [draftStatus, setDraftStatus] =
@@ -639,6 +695,7 @@ export default function LunaSphereDesigner() {
     releasePreview?.geography ?? workingGeography;
   const topology = geography.topology;
   const territoryLayout = geography.territories;
+  const protectedAreaLayout = geography.protectedAreas;
   const isPreviewingRelease = releasePreview !== null;
 
   const regions = useMemo(
@@ -833,6 +890,87 @@ export default function LunaSphereDesigner() {
     selectedTerritoryDefinition !== null &&
     selectedTerritoryPointIndex !== null &&
     selectedTerritoryDefinition.boundary.length > 4;
+  const resolvedProtectedAreas = useMemo(
+    () =>
+      resolveProtectedAreasForState(
+        topology,
+        protectedAreaLayout,
+        selectedState
+      ),
+    [protectedAreaLayout, selectedState, topology]
+  );
+  const protectedAreaValidation = useMemo(
+    () => validateProtectedAreaLayout(topology, protectedAreaLayout),
+    [protectedAreaLayout, topology]
+  );
+  const selectedProtectedAreaDefinition = useMemo(
+    () =>
+      selectedProtectedAreaId
+        ? getProtectedAreaDefinition(
+            protectedAreaLayout,
+            selectedProtectedAreaId
+          )
+        : null,
+    [protectedAreaLayout, selectedProtectedAreaId]
+  );
+  const selectedResolvedProtectedArea = useMemo(
+    () =>
+      selectedProtectedAreaId
+        ? resolvedProtectedAreas.find(
+            (area) => area.id === selectedProtectedAreaId
+          ) ?? null
+        : null,
+    [resolvedProtectedAreas, selectedProtectedAreaId]
+  );
+  const selectedProtectedAreaCanRemovePoint =
+    selectedProtectedAreaDefinition !== null &&
+    selectedProtectedAreaPointIndex !== null &&
+    selectedProtectedAreaDefinition.boundary.length > 4;
+  const selectedProtectedAreaIssues = useMemo(
+    () =>
+      [
+        ...protectedAreaValidation.errors,
+        ...protectedAreaValidation.warnings,
+        ...protectedAreaValidation.information,
+      ].filter(
+        (issue) =>
+          issue.areaId === selectedProtectedAreaId ||
+          (!selectedProtectedAreaId && issue.stateName === selectedState)
+      ),
+    [
+      protectedAreaValidation,
+      selectedProtectedAreaId,
+      selectedState,
+    ]
+  );
+  const selectedProtectedAreaSegmentTargets = useMemo(() => {
+    if (!selectedResolvedProtectedArea) {
+      return [] as {
+        key: string;
+        segmentIndex: number;
+        position: [number, number];
+      }[];
+    }
+
+    return selectedResolvedProtectedArea.boundary.map(
+      (point, segmentIndex) => {
+        const nextPoint =
+          selectedResolvedProtectedArea.boundary[
+            (segmentIndex + 1) %
+              selectedResolvedProtectedArea.boundary.length
+          ];
+
+        return {
+          key: `${selectedResolvedProtectedArea.id}-segment-${segmentIndex}`,
+          segmentIndex,
+          position: [
+            (point[0] + nextPoint[0]) / 2,
+            (point[1] + nextPoint[1]) / 2,
+          ] as [number, number],
+        };
+      }
+    );
+  }, [selectedResolvedProtectedArea]);
   const visibleSettlementOptions = useMemo(() => {
     if (!resolvedTerritories) {
       return [] as ResolvedLunaSphereSettlement[];
@@ -882,11 +1020,17 @@ export default function LunaSphereDesigner() {
   }, [selectedResolvedTerritory]);
   const showStateEditingHandles =
     territoryDisplayMode === "states" ||
-    (territoryDisplayMode === "all" && !selectedTerritoryId);
+    (territoryDisplayMode === "all" &&
+      !selectedTerritoryId &&
+      !selectedProtectedAreaId);
   const showTerritoryEditingHandles =
     selectedResolvedTerritory !== null &&
     (territoryDisplayMode === "all" ||
       selectedResolvedTerritory.kind === territoryDisplayMode);
+  const showProtectedAreaEditingHandles =
+    selectedResolvedProtectedArea !== null &&
+    (territoryDisplayMode === "all" ||
+      territoryDisplayMode === "protected");
 
   const removableNodeEdge = useMemo(() => {
     if (!selectedNodeId) {
@@ -1055,6 +1199,7 @@ export default function LunaSphereDesigner() {
         });
         setSelectedNodeId(null);
         setSelectedTerritoryPointIndex(null);
+        setSelectedProtectedAreaPointIndex(null);
         return;
       }
 
@@ -1063,6 +1208,7 @@ export default function LunaSphereDesigner() {
         dispatchHistory({ type: "redo" });
         setSelectedNodeId(null);
         setSelectedTerritoryPointIndex(null);
+        setSelectedProtectedAreaPointIndex(null);
         return;
       }
 
@@ -1070,6 +1216,27 @@ export default function LunaSphereDesigner() {
         event.key === "Delete" ||
         event.key === "Backspace"
       ) {
+        if (
+          selectedProtectedAreaId &&
+          selectedProtectedAreaPointIndex !== null &&
+          selectedProtectedAreaCanRemovePoint
+        ) {
+          event.preventDefault();
+          dispatchHistory({
+            type: "apply",
+            update: (currentGeography) => ({
+              ...currentGeography,
+              protectedAreas: removeProtectedAreaBoundaryPoint(
+                currentGeography.protectedAreas,
+                selectedProtectedAreaId,
+                selectedProtectedAreaPointIndex
+              ),
+            }),
+          });
+          setSelectedProtectedAreaPointIndex(null);
+          return;
+        }
+
         if (
           selectedTerritoryId &&
           selectedTerritoryPointIndex !== null &&
@@ -1120,6 +1287,9 @@ export default function LunaSphereDesigner() {
     isPreviewingRelease,
     removableNodeEdge,
     selectedNodeId,
+    selectedProtectedAreaCanRemovePoint,
+    selectedProtectedAreaId,
+    selectedProtectedAreaPointIndex,
     selectedTerritoryCanRemovePoint,
     selectedTerritoryId,
     selectedTerritoryPointIndex,
@@ -1130,6 +1300,8 @@ export default function LunaSphereDesigner() {
     setSelectedNodeId(null);
     setSelectedTerritoryId(null);
     setSelectedTerritoryPointIndex(null);
+    setSelectedProtectedAreaId(null);
+    setSelectedProtectedAreaPointIndex(null);
   }
 
   function selectTerritory(territoryId: string) {
@@ -1144,6 +1316,26 @@ export default function LunaSphereDesigner() {
 
     setSelectedState(definition.stateName);
     setSelectedTerritoryId(territoryId);
+    setSelectedTerritoryPointIndex(null);
+    setSelectedProtectedAreaId(null);
+    setSelectedProtectedAreaPointIndex(null);
+    setSelectedNodeId(null);
+  }
+
+  function selectProtectedArea(areaId: string) {
+    const definition = getProtectedAreaDefinition(
+      protectedAreaLayout,
+      areaId
+    );
+
+    if (!definition) {
+      return;
+    }
+
+    setSelectedState(definition.stateName);
+    setSelectedProtectedAreaId(areaId);
+    setSelectedProtectedAreaPointIndex(null);
+    setSelectedTerritoryId(null);
     setSelectedTerritoryPointIndex(null);
     setSelectedNodeId(null);
   }
@@ -1385,6 +1577,304 @@ export default function LunaSphereDesigner() {
     });
   }
 
+  function updateProtectedAreaBoundaryFromMap(
+    areaId: string,
+    pointIndex: number,
+    mapCoordinate: [number, number],
+    incrementRevision: boolean
+  ) {
+    dispatchHistory({
+      type: "preview",
+      update: (currentGeography) => {
+        const definition = getProtectedAreaDefinition(
+          currentGeography.protectedAreas,
+          areaId
+        );
+
+        if (!definition) {
+          return currentGeography;
+        }
+
+        const resolvedState = resolveStateTerritories(
+          currentGeography.topology,
+          currentGeography.territories,
+          definition.stateName
+        );
+
+        if (!resolvedState) {
+          return currentGeography;
+        }
+
+        const relativeCoordinate =
+          convertLunarCoordinateToStateRelative(
+            mapCoordinate,
+            resolvedState.stateBoundary,
+            resolvedState.interiorOrigin
+          );
+        const protectedAreas = moveProtectedAreaBoundaryPoint(
+          currentGeography.protectedAreas,
+          areaId,
+          pointIndex,
+          relativeCoordinate,
+          { incrementRevision }
+        );
+
+        return protectedAreas === currentGeography.protectedAreas
+          ? currentGeography
+          : { ...currentGeography, protectedAreas };
+      },
+    });
+  }
+
+  function updateProtectedAreaCenterFromMap(
+    areaId: string,
+    mapCoordinate: [number, number],
+    incrementRevision: boolean
+  ) {
+    dispatchHistory({
+      type: "preview",
+      update: (currentGeography) => {
+        const definition = getProtectedAreaDefinition(
+          currentGeography.protectedAreas,
+          areaId
+        );
+
+        if (!definition) {
+          return currentGeography;
+        }
+
+        const resolvedState = resolveStateTerritories(
+          currentGeography.topology,
+          currentGeography.territories,
+          definition.stateName
+        );
+
+        if (!resolvedState) {
+          return currentGeography;
+        }
+
+        const relativeCoordinate =
+          convertLunarCoordinateToStateRelative(
+            mapCoordinate,
+            resolvedState.stateBoundary,
+            resolvedState.interiorOrigin
+          );
+        const protectedAreas = moveProtectedAreaCenter(
+          currentGeography.protectedAreas,
+          areaId,
+          relativeCoordinate,
+          { incrementRevision }
+        );
+
+        return protectedAreas === currentGeography.protectedAreas
+          ? currentGeography
+          : { ...currentGeography, protectedAreas };
+      },
+    });
+  }
+
+  function addSelectedProtectedAreaPoint(segmentIndex: number) {
+    if (!selectedProtectedAreaId) return;
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        protectedAreas: insertProtectedAreaBoundaryPoint(
+          currentGeography.protectedAreas,
+          selectedProtectedAreaId,
+          segmentIndex
+        ),
+      }),
+    });
+    setSelectedProtectedAreaPointIndex(segmentIndex + 1);
+  }
+
+  function removeSelectedProtectedAreaPoint() {
+    if (
+      !selectedProtectedAreaId ||
+      selectedProtectedAreaPointIndex === null ||
+      !selectedProtectedAreaCanRemovePoint
+    ) {
+      return;
+    }
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        protectedAreas: removeProtectedAreaBoundaryPoint(
+          currentGeography.protectedAreas,
+          selectedProtectedAreaId,
+          selectedProtectedAreaPointIndex
+        ),
+      }),
+    });
+    setSelectedProtectedAreaPointIndex(null);
+  }
+
+  function nudgeSelectedProtectedAreaPoint(
+    deltaY: number,
+    deltaX: number
+  ) {
+    if (
+      !selectedProtectedAreaId ||
+      selectedProtectedAreaPointIndex === null ||
+      !selectedProtectedAreaDefinition
+    ) {
+      return;
+    }
+
+    const point =
+      selectedProtectedAreaDefinition.boundary[
+        selectedProtectedAreaPointIndex
+      ];
+
+    if (!point) return;
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        protectedAreas: moveProtectedAreaBoundaryPoint(
+          currentGeography.protectedAreas,
+          selectedProtectedAreaId,
+          selectedProtectedAreaPointIndex,
+          [point[0] + deltaY, point[1] + deltaX]
+        ),
+      }),
+    });
+  }
+
+  function nudgeSelectedProtectedAreaCenter(
+    deltaY: number,
+    deltaX: number
+  ) {
+    if (!selectedProtectedAreaId || !selectedProtectedAreaDefinition) {
+      return;
+    }
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        protectedAreas: moveProtectedAreaCenter(
+          currentGeography.protectedAreas,
+          selectedProtectedAreaId,
+          [
+            selectedProtectedAreaDefinition.center[0] + deltaY,
+            selectedProtectedAreaDefinition.center[1] + deltaX,
+          ]
+        ),
+      }),
+    });
+  }
+
+  function createProtectedArea() {
+    const nextLayout = addProtectedArea(
+      workingTopology,
+      workingProtectedAreaLayout,
+      selectedState
+    );
+    const existingIds = new Set(
+      workingProtectedAreaLayout.areas.map((area) => area.id)
+    );
+    const addedArea = nextLayout.areas.find(
+      (area) => !existingIds.has(area.id)
+    );
+
+    if (!addedArea) {
+      return;
+    }
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        protectedAreas: nextLayout,
+      }),
+    });
+    setTerritoryDisplayMode("protected");
+    setSelectedProtectedAreaId(addedArea.id);
+    setSelectedProtectedAreaPointIndex(null);
+    setSelectedTerritoryId(null);
+    setSelectedTerritoryPointIndex(null);
+    setSelectedNodeId(null);
+  }
+
+  function removeSelectedProtectedArea() {
+    if (!selectedProtectedAreaId) return;
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        protectedAreas: deleteProtectedArea(
+          currentGeography.protectedAreas,
+          selectedProtectedAreaId
+        ),
+      }),
+    });
+    setSelectedProtectedAreaId(null);
+    setSelectedProtectedAreaPointIndex(null);
+  }
+
+  function resetSelectedProtectedArea() {
+    if (!selectedProtectedAreaId) return;
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        protectedAreas: restoreProtectedArea(
+          currentGeography.topology,
+          currentGeography.protectedAreas,
+          selectedProtectedAreaId
+        ),
+      }),
+    });
+    setSelectedProtectedAreaPointIndex(null);
+  }
+
+  function resetSelectedStateProtectedAreas() {
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        protectedAreas: restoreStateProtectedAreas(
+          currentGeography.topology,
+          currentGeography.protectedAreas,
+          selectedState
+        ),
+      }),
+    });
+    setSelectedProtectedAreaId(null);
+    setSelectedProtectedAreaPointIndex(null);
+  }
+
+  function updateSelectedProtectedAreaMetadata(
+    input: Partial<{
+      name: string;
+      category: LunaSphereProtectedAreaCategory;
+      description: string;
+      minZoom: number;
+    }>
+  ) {
+    if (!selectedProtectedAreaId) return;
+
+    dispatchHistory({
+      type: "apply",
+      update: (currentGeography) => ({
+        ...currentGeography,
+        protectedAreas: updateProtectedAreaMetadata(
+          currentGeography.protectedAreas,
+          selectedProtectedAreaId,
+          input
+        ),
+      }),
+    });
+  }
+
   function addControlPoint(target: EdgeSegmentTarget) {
     dispatchHistory({
       type: "apply",
@@ -1471,12 +1961,14 @@ export default function LunaSphereDesigner() {
     dispatchHistory({ type: "undo" });
     setSelectedNodeId(null);
     setSelectedTerritoryPointIndex(null);
+    setSelectedProtectedAreaPointIndex(null);
   }
 
   function redo() {
     dispatchHistory({ type: "redo" });
     setSelectedNodeId(null);
     setSelectedTerritoryPointIndex(null);
+    setSelectedProtectedAreaPointIndex(null);
   }
 
   function saveDraftNow() {
@@ -1763,6 +2255,15 @@ export default function LunaSphereDesigner() {
           releasePreview.geography.territories.revision
         ) + 1,
     };
+    copiedGeography.protectedAreas = {
+      ...copiedGeography.protectedAreas,
+      status: "draft",
+      revision:
+        Math.max(
+          workingProtectedAreaLayout.revision,
+          releasePreview.geography.protectedAreas.revision
+        ) + 1,
+    };
     const releaseNumber = releasePreview.releaseNumber;
 
     dispatchHistory({
@@ -1827,6 +2328,7 @@ export default function LunaSphereDesigner() {
     if (
       !validation.valid ||
       !territoryValidation.valid ||
+      !protectedAreaValidation.valid ||
       !selectedRegion ||
       !selectedTopologyState
     ) {
@@ -1857,17 +2359,25 @@ export default function LunaSphereDesigner() {
           territoryLayout,
           selectedState
         ),
+        protectedAreas: getProtectedAreasForState(
+          protectedAreaLayout,
+          selectedState
+        ),
       }
     );
   }
 
   function exportAllStates() {
-    if (!validation.valid || !territoryValidation.valid) {
+    if (
+      !validation.valid ||
+      !territoryValidation.valid ||
+      !protectedAreaValidation.valid
+    ) {
       return;
     }
 
     downloadJson(
-      `lunasphere-geography-draft-state-r${topology.revision}-territory-r${territoryLayout.revision}.json`,
+      `lunasphere-geography-draft-state-r${topology.revision}-territory-r${territoryLayout.revision}-protected-r${protectedAreaLayout.revision}.json`,
       geography
     );
   }
@@ -1904,7 +2414,7 @@ export default function LunaSphereDesigner() {
           : databaseStatus === "error"
             ? "Database error"
             : databaseDraft
-              ? `State r${databaseDraft.topologyRevision} · Territory r${databaseDraft.territoryRevision}${
+              ? `State r${databaseDraft.topologyRevision} · Territory r${databaseDraft.territoryRevision} · Protected r${databaseDraft.protectedAreaRevision}${
                   databaseDraftIsCurrent ? " · current" : " · differs"
                 }`
               : "No database draft";
@@ -1923,10 +2433,10 @@ export default function LunaSphereDesigner() {
 
           <p className="mt-2 max-w-4xl text-sm text-zinc-400">
             Every state border is stored once. Dragging a white handle
-            updates all states that share it. Cities and towns now use
-            state-relative territory geometry that reflows with the selected
-            state. Browser autosave and database releases protect the state
-            topology while Moon-perimeter handles remain locked to the
+            updates all states that share it. Cities, towns, and protected
+            areas use state-relative geometry that reflows with the selected
+            state. Browser autosave and database releases protect the complete
+            geography while Moon-perimeter handles remain locked to the
             circular saleable boundary.
           </p>
 
@@ -1957,7 +2467,7 @@ export default function LunaSphereDesigner() {
               </span>
               <div className="flex flex-wrap gap-2">
                 {(
-                  ["states", "city", "town", "all"] as const
+                  ["states", "city", "town", "protected", "all"] as const
                 ).map((mode) => (
                   <button
                     key={mode}
@@ -1975,7 +2485,9 @@ export default function LunaSphereDesigner() {
                         ? "Cities"
                         : mode === "town"
                           ? "Towns"
-                          : "All"}
+                          : mode === "protected"
+                            ? "Protected"
+                            : "All"}
                   </button>
                 ))}
               </div>
@@ -1998,6 +2510,7 @@ export default function LunaSphereDesigner() {
                 }}
                 disabled={
                   territoryDisplayMode === "states" ||
+                  territoryDisplayMode === "protected" ||
                   visibleSettlementOptions.length === 0
                 }
                 className="w-full rounded-xl border border-white/15 bg-black px-4 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
@@ -2007,6 +2520,37 @@ export default function LunaSphereDesigner() {
                   <option key={territory.id} value={territory.id}>
                     {territory.kind === "city" ? "City" : "Town"}{" "}
                     {territory.territoryNumber}: {territory.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="min-w-72">
+              <span className="mb-2 block text-xs font-bold uppercase tracking-wider text-zinc-400">
+                Selected protected area
+              </span>
+              <select
+                value={selectedProtectedAreaId ?? ""}
+                onChange={(event) => {
+                  const areaId = event.target.value;
+                  if (areaId) {
+                    selectProtectedArea(areaId);
+                  } else {
+                    setSelectedProtectedAreaId(null);
+                    setSelectedProtectedAreaPointIndex(null);
+                  }
+                }}
+                disabled={
+                  territoryDisplayMode === "states" ||
+                  territoryDisplayMode === "city" ||
+                  territoryDisplayMode === "town"
+                }
+                className="w-full rounded-xl border border-rose-300/30 bg-black px-4 py-3 font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <option value="">Choose a protected area</option>
+                {resolvedProtectedAreas.map((area) => (
+                  <option key={area.id} value={area.id}>
+                    {area.category}: {area.name}
                   </option>
                 ))}
               </select>
@@ -2083,6 +2627,24 @@ export default function LunaSphereDesigner() {
 
             <button
               type="button"
+              onClick={createProtectedArea}
+              disabled={isPreviewingRelease}
+              className="rounded-xl border border-rose-300/30 bg-rose-400/10 px-4 py-3 text-sm font-bold text-rose-100 enabled:hover:bg-rose-400/20 disabled:opacity-35"
+            >
+              Add Protected Area
+            </button>
+
+            <button
+              type="button"
+              onClick={resetSelectedStateProtectedAreas}
+              disabled={isPreviewingRelease}
+              className="rounded-xl border border-rose-300/30 px-4 py-3 text-sm font-bold text-rose-100 enabled:hover:bg-rose-400/10 disabled:opacity-35"
+            >
+              Reset State Protected Areas
+            </button>
+
+            <button
+              type="button"
               onClick={reloadSavedDraft}
               disabled={isPreviewingRelease || !lastSavedAt}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
@@ -2102,7 +2664,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={exportSelectedState}
-              disabled={!validation.valid || !territoryValidation.valid}
+              disabled={!validation.valid || !territoryValidation.valid || !protectedAreaValidation.valid}
               className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black text-black enabled:hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Export Selected State
@@ -2111,7 +2673,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={exportAllStates}
-              disabled={!validation.valid || !territoryValidation.valid}
+              disabled={!validation.valid || !territoryValidation.valid || !protectedAreaValidation.valid}
               className="rounded-xl bg-white px-4 py-3 text-sm font-black text-black enabled:hover:bg-zinc-200 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Export Geography Draft
@@ -2125,10 +2687,10 @@ export default function LunaSphereDesigner() {
                   Shared Database Workspace
                 </p>
                 <p className="mt-1 text-sm text-violet-50/75">
-                  Save one cross-device geography draft, including states,
-                  cities, and towns. Publish immutable releases, preview any
-                  release, and choose the release whose state layer is used by
-                  the public Moon Map.
+                  Save one cross-device geography draft containing states,
+                  cities, towns, and protected areas. Publish immutable
+                  releases, preview any release, and choose the complete
+                  geography used by the public Moon Map.
                 </p>
               </div>
 
@@ -2204,7 +2766,7 @@ export default function LunaSphereDesigner() {
               <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-violet-50/80">
                 <strong className="text-violet-100">Database draft:</strong>{" "}
                 {databaseDraft
-                  ? `State r${databaseDraft.topologyRevision} · Territory r${databaseDraft.territoryRevision}, saved ${formatDatabaseDate(
+                  ? `State r${databaseDraft.topologyRevision} · Territory r${databaseDraft.territoryRevision} · Protected r${databaseDraft.protectedAreaRevision}, saved ${formatDatabaseDate(
                       databaseDraft.savedAt
                     )}`
                   : "Not saved yet"}
@@ -2213,7 +2775,7 @@ export default function LunaSphereDesigner() {
               <div className="rounded-xl border border-white/10 bg-black/25 p-3 text-violet-50/80">
                 <strong className="text-violet-100">Latest release:</strong>{" "}
                 {latestRelease
-                  ? `Release ${latestRelease.releaseNumber}, state r${latestRelease.topologyRevision} · territory r${latestRelease.territoryRevision}, published ${formatDatabaseDate(
+                  ? `Release ${latestRelease.releaseNumber}, state r${latestRelease.topologyRevision} · territory r${latestRelease.territoryRevision} · protected r${latestRelease.protectedAreaRevision}, published ${formatDatabaseDate(
                       latestRelease.publishedAt
                     )}`
                   : "No releases published yet"}
@@ -2287,7 +2849,7 @@ export default function LunaSphereDesigner() {
                             )}
                           </div>
                           <p className="mt-1 text-xs text-zinc-400">
-                            State r{release.topologyRevision} · Territory r{release.territoryRevision} · Published {formatDatabaseDate(
+                            State r{release.topologyRevision} · Territory r{release.territoryRevision} · Protected r{release.protectedAreaRevision} · Published {formatDatabaseDate(
                               release.publishedAt
                             )}
                           </p>
@@ -2513,6 +3075,44 @@ export default function LunaSphereDesigner() {
                   );
                 })}
 
+              {(territoryDisplayMode === "protected" ||
+                territoryDisplayMode === "all") &&
+                resolvedProtectedAreas.map((area) => {
+                  const isSelected =
+                    area.id === selectedProtectedAreaId;
+
+                  return (
+                    <Polygon
+                      key={`protected-${area.id}`}
+                      positions={area.boundary}
+                      pathOptions={{
+                        color: isSelected ? "#ffffff" : "#f43f5e",
+                        weight: isSelected ? 4 : 2.2,
+                        opacity: 0.96,
+                        fillColor: "#be123c",
+                        fillOpacity: isSelected ? 0.42 : 0.24,
+                        dashArray:
+                          area.category === "Reserved Area"
+                            ? "8 5"
+                            : undefined,
+                      }}
+                      eventHandlers={{
+                        click: () => selectProtectedArea(area.id),
+                      }}
+                    >
+                      <Popup>
+                        <strong>{area.name}</strong>
+                        <br />
+                        {area.category} · {area.stateName}
+                        <br />
+                        Protected from property inventory
+                        <br />
+                        Click to edit
+                      </Popup>
+                    </Polygon>
+                  );
+                })}
+
               {showStateEditingHandles &&
                 selectedEdges.map((edge) => (
                   <Polyline
@@ -2710,6 +3310,8 @@ export default function LunaSphereDesigner() {
                               setSelectedTerritoryPointIndex(
                                 pointIndex
                               );
+                              setSelectedProtectedAreaId(null);
+                              setSelectedProtectedAreaPointIndex(null);
                               setSelectedNodeId(null);
                             },
                             dragstart: () => {
@@ -2718,6 +3320,8 @@ export default function LunaSphereDesigner() {
                               setSelectedTerritoryPointIndex(
                                 pointIndex
                               );
+                              setSelectedProtectedAreaId(null);
+                              setSelectedProtectedAreaPointIndex(null);
                               setSelectedNodeId(null);
                             },
                             drag: (event) => {
@@ -2756,6 +3360,139 @@ export default function LunaSphereDesigner() {
                     )}
                   </>
                 )}
+
+              {showProtectedAreaEditingHandles &&
+                selectedResolvedProtectedArea && (
+                  <>
+                    <Marker
+                      key={`${selectedResolvedProtectedArea.id}-center`}
+                      position={selectedResolvedProtectedArea.center}
+                      icon={protectedAreaCenterIcon}
+                      draggable={!isPreviewingRelease}
+                      eventHandlers={{
+                        dragstart: () => {
+                          dragBaselineRef.current =
+                            cloneGeographyDocument(geography);
+                          setSelectedProtectedAreaPointIndex(null);
+                          setSelectedTerritoryId(null);
+                          setSelectedTerritoryPointIndex(null);
+                          setSelectedNodeId(null);
+                        },
+                        drag: (event) => {
+                          const nextPosition = event.target.getLatLng();
+                          updateProtectedAreaCenterFromMap(
+                            selectedResolvedProtectedArea.id,
+                            [nextPosition.lat, nextPosition.lng],
+                            false
+                          );
+                        },
+                        dragend: (event) => {
+                          const baseline = dragBaselineRef.current;
+                          const nextPosition = event.target.getLatLng();
+                          updateProtectedAreaCenterFromMap(
+                            selectedResolvedProtectedArea.id,
+                            [nextPosition.lat, nextPosition.lng],
+                            false
+                          );
+
+                          if (baseline) {
+                            dispatchHistory({
+                              type: "commit-preview",
+                              baseline,
+                            });
+                          }
+
+                          dragBaselineRef.current = null;
+                        },
+                      }}
+                    >
+                      <Popup>Drag to move the entire protected area</Popup>
+                    </Marker>
+
+                    {!isPreviewingRelease &&
+                      selectedProtectedAreaSegmentTargets.map((target) => (
+                        <Marker
+                          key={target.key}
+                          position={target.position}
+                          icon={protectedAreaAddIcon}
+                          eventHandlers={{
+                            click: () =>
+                              addSelectedProtectedAreaPoint(
+                                target.segmentIndex
+                              ),
+                          }}
+                        >
+                          <Popup>Add a protected-area boundary point</Popup>
+                        </Marker>
+                      ))}
+
+                    {selectedResolvedProtectedArea.boundary.map(
+                      (position, pointIndex) => (
+                        <Marker
+                          key={`${selectedResolvedProtectedArea.id}-point-${pointIndex}`}
+                          position={position}
+                          icon={
+                            pointIndex ===
+                            selectedProtectedAreaPointIndex
+                              ? selectedProtectedAreaVertexIcon
+                              : protectedAreaVertexIcon
+                          }
+                          draggable={!isPreviewingRelease}
+                          eventHandlers={{
+                            click: () => {
+                              setSelectedProtectedAreaPointIndex(
+                                pointIndex
+                              );
+                              setSelectedTerritoryId(null);
+                              setSelectedTerritoryPointIndex(null);
+                              setSelectedNodeId(null);
+                            },
+                            dragstart: () => {
+                              dragBaselineRef.current =
+                                cloneGeographyDocument(geography);
+                              setSelectedProtectedAreaPointIndex(
+                                pointIndex
+                              );
+                              setSelectedTerritoryId(null);
+                              setSelectedTerritoryPointIndex(null);
+                              setSelectedNodeId(null);
+                            },
+                            drag: (event) => {
+                              const nextPosition =
+                                event.target.getLatLng();
+                              updateProtectedAreaBoundaryFromMap(
+                                selectedResolvedProtectedArea.id,
+                                pointIndex,
+                                [nextPosition.lat, nextPosition.lng],
+                                false
+                              );
+                            },
+                            dragend: (event) => {
+                              const baseline = dragBaselineRef.current;
+                              const nextPosition =
+                                event.target.getLatLng();
+                              updateProtectedAreaBoundaryFromMap(
+                                selectedResolvedProtectedArea.id,
+                                pointIndex,
+                                [nextPosition.lat, nextPosition.lng],
+                                false
+                              );
+
+                              if (baseline) {
+                                dispatchHistory({
+                                  type: "commit-preview",
+                                  baseline,
+                                });
+                              }
+
+                              dragBaselineRef.current = null;
+                            },
+                          }}
+                        />
+                      )
+                    )}
+                  </>
+                )}
             </MapContainer>
           </div>
 
@@ -2774,7 +3511,7 @@ export default function LunaSphereDesigner() {
                   Revisions
                 </p>
                 <p className="mt-1 text-lg font-black">
-                  State {topology.revision} · Territory {territoryLayout.revision}
+                  State {topology.revision} · Territory {territoryLayout.revision} · Protected {protectedAreaLayout.revision}
                 </p>
               </div>
 
@@ -2904,9 +3641,71 @@ export default function LunaSphereDesigner() {
                 )}
 
                 <p className="mt-3 text-[11px] font-bold text-cyan-100/80">
-                  These overlays are Studio-only in this milestone. They do
-                  not yet replace public city/town markers or generate
-                  saleable blocks.
+                  City and town territories are part of the same published
+                  geography and already control public block inventory.
+                </p>
+              </div>
+
+              <div className="rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-rose-50">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="font-black">Protected & Historic Areas</p>
+                    <p className="mt-1 text-xs text-rose-50/70">
+                      These editable, state-relative zones are permanently
+                      excluded from Rural Acres, City Blocks, and Town Blocks.
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-lg border px-2 py-1 text-[10px] font-black uppercase tracking-wider ${
+                      protectedAreaValidation.valid
+                        ? "border-emerald-300/30 bg-emerald-400/10 text-emerald-100"
+                        : "border-red-300/30 bg-red-400/10 text-red-100"
+                    }`}
+                  >
+                    {protectedAreaValidation.valid ? "Valid" : "Review"}
+                  </span>
+                </div>
+
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <div className="rounded-lg border border-rose-100/15 bg-black/30 p-2">
+                    <p className="text-lg font-black">
+                      {resolvedProtectedAreas.length}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-rose-50/60">
+                      This State
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-rose-100/15 bg-black/30 p-2">
+                    <p className="text-lg font-black">
+                      {protectedAreaValidation.areaCount}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-rose-50/60">
+                      World Total
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-rose-100/15 bg-black/30 p-2">
+                    <p className="text-lg font-black">
+                      {protectedAreaValidation.errors.length}
+                    </p>
+                    <p className="text-[10px] uppercase tracking-wider text-rose-50/60">
+                      Errors
+                    </p>
+                  </div>
+                </div>
+
+                {selectedProtectedAreaIssues.length > 0 && (
+                  <div className="mt-3 max-h-28 space-y-1 overflow-y-auto rounded-lg border border-white/10 bg-black/30 p-2 text-[11px] text-rose-50/75">
+                    {selectedProtectedAreaIssues.slice(0, 5).map((issue) => (
+                      <p key={`${issue.code}-${issue.areaId ?? issue.message}`}>
+                        <strong>{issue.code}:</strong> {issue.message}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
+                <p className="mt-3 text-[11px] font-bold text-rose-100/80">
+                  Protected geometry is saved in browser drafts, database
+                  drafts, numbered releases, previews, activation, and rollback.
                 </p>
               </div>
 
@@ -3017,6 +3816,186 @@ export default function LunaSphereDesigner() {
                         className="rounded-lg border border-white/25 px-3 py-2 text-xs font-black enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         Reset This Territory
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+              {selectedResolvedProtectedArea &&
+                selectedProtectedAreaDefinition && (
+                  <div className="rounded-xl border border-rose-400/30 bg-rose-400/10 p-3 text-rose-50">
+                    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-rose-200/70">
+                      Selected protected area
+                    </p>
+
+                    <label className="mt-3 block text-xs font-bold">
+                      Name
+                      <input
+                        value={selectedProtectedAreaDefinition.name}
+                        onChange={(event) =>
+                          updateSelectedProtectedAreaMetadata({
+                            name: event.target.value,
+                          })
+                        }
+                        disabled={isPreviewingRelease}
+                        className="mt-1 w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-white disabled:opacity-40"
+                      />
+                    </label>
+
+                    <label className="mt-3 block text-xs font-bold">
+                      Classification
+                      <select
+                        value={selectedProtectedAreaDefinition.category}
+                        onChange={(event) =>
+                          updateSelectedProtectedAreaMetadata({
+                            category: event.target.value as LunaSphereProtectedAreaCategory,
+                          })
+                        }
+                        disabled={isPreviewingRelease}
+                        className="mt-1 w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-white disabled:opacity-40"
+                      >
+                        {PROTECTED_AREA_CATEGORIES.map((category) => (
+                          <option key={category} value={category}>
+                            {category}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <label className="mt-3 block text-xs font-bold">
+                      Description
+                      <textarea
+                        value={selectedProtectedAreaDefinition.description}
+                        onChange={(event) =>
+                          updateSelectedProtectedAreaMetadata({
+                            description: event.target.value,
+                          })
+                        }
+                        disabled={isPreviewingRelease}
+                        rows={4}
+                        className="mt-1 w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-white disabled:opacity-40"
+                      />
+                    </label>
+
+                    <label className="mt-3 block text-xs font-bold">
+                      Public minimum zoom
+                      <select
+                        value={selectedProtectedAreaDefinition.minZoom}
+                        onChange={(event) =>
+                          updateSelectedProtectedAreaMetadata({
+                            minZoom: Number(event.target.value),
+                          })
+                        }
+                        disabled={isPreviewingRelease}
+                        className="mt-1 w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-white disabled:opacity-40"
+                      >
+                        {[2, 3, 4, 5, 6, 7].map((zoom) => (
+                          <option key={zoom} value={zoom}>
+                            Zoom {zoom}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+
+                    <p className="mt-3 font-mono text-[11px] text-rose-50/70">
+                      {selectedResolvedProtectedArea.id} · Protected revision{" "}
+                      {protectedAreaLayout.revision}
+                    </p>
+                    <p className="mt-2 text-xs text-rose-50/75">
+                      Drag the diamond to move the complete zone. Drag circular
+                      handles to reshape it; plus handles add detail points.
+                    </p>
+
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs font-black">
+                      <span />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          selectedProtectedAreaPointIndex === null
+                            ? nudgeSelectedProtectedAreaCenter(-0.005, 0)
+                            : nudgeSelectedProtectedAreaPoint(-0.005, 0)
+                        }
+                        disabled={isPreviewingRelease}
+                        className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
+                      >
+                        ↑
+                      </button>
+                      <span />
+                      <button
+                        type="button"
+                        onClick={() =>
+                          selectedProtectedAreaPointIndex === null
+                            ? nudgeSelectedProtectedAreaCenter(0, -0.005)
+                            : nudgeSelectedProtectedAreaPoint(0, -0.005)
+                        }
+                        disabled={isPreviewingRelease}
+                        className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
+                      >
+                        ←
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          selectedProtectedAreaPointIndex === null
+                            ? nudgeSelectedProtectedAreaCenter(0.005, 0)
+                            : nudgeSelectedProtectedAreaPoint(0.005, 0)
+                        }
+                        disabled={isPreviewingRelease}
+                        className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
+                      >
+                        ↓
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          selectedProtectedAreaPointIndex === null
+                            ? nudgeSelectedProtectedAreaCenter(0, 0.005)
+                            : nudgeSelectedProtectedAreaPoint(0, 0.005)
+                        }
+                        disabled={isPreviewingRelease}
+                        className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
+                      >
+                        →
+                      </button>
+                    </div>
+
+                    <p className="mt-2 text-[11px] text-rose-50/70">
+                      {selectedProtectedAreaPointIndex === null
+                        ? "Precision controls move the entire protected zone."
+                        : `Boundary point ${selectedProtectedAreaPointIndex + 1} of ${selectedProtectedAreaDefinition.boundary.length} selected.`}
+                    </p>
+
+                    <div className="mt-3 grid gap-2">
+                      <button
+                        type="button"
+                        onClick={removeSelectedProtectedAreaPoint}
+                        disabled={
+                          isPreviewingRelease ||
+                          !selectedProtectedAreaCanRemovePoint
+                        }
+                        className="rounded-lg border border-white/25 px-3 py-2 text-xs font-black enabled:hover:bg-white/10 disabled:opacity-40"
+                      >
+                        {selectedProtectedAreaPointIndex === null
+                          ? "Select a Boundary Point to Remove"
+                          : selectedProtectedAreaCanRemovePoint
+                            ? "Remove Selected Boundary Point"
+                            : "Minimum Boundary Detail Reached"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={resetSelectedProtectedArea}
+                        disabled={isPreviewingRelease}
+                        className="rounded-lg border border-white/25 px-3 py-2 text-xs font-black enabled:hover:bg-white/10 disabled:opacity-40"
+                      >
+                        Reset This Protected Area
+                      </button>
+                      <button
+                        type="button"
+                        onClick={removeSelectedProtectedArea}
+                        disabled={isPreviewingRelease}
+                        className="rounded-lg border border-red-300/40 bg-red-400/10 px-3 py-2 text-xs font-black text-red-100 enabled:hover:bg-red-400/20 disabled:opacity-40"
+                      >
+                        Delete This Protected Area
                       </button>
                     </div>
                   </div>
@@ -3145,11 +4124,10 @@ export default function LunaSphereDesigner() {
               )}
 
               <p className="rounded-xl border border-sky-400/30 bg-sky-400/10 p-3 text-sky-100">
-                Browser autosave protects immediate work. The controlled
-                active state release now drives the public Moon Map. Nested
-                city and town territories remain Studio-only in this milestone,
-                and parcels, reservations, checkout, and customer records are
-                unchanged.
+                Browser autosave protects immediate work. The controlled active
+                release drives states, cities, towns, protected areas, and
+                property inventory on the public Moon Map. Published property
+                records remain stable while new draft geography stays private.
               </p>
             </div>
           </aside>

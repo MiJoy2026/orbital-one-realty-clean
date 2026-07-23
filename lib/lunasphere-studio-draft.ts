@@ -96,18 +96,25 @@ export function loadLunaSphereStudioDraft(
       isRecord(parsedValue) &&
       parsedValue.format === DRAFT_FORMAT &&
       parsedValue.storageVersion === DRAFT_STORAGE_VERSION &&
-      typeof parsedValue.savedAt === "string" &&
-      hasCompatibleGeographyDocumentStructure(
+      typeof parsedValue.savedAt === "string"
+    ) {
+      const normalizedGeography = normalizeGeographyDocument(
         parsedValue.geography,
         baselineGeography
-      )
-    ) {
-      return {
-        status: "loaded",
-        savedAt: parsedValue.savedAt,
-        geography: cloneGeographyDocument(parsedValue.geography),
-        migratedLegacyDraft: false,
-      };
+      );
+
+      if (normalizedGeography) {
+        return {
+          status: "loaded",
+          savedAt: parsedValue.savedAt,
+          geography: normalizedGeography,
+          migratedLegacyDraft:
+            !hasCompatibleGeographyDocumentStructure(
+              parsedValue.geography,
+              baselineGeography
+            ),
+        };
+      }
     }
 
     return {

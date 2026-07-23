@@ -163,6 +163,7 @@ const ownedProperties = (
       <LunarLeafletMap
         mapRegions={publicGeography.regions}
         publicSettlements={publicGeography.settlements}
+        publicProtectedAreas={publicGeography.protectedAreas}
         activeGeographyReleaseNumber={
           publicGeography.activeReleaseNumber
         }

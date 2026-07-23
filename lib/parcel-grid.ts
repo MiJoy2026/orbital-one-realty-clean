@@ -630,6 +630,28 @@ export function getSelectableRuralParcelByKey(
   );
 }
 
+
+export function parcelPolygonOverlapsExcludedTerritories(
+  polygon: LunarPolygon,
+  excludedTerritories: readonly ParcelExclusionTerritory[]
+): boolean {
+  const bounds = calculateBoundingBox(polygon);
+
+  return excludedTerritories.some((territory) => {
+    if (territory.boundary.length < 3) {
+      return false;
+    }
+
+    const territoryBounds = calculateBoundingBox(territory.boundary);
+    return rectangleOverlapsExcludedTerritory(
+      polygon,
+      bounds,
+      territory.boundary,
+      territoryBounds
+    );
+  });
+}
+
 export function findParcelAtCoordinate(
   parcels: ParcelCell[],
   x: number,

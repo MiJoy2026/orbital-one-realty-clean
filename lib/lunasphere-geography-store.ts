@@ -14,7 +14,14 @@ import {
   resolveStateTerritories,
   type ResolvedLunaSphereSettlement,
 } from "./lunasphere-territories";
-import type { PublicLunaSphereSettlement } from "./lunasphere-public-geography";
+import {
+  resolveAllProtectedAreas,
+  type ResolvedLunaSphereProtectedArea,
+} from "./lunasphere-protected-areas";
+import type {
+  PublicLunaSphereProtectedArea,
+  PublicLunaSphereSettlement,
+} from "./lunasphere-public-geography";
 import {
   lunarMapRegions,
   type LunarMapRegion,
@@ -36,6 +43,7 @@ export type GeographyDraftRecord = {
   savedAt: string;
   topologyRevision: number;
   territoryRevision: number;
+  protectedAreaRevision: number;
   geography: LunaSphereGeographyDocument;
 };
 
@@ -44,6 +52,7 @@ export type GeographyReleaseRecord = {
   publishedAt: string;
   topologyRevision: number;
   territoryRevision: number;
+  protectedAreaRevision: number;
   topologyHash: string;
 };
 
@@ -68,6 +77,7 @@ export type PublicGeographySnapshot = {
   source: PublicGeographySource;
   regions: LunarMapRegion[];
   settlements: PublicLunaSphereSettlement[];
+  protectedAreas: PublicLunaSphereProtectedArea[];
   activeReleaseNumber: number | null;
   activatedAt: string | null;
   fallbackReason: PublicGeographyFallbackReason | null;
@@ -148,6 +158,7 @@ export function parseAndValidateGeography(
     const firstErrors = [
       ...validation.topology.errors,
       ...validation.territories.errors,
+      ...validation.protectedAreas.errors,
     ]
       .slice(0, 3)
       .map((issue) => issue.message)
@@ -212,6 +223,7 @@ function mapReleaseRecord(
     publishedAt: record.publishedAt.toISOString(),
     topologyRevision: record.topologyRevision,
     territoryRevision: geography.territories.revision,
+    protectedAreaRevision: geography.protectedAreas.revision,
     topologyHash: record.topologyHash,
   };
 }
@@ -259,6 +271,7 @@ export async function getGeographyWorkspace(
             savedAt: draft.updatedAt.toISOString(),
             topologyRevision: geography.topology.revision,
             territoryRevision: geography.territories.revision,
+            protectedAreaRevision: geography.protectedAreas.revision,
             geography,
           };
         })()
@@ -349,6 +362,34 @@ function clonePublicSettlement(
   };
 }
 
+function clonePublicProtectedArea(
+  area: ResolvedLunaSphereProtectedArea
+): PublicLunaSphereProtectedArea {
+  return {
+    id: area.id,
+    stateId: area.stateId,
+    stateName: area.stateName,
+    stateNumber: area.stateNumber,
+    name: area.name,
+    slug: area.slug,
+    category: area.category,
+    description: area.description,
+    attractionId: area.attractionId,
+    center: [area.center[0], area.center[1]],
+    boundary: area.boundary.map(([y, x]) => [y, x] as [number, number]),
+    minZoom: area.minZoom,
+  };
+}
+
+function resolvePublicProtectedAreas(
+  geography: LunaSphereGeographyDocument
+): PublicLunaSphereProtectedArea[] {
+  return resolveAllProtectedAreas(
+    geography.topology,
+    geography.protectedAreas
+  ).map(clonePublicProtectedArea);
+}
+
 function resolvePublicSettlements(
   geography: LunaSphereGeographyDocument
 ): PublicLunaSphereSettlement[] {
@@ -376,6 +417,7 @@ function createBuiltInPublicGeography(
     source: "built-in-fallback",
     regions: cloneMapRegions(lunarMapRegions),
     settlements: resolvePublicSettlements(baselineGeography),
+    protectedAreas: resolvePublicProtectedAreas(baselineGeography),
     activeReleaseNumber: null,
     activatedAt: null,
     fallbackReason,
@@ -419,6 +461,7 @@ export async function getPublicGeographySnapshot(
         source: "active-release",
         regions: cloneMapRegions(regions),
         settlements: resolvePublicSettlements(geography),
+        protectedAreas: resolvePublicProtectedAreas(geography),
         activeReleaseNumber: activation.release.releaseNumber,
         activatedAt: activation.createdAt.toISOString(),
         fallbackReason: null,
@@ -496,6 +539,7 @@ export async function saveGeographyDraft(
       savedAt: record.updatedAt.toISOString(),
       topologyRevision: geography.topology.revision,
       territoryRevision: geography.territories.revision,
+      protectedAreaRevision: geography.protectedAreas.revision,
       geography,
     };
   });
@@ -613,6 +657,7 @@ export async function publishGeographyRelease(
         savedAt: draft.updatedAt.toISOString(),
         topologyRevision: draftGeography.topology.revision,
         territoryRevision: draftGeography.territories.revision,
+        protectedAreaRevision: draftGeography.protectedAreas.revision,
         geography: draftGeography,
       },
       release: mapReleaseRecord(release),

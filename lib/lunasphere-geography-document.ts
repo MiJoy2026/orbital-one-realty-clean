@@ -1,4 +1,10 @@
 import {
+  cloneProtectedAreaLayout,
+  createInitialProtectedAreaLayout,
+  validateProtectedAreaLayout,
+  type LunaSphereProtectedAreaLayout,
+} from "./lunasphere-protected-areas";
+import {
   cloneTerritoryLayout,
   createInitialTerritoryLayout,
   validateTerritoryLayout,
@@ -13,19 +19,21 @@ import {
 
 export const LUNASPHERE_GEOGRAPHY_DOCUMENT_FORMAT =
   "lunasphere-geography-document";
-export const LUNASPHERE_GEOGRAPHY_DOCUMENT_SCHEMA_VERSION = 1;
+export const LUNASPHERE_GEOGRAPHY_DOCUMENT_SCHEMA_VERSION = 2;
 
 export type LunaSphereGeographyDocument = {
   format: typeof LUNASPHERE_GEOGRAPHY_DOCUMENT_FORMAT;
   schemaVersion: typeof LUNASPHERE_GEOGRAPHY_DOCUMENT_SCHEMA_VERSION;
   topology: LunaSphereTopology;
   territories: LunaSphereTerritoryLayout;
+  protectedAreas: LunaSphereProtectedAreaLayout;
 };
 
 export type LunaSphereGeographyValidation = {
   valid: boolean;
   topology: ReturnType<typeof validateTopology>;
   territories: ReturnType<typeof validateTerritoryLayout>;
+  protectedAreas: ReturnType<typeof validateProtectedAreaLayout>;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -274,15 +282,98 @@ export function hasCompatibleTerritoryLayoutStructure(
   return candidateIds.size === baselineById.size;
 }
 
+
+export function hasCompatibleProtectedAreaLayoutStructure(
+  value: unknown,
+  baselineLayout: LunaSphereProtectedAreaLayout
+): value is LunaSphereProtectedAreaLayout {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  if (
+    typeof value.id !== "string" ||
+    typeof value.worldId !== "string" ||
+    typeof value.worldVersion !== "string" ||
+    typeof value.schemaVersion !== "number" ||
+    typeof value.revision !== "number" ||
+    !["draft", "approved", "published", "archived"].includes(
+      String(value.status)
+    ) ||
+    !Array.isArray(value.areas)
+  ) {
+    return false;
+  }
+
+  if (
+    value.worldId !== baselineLayout.worldId ||
+    value.worldVersion !== baselineLayout.worldVersion ||
+    value.schemaVersion !== baselineLayout.schemaVersion
+  ) {
+    return false;
+  }
+
+  const candidateIds = new Set<string>();
+
+  return value.areas.every((area) => {
+    if (!isRecord(area) || typeof area.id !== "string") {
+      return false;
+    }
+
+    if (candidateIds.has(area.id)) {
+      return false;
+    }
+
+    candidateIds.add(area.id);
+
+    const centerIsValid =
+      Array.isArray(area.center) &&
+      area.center.length === 2 &&
+      area.center.every(
+        (coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate)
+      );
+    const boundaryIsValid =
+      Array.isArray(area.boundary) &&
+      area.boundary.length >= 4 &&
+      area.boundary.every(
+        (coordinate) =>
+          Array.isArray(coordinate) &&
+          coordinate.length === 2 &&
+          coordinate.every(
+            (value) => typeof value === "number" && Number.isFinite(value)
+          )
+      );
+
+    return (
+      typeof area.stateId === "string" &&
+      typeof area.stateName === "string" &&
+      typeof area.stateNumber === "number" &&
+      typeof area.name === "string" &&
+      typeof area.slug === "string" &&
+      ["Historic Site", "Landmark", "Scientific Preserve", "Reserved Area"].includes(
+        String(area.category)
+      ) &&
+      typeof area.description === "string" &&
+      (area.attractionId === null || typeof area.attractionId === "string") &&
+      typeof area.minZoom === "number" &&
+      centerIsValid &&
+      boundaryIsValid
+    );
+  });
+}
+
 export function createGeographyDocument(
   topology: LunaSphereTopology,
-  territories: LunaSphereTerritoryLayout
+  territories: LunaSphereTerritoryLayout,
+  protectedAreas: LunaSphereProtectedAreaLayout =
+    createInitialProtectedAreaLayout(topology)
 ): LunaSphereGeographyDocument {
   return {
     format: LUNASPHERE_GEOGRAPHY_DOCUMENT_FORMAT,
     schemaVersion: LUNASPHERE_GEOGRAPHY_DOCUMENT_SCHEMA_VERSION,
     topology: cloneTopology(topology),
     territories: cloneTerritoryLayout(territories),
+    protectedAreas: cloneProtectedAreaLayout(protectedAreas),
   };
 }
 
@@ -291,7 +382,8 @@ export function createInitialGeographyDocument(
 ): LunaSphereGeographyDocument {
   return createGeographyDocument(
     topology,
-    createInitialTerritoryLayout()
+    createInitialTerritoryLayout(),
+    createInitialProtectedAreaLayout(topology)
   );
 }
 
@@ -300,7 +392,8 @@ export function cloneGeographyDocument(
 ): LunaSphereGeographyDocument {
   return createGeographyDocument(
     geography.topology,
-    geography.territories
+    geography.territories,
+    geography.protectedAreas
   );
 }
 
@@ -320,6 +413,10 @@ export function hasCompatibleGeographyDocumentStructure(
     hasCompatibleTerritoryLayoutStructure(
       value.territories,
       baseline.territories
+    ) &&
+    hasCompatibleProtectedAreaLayoutStructure(
+      value.protectedAreas,
+      baseline.protectedAreas
     )
   );
 }
@@ -337,8 +434,29 @@ export function normalizeGeographyDocument(
     return cloneGeographyDocument(value);
   }
 
+  if (
+    isRecord(value) &&
+    value.format === LUNASPHERE_GEOGRAPHY_DOCUMENT_FORMAT &&
+    value.schemaVersion === 1 &&
+    hasCompatibleTopologyStructure(value.topology, baseline.topology) &&
+    hasCompatibleTerritoryLayoutStructure(
+      value.territories,
+      baseline.territories
+    )
+  ) {
+    return createGeographyDocument(
+      value.topology,
+      value.territories,
+      baseline.protectedAreas
+    );
+  }
+
   if (hasCompatibleTopologyStructure(value, baseline.topology)) {
-    return createGeographyDocument(value, baseline.territories);
+    return createGeographyDocument(
+      value,
+      baseline.territories,
+      baseline.protectedAreas
+    );
   }
 
   return null;
@@ -360,6 +478,10 @@ export function setGeographyStatus(
       ...cloned.territories,
       status,
     },
+    protectedAreas: {
+      ...cloned.protectedAreas,
+      status,
+    },
   };
 }
 
@@ -371,10 +493,15 @@ export function validateGeographyDocument(
     geography.topology,
     geography.territories
   );
+  const protectedAreas = validateProtectedAreaLayout(
+    geography.topology,
+    geography.protectedAreas
+  );
 
   return {
-    valid: topology.valid && territories.valid,
+    valid: topology.valid && territories.valid && protectedAreas.valid,
     topology,
     territories,
+    protectedAreas,
   };
 }

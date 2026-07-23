@@ -1,4 +1,8 @@
-import type { ParcelCell } from "./parcel-grid";
+import {
+  parcelPolygonOverlapsExcludedTerritories,
+  type ParcelCell,
+  type ParcelExclusionTerritory,
+} from "./parcel-grid";
 import type { PublicLunaSphereSettlement } from "./lunasphere-public-geography";
 import {
   calculateBoundingBox,
@@ -280,10 +284,22 @@ function getGridResolutionForZoom(zoom: number): GridResolution | null {
   };
 }
 
-function createGeometrySignature(town: PublicLunaSphereSettlement): string {
-  return town.boundary
-    .map(([y, x]) => `${y.toFixed(4)},${x.toFixed(4)}`)
-    .join(";");
+function createGeometrySignature(
+  town: PublicLunaSphereSettlement,
+  excludedTerritories: readonly ParcelExclusionTerritory[]
+): string {
+  const serialize = (boundary: readonly [number, number][]) =>
+    boundary
+      .map(([y, x]) => `${y.toFixed(4)},${x.toFixed(4)}`)
+      .join(";");
+
+  return [
+    serialize(town.boundary),
+    ...excludedTerritories
+      .slice()
+      .sort((first, second) => first.id.localeCompare(second.id))
+      .map((territory) => `${territory.id}:${serialize(territory.boundary)}`),
+  ].join("|");
 }
 
 function rememberCachedGrid(
@@ -305,7 +321,8 @@ function rememberCachedGrid(
 
 function generateTownBlockGrid(
   town: PublicLunaSphereSettlement,
-  resolution: GridResolution
+  resolution: GridResolution,
+  excludedTerritories: readonly ParcelExclusionTerritory[]
 ): TownBlockCell[] {
   if (town.kind !== "town" || town.boundary.length < 3) {
     return [];
@@ -351,6 +368,15 @@ function generateTownBlockGrid(
         continue;
       }
 
+      if (
+        parcelPolygonOverlapsExcludedTerritories(
+          positions,
+          excludedTerritories
+        )
+      ) {
+        continue;
+      }
+
       const column = columnIndex + 1;
       const row = rowIndex + 1;
 
@@ -389,7 +415,8 @@ function generateTownBlockGrid(
 
 export function getTownBlockGridForZoom(
   town: PublicLunaSphereSettlement,
-  zoom: number
+  zoom: number,
+  excludedTerritories: readonly ParcelExclusionTerritory[] = []
 ): TownBlockCell[] {
   const resolution = getGridResolutionForZoom(zoom);
 
@@ -400,7 +427,7 @@ export function getTownBlockGridForZoom(
   const cacheKey = [
     town.id,
     resolution.resolutionLevel,
-    createGeometrySignature(town),
+    createGeometrySignature(town, excludedTerritories),
   ].join(":");
   const cachedGrid = townBlockGridCache.get(cacheKey);
 
@@ -410,21 +437,26 @@ export function getTownBlockGridForZoom(
     return cachedGrid;
   }
 
-  const generatedGrid = generateTownBlockGrid(town, resolution);
+  const generatedGrid = generateTownBlockGrid(
+    town,
+    resolution,
+    excludedTerritories
+  );
   rememberCachedGrid(cacheKey, generatedGrid);
   return generatedGrid;
 }
 
 export function getSelectableTownBlockByKey(
   town: PublicLunaSphereSettlement,
-  blockKey: string
+  blockKey: string,
+  excludedTerritories: readonly ParcelExclusionTerritory[] = []
 ): TownBlockCell | null {
   if (!townBlockKeyMatchesSettlement(blockKey, town)) {
     return null;
   }
 
   return (
-    getTownBlockGridForZoom(town, 7).find(
+    getTownBlockGridForZoom(town, 7, excludedTerritories).find(
       (block) => block.parcelKey === blockKey
     ) ?? null
   );
