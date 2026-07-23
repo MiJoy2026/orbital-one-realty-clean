@@ -1,6 +1,6 @@
 "use client";
 
-import { Polygon, Marker, Popup } from "react-leaflet";
+import { Polygon, Marker } from "react-leaflet";
 import { divIcon } from "leaflet";
 import type { LunarMapRegion } from "@/lib/lunar-map-regions";
 
@@ -48,20 +48,7 @@ export default function StateLayer({
                 });
               },
             }}
-          >
-            <Popup>
-              <div style={{ minWidth: "180px" }}>
-                <strong>{region.name}</strong>
-                <br />
-                <span>Orbital One Lunar State</span>
-                <br />
-                <br />
-                <a href={`/states/${encodeURIComponent(region.name)}`}>
-                  View State Properties
-                </a>
-              </div>
-            </Popup>
-          </Polygon>
+          />
 
           <Marker
             position={region.labelPosition}

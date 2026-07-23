@@ -5,7 +5,7 @@ const propertyTypes = [
     title: "Rural Acres",
     price: "From $24.95",
     image: "/property-images/rural-acre.jpg",
-    details: ["1 Acre — $24.95", "Additional acres — $7.95 each"],
+    details: ["1 Acre — $24.95", "Exact selectable parcel on the Moon Map"],
   },
   {
     title: "Town Blocks",

@@ -13,22 +13,47 @@ export default async function AccountHoaPage() {
     where: {
       id: userId,
     },
-    include: {
-      orders: {
-        orderBy: {
-          createdAt: "asc",
-        },
-      },
-    },
   });
 
   if (!user) {
     redirect("/login");
   }
 
+  const [orders, member] = await Promise.all([
+    prisma.order.findMany({
+      where: {
+        paymentStatus: {
+          equals: "Paid",
+          mode: "insensitive",
+        },
+        OR: [
+          { userId: user.id },
+          { email: { equals: user.email, mode: "insensitive" } },
+          { recipientEmail: { equals: user.email, mode: "insensitive" } },
+        ],
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    }),
+    prisma.member.findFirst({
+      where: {
+        OR: [
+          { userId: user.id },
+          { email: { equals: user.email, mode: "insensitive" } },
+        ],
+      },
+    }),
+  ]);
+
   const email = user.email;
-  const orders = user.orders;
   const firstOrder = orders[0];
+  const memberName = member?.name || firstOrder?.deedName || user.name || "Orbital One Member";
+  const membershipNumber =
+    member?.hoaNumber ||
+    (firstOrder ? `HOA-${firstOrder.certificateNumber}` : "");
+  const memberSince =
+    member?.activatedAt || member?.createdAt || firstOrder?.createdAt || null;
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -41,17 +66,7 @@ export default async function AccountHoaPage() {
           View your Orbital One Realty HOA membership benefits.
         </p>
 
-        {!email ? (
-          <div className="mt-10 rounded-3xl border border-white/20 bg-white/5 p-8">
-            <p className="text-lg text-gray-300">
-              Add your checkout email to the URL to view your HOA membership.
-            </p>
-
-            <p className="mt-4 rounded-xl bg-black p-4 text-yellow-400">
-              /account/hoa?email=your@email.com
-            </p>
-          </div>
-        ) : !firstOrder ? (
+        {!firstOrder ? (
           <div className="mt-10 rounded-3xl border border-white/20 bg-white/5 p-8">
             <p className="text-lg text-gray-300">
               No HOA membership found for this email.
@@ -65,7 +80,7 @@ export default async function AccountHoaPage() {
               </p>
 
               <h2 className="mt-4 text-4xl font-black">
-                {firstOrder.deedName}
+                {memberName}
               </h2>
 
               <div className="mt-8 grid gap-6 md:grid-cols-3">
@@ -74,7 +89,7 @@ export default async function AccountHoaPage() {
                     Membership Number
                   </p>
                   <p className="mt-2 text-2xl font-black text-yellow-400">
-                    HOA-{firstOrder.certificateNumber}
+                    {membershipNumber}
                   </p>
                 </div>
 
@@ -83,7 +98,7 @@ export default async function AccountHoaPage() {
                     Member Since
                   </p>
                   <p className="mt-2 text-2xl font-black">
-                    {firstOrder.createdAt.toLocaleDateString()}
+                    {memberSince?.toLocaleDateString()}
                   </p>
                 </div>
 
@@ -112,15 +127,15 @@ export default async function AccountHoaPage() {
     </p>
 
     <p className="mt-10 text-3xl font-black text-white">
-      {firstOrder.deedName}
+      {memberName}
     </p>
 
     <p className="mt-6 text-yellow-400">
-      Membership No: HOA-{firstOrder.certificateNumber}
+      Membership No: {membershipNumber}
     </p>
 
     <p className="mt-2 text-gray-300">
-      Member Since: {firstOrder.createdAt.toLocaleDateString()}
+      Member Since: {memberSince?.toLocaleDateString()}
     </p>
 
     <p className="mt-2 text-gray-300">
@@ -143,13 +158,13 @@ export default async function AccountHoaPage() {
                 <p>🏠 Future virtual lunar home-building opportunities</p>
                 <p>⭐ Member discounts and promotions</p>
                 <p>🏛️ 2026 Founding Member recognition</p>
-                <p>🛂 Lunar passport and certificate access</p>
+                <p>📄 Membership certificate and document access</p>
               </div>
             </section>
 
             <div className="mt-10 flex flex-wrap gap-4">
               <a
-                href={`/account?email=${encodeURIComponent(email)}`}
+                href="/account"
                 className="rounded-xl bg-yellow-400 px-6 py-3 font-black text-black"
               >
                 Back to My Account
@@ -162,26 +177,16 @@ export default async function AccountHoaPage() {
               </a>
 
               <a
-                href={`/api/generate-hoa-certificate?propertyId=${firstOrder.propertyId}&deedName=${encodeURIComponent(
-                  firstOrder.deedName
-                )}&certificateNumber=${encodeURIComponent(
-                  firstOrder.certificateNumber
-                )}`}
+                href={`/api/generate-hoa-certificate?certificateNumber=${encodeURIComponent(firstOrder.certificateNumber)}`}
                 className="rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
               >
                 Download HOA Certificate
               </a>
               <a
-                href={`/api/generate-hoa-member-card?memberName=${encodeURIComponent(
-                firstOrder.deedName
-                )}&membershipNumber=${encodeURIComponent(
-                  `HOA-${firstOrder.certificateNumber}`
-                )}&joinDate=${encodeURIComponent(
-                firstOrder.createdAt.toLocaleDateString()
-                )}&propertiesOwned=${orders.length}`}
+                href="/api/generate-hoa-member-card"
                 className="rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
-                 >
-                 Download HOA Member Card
+              >
+                Download HOA Member Card
               </a>
             </div>
           </>

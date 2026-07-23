@@ -1,23 +1,52 @@
 "use client";
 
 import Link from "next/link";
-import { useCart } from "../context/CartContext";
+import { useEffect, useState } from "react";
+
+import {
+  CART_RESERVATION_COOKIE,
+  parseReservationCookie,
+} from "../lib/cart-reservations";
+
+function readCartCount(): number {
+  if (typeof document === "undefined") {
+    return 0;
+  }
+
+  const cookie = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${CART_RESERVATION_COOKIE}=`));
+  const value = cookie?.slice(CART_RESERVATION_COOKIE.length + 1);
+
+  return parseReservationCookie(value).length;
+}
 
 export default function CartButton() {
-  const { itemCount } = useCart();
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    const refreshCount = () => setCount(readCartCount());
+    refreshCount();
+    window.addEventListener("orbital-cart-updated", refreshCount);
+    window.addEventListener("focus", refreshCount);
+
+    return () => {
+      window.removeEventListener("orbital-cart-updated", refreshCount);
+      window.removeEventListener("focus", refreshCount);
+    };
+  }, []);
 
   return (
     <Link
       href="/cart"
-      className="relative flex items-center gap-2 rounded-lg border border-white/20 px-4 py-2 hover:bg-white/10 transition"
+      className="flex items-center gap-2 rounded-lg border border-white/20 px-4 py-2 transition hover:bg-white/10"
     >
       <span className="text-xl">🛒</span>
-
       <span>Cart</span>
-
-      {itemCount > 0 && (
-        <span className="absolute -top-2 -right-2 flex h-6 w-6 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white">
-          {itemCount}
+      {count > 0 && (
+        <span className="rounded-full bg-yellow-400 px-2 py-0.5 text-xs font-black text-black">
+          {count}
         </span>
       )}
     </Link>

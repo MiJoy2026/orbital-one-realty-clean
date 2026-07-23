@@ -10,7 +10,7 @@ model Order {
   id                String   @id @default(cuid())
   createdAt         DateTime @default(now())
 
-  stripeSessionId   String   @unique
+  stripeSessionId   String
   propertyId        String
   propertyType      String
   acreagePurchased  Float?
@@ -35,25 +35,32 @@ model Order {
   recipientEmail String?
   giftMessage    String?
   hoaClaimed     Boolean @default(false)
+
+  @@unique([stripeSessionId, propertyId], map: "Order_stripe_session_property_key")
+  @@index([stripeSessionId], map: "Order_stripe_session_idx")
 }
 
 model PropertyReservation {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  expiresAt   DateTime
+  id                      String   @id @default(cuid())
+  createdAt               DateTime @default(now())
+  expiresAt               DateTime
 
-  stateName   String
-  cityName    String?
-  townName    String?
+  stateName               String
+  cityName                String?
+  townName                String?
 
-  parcelKey   String   @unique
-  propertyType String
-  acreage     Float?
+  parcelKey               String
+  propertyType            String
+  acreage                  Float?
 
-  mapX        Float?
-  mapY        Float?
+  mapX                     Float?
+  mapY                     Float?
 
-  status      String   @default("Reserved")
+  status                   String   @default("Reserved")
+  stripeCheckoutSessionId  String?
+
+  @@index([parcelKey, status, expiresAt], map: "PropertyReservation_parcel_status_expires_idx")
+  @@index([stripeCheckoutSessionId], map: "PropertyReservation_checkout_session_idx")
 }
 
 model LunarState {

@@ -1,14 +1,74 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { NextResponse } from "next/server";
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
+import { prisma } from "../../../lib/prisma";
+import { getSessionUserId } from "../../../lib/session";
 
-  const memberName = searchParams.get("memberName") || "Orbital One Member";
-  const membershipNumber =
-    searchParams.get("membershipNumber") || "HOA-OOR-2026-000000";
-  const joinDate = searchParams.get("joinDate") || new Date().toLocaleDateString();
-  const propertiesOwned = searchParams.get("propertiesOwned") || "1";
+export async function GET() {
+  const userId = await getSessionUserId();
+
+  if (!userId) {
+    return NextResponse.json(
+      { error: "Please sign in to download your HOA member card." },
+      { status: 401 }
+    );
+  }
+
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+  });
+
+  if (!user) {
+    return NextResponse.json({ error: "Account not found." }, { status: 404 });
+  }
+
+  const [member, orders] = await Promise.all([
+    prisma.member.findFirst({
+      where: {
+        OR: [
+          { userId: user.id },
+          { email: { equals: user.email, mode: "insensitive" } },
+        ],
+      },
+    }),
+    prisma.order.findMany({
+      where: {
+        OR: [
+          { userId: user.id },
+          { email: { equals: user.email, mode: "insensitive" } },
+          {
+            recipientEmail: {
+              equals: user.email,
+              mode: "insensitive",
+            },
+          },
+        ],
+        paymentStatus: {
+          equals: "Paid",
+          mode: "insensitive",
+        },
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    }),
+  ]);
+
+  if (!member || orders.length === 0) {
+    return NextResponse.json(
+      { error: "An active HOA membership was not found." },
+      { status: 404 }
+    );
+  }
+
+  const memberName = member.name;
+  const membershipNumber = member.hoaNumber;
+  const joinDate = (
+    member.activatedAt || orders[0].createdAt
+  ).toLocaleDateString();
+  const propertiesOwned = String(orders.length);
 
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([500, 300]);
@@ -85,20 +145,24 @@ export async function GET(request: Request) {
     color: white,
   });
 
-  page.drawText("Free HOA Membership • Lunar Newsletters • Future Member Benefits", {
-    x: 42,
-    y: 42,
-    size: 9,
-    font: bodyFont,
-    color: gold,
-  });
+  page.drawText(
+    "Free HOA Membership • Lunar Newsletters • Future Member Benefits",
+    {
+      x: 42,
+      y: 42,
+      size: 9,
+      font: bodyFont,
+      color: gold,
+    }
+  );
 
   const pdfBytes = await pdfDoc.save();
 
   return new NextResponse(Buffer.from(pdfBytes), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="orbital-one-hoa-member-card.pdf"`,
+      "Content-Disposition":
+        'attachment; filename="orbital-one-hoa-member-card.pdf"',
     },
   });
 }

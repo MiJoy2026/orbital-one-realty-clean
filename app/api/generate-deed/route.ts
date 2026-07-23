@@ -1,4 +1,4 @@
-import { prisma } from "../../../lib/prisma";
+import { getOrderDocumentData, OrderDocumentError } from "../../../lib/order-document-data";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { NextResponse } from "next/server";
 
@@ -14,38 +14,34 @@ function centerText(page: any, text: string, y: number, size: number, font: any,
 }
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const propertyId = searchParams.get("propertyId");
-  if (!propertyId) {
-  return new NextResponse("Missing property ID", { status: 400 });
-}
-  const deedName =
-  searchParams.get("deedName") || "Deed Recipient";
-  const certificateNumber =
-  searchParams.get("certificateNumber") || `OOR-2026-${propertyId || "UNKNOWN"}`;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  let documentData;
 
-  const verificationUrl =
-  `${appUrl}/verify/${certificateNumber}`;
-  const property = await prisma.property.findUnique({
-  where: {
-    id: propertyId,
-  },
-});
-  const allocation = await prisma.acreageAllocation.findFirst({
-  where: {
-    certificateNumber,
-  },
-});
+  try {
+    documentData = await getOrderDocumentData(request);
+  } catch (error) {
+    if (error instanceof OrderDocumentError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status }
+      );
+    }
 
-const assignedAcreRange = allocation
-  ? allocation.startingAcre === allocation.endingAcre
-    ? `Acre ${allocation.startingAcre.toLocaleString()}`
-    : `Acres ${allocation.startingAcre.toLocaleString()} through ${allocation.endingAcre.toLocaleString()}`
-  : property?.size || "";
-  if (!property) {
-    return NextResponse.json({ error: "Property not found" }, { status: 404 });
+    throw error;
   }
+
+  const {
+    property,
+    allocation,
+    assignedAcreRange,
+    certificateNumber,
+    deedName,
+    issueDate,
+    locationLabel,
+  } = documentData;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const verificationUrl = `${appUrl}/verify/${encodeURIComponent(
+    certificateNumber
+  )}`;
 
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([612, 792]);
@@ -126,8 +122,8 @@ page.drawText(deedName, {
   page.drawText("Property Type:", { x: detailX, y: 400, size: 14, font: titleFont });
   page.drawText(property.type, { x: valueX, y: 400, size: 14, font: bodyFont });
 
-  page.drawText("Lunar State:", { x: detailX, y: 370, size: 14, font: titleFont });
-  page.drawText(property.state, { x: valueX, y: 370, size: 14, font: bodyFont });
+  page.drawText("Lunar Location:", { x: detailX, y: 370, size: 14, font: titleFont });
+  page.drawText(locationLabel, { x: valueX, y: 370, size: 12, font: bodyFont });
 
   page.drawText("Property Size:", {
   x: detailX,
@@ -166,7 +162,7 @@ if (allocation) {
   font: titleFont,
 });
 
-page.drawText(new Date().toLocaleDateString(), {
+page.drawText(issueDate, {
   x: valueX,
   y: allocation ? 280 : 310,
   size: 14,

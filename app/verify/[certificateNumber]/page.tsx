@@ -12,11 +12,20 @@ export default async function VerifyCertificatePage({
       certificateNumber: resolvedParams.certificateNumber,
     },
   });
-  const allocation = await prisma.acreageAllocation.findFirst({
-  where: {
-    certificateNumber: resolvedParams.certificateNumber,
-  },
-});
+  const [allocation, property] = await Promise.all([
+    prisma.acreageAllocation.findFirst({
+      where: {
+        certificateNumber: resolvedParams.certificateNumber,
+      },
+    }),
+    order
+      ? prisma.property.findUnique({
+          where: {
+            id: order.propertyId,
+          },
+        })
+      : Promise.resolve(null),
+  ]);
   if (!order) {
     return (
       <main className="min-h-screen bg-black px-6 py-20 text-center text-white">
@@ -94,8 +103,19 @@ export default async function VerifyCertificatePage({
           </div>
               )}
             <div>
-              <p className="text-sm uppercase text-gray-400">Lunar State</p>
-              <p className="mt-2 text-xl font-bold">{order.lunarState}</p>
+              <p className="text-sm uppercase text-gray-400">Lunar Location</p>
+              <p className="mt-2 text-xl font-bold">
+                {[property?.city, property?.town, order.lunarState]
+                  .filter(Boolean)
+                  .join(" • ")}
+              </p>
+            </div>
+
+            <div>
+              <p className="text-sm uppercase text-gray-400">Property Size</p>
+              <p className="mt-2 text-xl font-bold">
+                {property?.size || "Recorded property"}
+              </p>
             </div>
 
             <div>

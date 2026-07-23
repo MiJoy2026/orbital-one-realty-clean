@@ -15,7 +15,7 @@ export default function SettlementInfoPanel({
     : `/towns/${encodeURIComponent(settlement.name)}`;
 
   return (
-    <aside className="rounded-3xl border border-white/15 bg-black/75 p-6 shadow-2xl backdrop-blur">
+    <aside className="rounded-3xl border border-white/15 bg-black/75 p-6 shadow-2xl backdrop-blur lg:h-full lg:overflow-y-auto">
       <p
         className={`text-xs font-black uppercase tracking-[0.28em] ${
           isCity ? "text-cyan-300" : "text-amber-300"

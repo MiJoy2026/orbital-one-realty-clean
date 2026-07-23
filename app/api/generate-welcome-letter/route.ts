@@ -1,4 +1,4 @@
-import { prisma } from "../../../lib/prisma";
+import { getOrderDocumentData, OrderDocumentError } from "../../../lib/order-document-data";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { NextResponse } from "next/server";
 
@@ -21,38 +21,32 @@ function centerText(
 }
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const propertyId = searchParams.get("propertyId");
-  const deedName = searchParams.get("deedName") || "Orbital One Explorer";
-  const certificateNumber =
-  searchParams.get("certificateNumber") || `OOR-2026-${propertyId || "UNKNOWN"}`;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  let documentData;
 
-  const verificationUrl =
-  `${appUrl}/verify/${certificateNumber}`;
-  if (!propertyId) {
-  return new NextResponse("Missing property ID", { status: 400 });
-}
+  try {
+    documentData = await getOrderDocumentData(request);
+  } catch (error) {
+    if (error instanceof OrderDocumentError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status }
+      );
+    }
 
-const property = await prisma.property.findUnique({
-  where: {
-    id: propertyId,
-  },
-});;
-  const allocation = await prisma.acreageAllocation.findFirst({
-  where: {
-    certificateNumber,
-  },
-});
-
-const assignedAcreRange = allocation
-  ? allocation.startingAcre === allocation.endingAcre
-    ? `Acre ${allocation.startingAcre.toLocaleString()}`
-    : `Acres ${allocation.startingAcre.toLocaleString()} through ${allocation.endingAcre.toLocaleString()}`
-  : "";
-  if (!property) {
-    return NextResponse.json({ error: "Property not found" }, { status: 404 });
+    throw error;
   }
+
+  const {
+    property,
+    assignedAcreRange,
+    certificateNumber,
+    deedName,
+    locationLabel,
+  } = documentData;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const verificationUrl = `${appUrl}/verify/${encodeURIComponent(
+    certificateNumber
+  )}`;
 
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([612, 792]);
@@ -99,8 +93,8 @@ const assignedAcreRange = allocation
 });
   const paragraphs = [
     "Congratulations and welcome to Orbital One Realty. Your novelty lunar property package has been prepared as a fun, memorable, and out-of-this-world keepsake.",
-    `Your selected property is ${property.id}, a ${property.size} ${property.type} located in the lunar state of ${property.state}.${assignedAcreRange ? ` Assigned acreage: ${assignedAcreRange}.` : ""}`,`Your selected property is ${property.id}, a ${property.size} ${property.type} located in the lunar state of ${property.state}.`,
-    "Inside your Orbital One welcome package, you will find your novelty deed, property information, nearby lunar attractions, HOA membership materials, and optional add-ons such as novelty lunar passports.",
+    `Your selected property is ${property.id}, a ${property.size} ${property.type} located at ${locationLabel}.${assignedAcreRange ? ` Assigned acreage: ${assignedAcreRange}.` : ""}`,
+    "Your package includes a personalized novelty deed, property information, HOA membership materials, and access to your recorded certificate in the Orbital One registry.",
     "Please remember that Orbital One Realty products are novelty and commemorative items only. They do not convey legal ownership, mineral rights, territorial rights, or any enforceable property interest in lunar real estate.",
     "Thank you for joining the Orbital One community. It's fun. It's unique. It's out of this world!",
   ];

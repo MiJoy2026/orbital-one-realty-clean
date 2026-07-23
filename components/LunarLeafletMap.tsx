@@ -486,6 +486,7 @@ export default function LunarLeafletMap({
         parcelKey: data.parcelKey,
         expiresAt: data.expiresAt,
       });
+      window.dispatchEvent(new Event("orbital-cart-updated"));
     } finally {
       setReservingParcel(false);
     }
@@ -783,7 +784,7 @@ export default function LunarLeafletMap({
                 }}
               />
             </div>
-      <div className="grid gap-6 lg:grid-cols-[1fr_320px]">
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="h-[850px] overflow-hidden rounded-3xl border border-yellow-400/40 bg-black shadow-2xl">
           <MapContainer
             key="orbital-one-lunar-map"
@@ -1064,6 +1065,7 @@ export default function LunarLeafletMap({
           </MapContainer>
         </div>
 
+        <div className="min-h-0 lg:h-[850px]">
         {selectedParcel ? (
   <PropertyInfoPanel
     selectedParcel={selectedParcel}
@@ -1097,6 +1099,7 @@ export default function LunarLeafletMap({
       setActiveReservation(null);
       setSelectedParcelKey(null);
       setSelectedParcel(null);
+      window.dispatchEvent(new Event("orbital-cart-updated"));
     }}
     onCancelReservation={async () => {
       if (!activeReservation) return;
@@ -1126,6 +1129,7 @@ export default function LunarLeafletMap({
       setActiveReservation(null);
       setSelectedParcelKey(null);
       setSelectedParcel(null);
+      window.dispatchEvent(new Event("orbital-cart-updated"));
     }}
   />
 ) : selectedSettlement ? (
@@ -1136,6 +1140,7 @@ export default function LunarLeafletMap({
     stateSummary={selectedStateSummary}
   />
 )}
+        </div>
       </div>
     </div>
   );

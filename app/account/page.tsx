@@ -11,6 +11,7 @@ import { prisma } from "../../lib/prisma";type AccountOrder = {
   propertyId: string;
   lunarState: string;
   deedName: string;
+  passportPurchased: boolean;
   createdAt: Date;
 };
 
@@ -44,10 +45,14 @@ const member = await prisma.member.findUnique({
 
 const orders = (await prisma.order.findMany({
   where: {
+    paymentStatus: {
+      equals: "Paid",
+      mode: "insensitive",
+    },
     OR: [
       { userId: user.id },
-      { email: user.email },
-      { recipientEmail: user.email },
+      { email: { equals: user.email, mode: "insensitive" } },
+      { recipientEmail: { equals: user.email, mode: "insensitive" } },
     ],
   },
   orderBy: {
@@ -358,44 +363,30 @@ const portfolioValue = orders.reduce(
                         </a>
 
                         <a
-                          href={`/api/generate-deed?propertyId=${order.propertyId}&deedName=${encodeURIComponent(
-                            order.deedName
-                          )}&certificateNumber=${encodeURIComponent(
-                            order.certificateNumber
-                          )}`}
+                          href={`/api/generate-deed?certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
                           className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
                         >
                           Download Deed
                         </a>
 
                         <a
-                          href={`/api/generate-welcome-letter?propertyId=${order.propertyId}&deedName=${encodeURIComponent(
-                            order.deedName
-                          )}&certificateNumber=${encodeURIComponent(
-                            order.certificateNumber
-                          )}`}
+                          href={`/api/generate-welcome-letter?certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
                           className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
                         >
                           Download Welcome Letter
                         </a>
 
-                        <a
-                          href={`/api/generate-passport?propertyId=${order.propertyId}&deedName=${encodeURIComponent(
-                            order.deedName
-                          )}&certificateNumber=${encodeURIComponent(
-                            order.certificateNumber
-                          )}`}
-                          className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
-                        >
-                          Download Passport
-                        </a>
+                        {order.passportPurchased && (
+                          <a
+                            href={`/api/generate-passport?certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
+                            className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
+                          >
+                            Download Passport
+                          </a>
+                        )}
 
                         <a
-                          href={`/api/generate-hoa-certificate?propertyId=${order.propertyId}&deedName=${encodeURIComponent(
-                            order.deedName
-                          )}&certificateNumber=${encodeURIComponent(
-                            order.certificateNumber
-                          )}`}
+                          href={`/api/generate-hoa-certificate?certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
                           className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
                         >
                           Download HOA Certificate

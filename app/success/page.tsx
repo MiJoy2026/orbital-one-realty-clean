@@ -1,8 +1,29 @@
+import Link from "next/link";
 import Stripe from "stripe";
-import { prisma } from "../../lib/prisma";
-import { sendOrderEmail } from "../../lib/send-order-email";
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY as string);
+import ClearCartCookie from "../../components/ClearCartCookie";
+import { fulfillStripeCheckoutSession } from "../../lib/fulfillment-service";
+import { prisma } from "../../lib/prisma";
+
+function ProcessingMessage({ message }: { message: string }) {
+  return (
+    <main className="min-h-screen bg-black px-6 py-20 text-white">
+      <div className="mx-auto max-w-3xl rounded-3xl border border-yellow-400/40 bg-white/5 p-10 text-center">
+        <p className="text-sm font-bold uppercase tracking-[0.35em] text-yellow-400">
+          Payment Received
+        </p>
+        <h1 className="mt-4 text-4xl font-black uppercase text-yellow-400">
+          Preparing Your Welcome Package
+        </h1>
+        <p className="mt-6 text-lg text-gray-300">{message}</p>
+        <p className="mt-4 text-sm text-gray-500">
+          Your Stripe payment is the source of truth. Refresh this page in a
+          moment if fulfillment is still processing.
+        </p>
+      </div>
+    </main>
+  );
+}
 
 export default async function SuccessPage({
   searchParams,
@@ -10,247 +31,219 @@ export default async function SuccessPage({
   searchParams: Promise<{ session_id?: string }>;
 }) {
   const params = await searchParams;
+  const sessionId = params.session_id?.trim();
+  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
-  let propertyId = "R-001";
-  let deedName = "Deed Recipient";
-  let certificateNumber = "OOR-2026-000000";
-  let assignedAcreRange = "";
-
-  if (params.session_id) {
-    const session = await stripe.checkout.sessions.retrieve(params.session_id);
-
-    propertyId = session.metadata?.propertyId || propertyId;
-    deedName = session.metadata?.deedName || deedName;
-
-    const acres = Number(session.metadata?.acres || 1);
-    const propertyType = session.metadata?.propertyType || "Unknown";
-    const lunarState = session.metadata?.state || "Unknown";
-    const amountPaid = session.amount_total ? session.amount_total / 100 : 0;
-    const paymentStatus = session.payment_status || "unknown";
-    const email = session.customer_details?.email || null;
-
-    const existingOrder = await prisma.order.findUnique({
-      where: {
-        stripeSessionId: session.id,
-      },
-    });
-
-    if (existingOrder) {
-      certificateNumber = existingOrder.certificateNumber;
-    } else {
-      const orderCount = await prisma.order.count();
-
-      certificateNumber = `OOR-2026-${String(orderCount + 1).padStart(
-        6,
-        "0"
-      )}`;
-
-      await prisma.order.create({
-        data: {
-          stripeSessionId: session.id,
-          propertyId,
-          propertyType,
-          acreagePurchased: propertyType === "Rural Acre" ? acres : null,
-          lunarState,
-          deedName,
-          certificateNumber,
-          amountPaid,
-          paymentStatus,
-          email,
-          premiumGoldSeal: true,
-        },
-      });
-
-      await prisma.property.update({
-        where: {
-          id: propertyId,
-        },
-        data: {
-          status: "Sold",
-        },
-      });
-
-            if (propertyType === "Rural Acre") {
-  const currentInventory = await prisma.stateInventory.upsert({
-    where: {
-      stateName: lunarState,
-    },
-    update: {},
-    create: {
-      stateName: lunarState,
-      totalAcres: 50000,
-      soldAcres: 0,
-    },
-  });
-
-  const startingAcre = Math.floor(currentInventory.soldAcres) + 1;
-  const endingAcre = Math.floor(currentInventory.soldAcres + acres);
-
-  await prisma.stateInventory.update({
-    where: {
-      stateName: lunarState,
-    },
-    data: {
-      soldAcres: {
-        increment: acres,
-      },
-    },
-  });
-
-  const allocation = await prisma.acreageAllocation.create({
-  data: {
-      orderId: propertyId,
-      certificateNumber,
-      stateName: lunarState,
-      propertyId,
-      startingAcre,
-      endingAcre,
-      acresAssigned: acres,
-    },
-  });
-     assignedAcreRange =
-  allocation.startingAcre === allocation.endingAcre
-    ? `Acre ${allocation.startingAcre.toLocaleString()}`
-    : `Acres ${allocation.startingAcre.toLocaleString()} through ${allocation.endingAcre.toLocaleString()}`;
-}
-
-      await sendOrderEmail({
-        to: email || "",
-        deedName,
-        propertyId,
-        propertyType,
-        lunarState,
-        certificateNumber,
-        amountPaid,
-      });
-       {assignedAcreRange && (
-  <div className="mx-auto mt-6 max-w-4xl rounded-2xl border border-yellow-400 p-6">
-    <p className="text-sm uppercase text-gray-400">Assigned Acre Range</p>
-    <p className="mt-2 text-3xl font-black text-yellow-400">
-      {assignedAcreRange}
-    </p>
-  </div>
-)}
-    }
+  if (!sessionId) {
+    return (
+      <main className="min-h-screen bg-black px-6 py-20 text-center text-white">
+        <h1 className="text-4xl font-black text-yellow-400">
+          Checkout Session Missing
+        </h1>
+        <Link
+          href="/moon-map"
+          className="mt-8 inline-block rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
+        >
+          Return to the Moon Map
+        </Link>
+      </main>
+    );
   }
 
-  const verificationUrl = `/verify/${certificateNumber}`;
+  if (!stripeSecretKey) {
+    return (
+      <ProcessingMessage message="Secure payment verification is temporarily unavailable." />
+    );
+  }
+
+  const stripe = new Stripe(stripeSecretKey);
+  let session: Stripe.Checkout.Session;
+
+  try {
+    session = await stripe.checkout.sessions.retrieve(sessionId);
+  } catch (error) {
+    console.error("[Orbital One] Unable to retrieve Stripe session.", error);
+    return (
+      <ProcessingMessage message="We could not retrieve this checkout session yet." />
+    );
+  }
+
+  if (session.payment_status !== "paid") {
+    return (
+      <ProcessingMessage message="Stripe has not marked this checkout as paid yet." />
+    );
+  }
+
+  try {
+    await fulfillStripeCheckoutSession(session);
+  } catch (error) {
+    console.error(
+      "[Orbital One] Success-page fulfillment fallback failed.",
+      error
+    );
+  }
+
+  const orders = await prisma.order.findMany({
+    where: {
+      stripeSessionId: session.id,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+  if (orders.length === 0) {
+    return (
+      <ProcessingMessage message="Your payment is confirmed and fulfillment is still being recorded." />
+    );
+  }
+
+  const [properties, allocations] = await Promise.all([
+    prisma.property.findMany({
+      where: {
+        id: { in: orders.map((order) => order.propertyId) },
+      },
+    }),
+    prisma.acreageAllocation.findMany({
+      where: {
+        certificateNumber: {
+          in: orders.map((order) => order.certificateNumber),
+        },
+      },
+    }),
+  ]);
+  const propertyById = new Map(
+    properties.map((property) => [property.id, property])
+  );
+  const allocationByCertificate = new Map(
+    allocations.map((allocation) => [allocation.certificateNumber, allocation])
+  );
+  const totalPaid = session.amount_total
+    ? session.amount_total / 100
+    : orders.reduce((sum, order) => sum + order.amountPaid, 0);
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
+      <ClearCartCookie />
       <div className="mx-auto max-w-6xl text-center">
         <p className="text-sm font-bold uppercase tracking-[0.35em] text-yellow-400">
           Purchase Complete
         </p>
-
         <h1 className="mt-4 text-5xl font-black uppercase text-yellow-400">
           Welcome to Orbital One Realty
         </h1>
-
         <p className="mt-6 text-2xl">
-          Congratulations,{" "}
-          <span className="font-black text-yellow-400">{deedName}</span>
+          Congratulations, <span className="font-black text-yellow-400">{orders[0].deedName}</span>
+        </p>
+        <p className="mt-3 text-gray-300">
+          {orders.length} {orders.length === 1 ? "property has" : "properties have"} been recorded. Total paid: ${totalPaid.toFixed(2)}.
         </p>
 
-        <div className="mx-auto mt-10 grid max-w-4xl gap-6 md:grid-cols-3">
-          <div className="rounded-2xl border border-yellow-400 p-6">
-            <p className="text-sm uppercase text-gray-400">Property ID</p>
-            <p className="mt-2 text-3xl font-black text-yellow-400">
-              {propertyId}
-            </p>
-          </div>
+        <div className="mt-10 space-y-8 text-left">
+          {orders.map((order) => {
+            const property = propertyById.get(order.propertyId);
+            const allocation = allocationByCertificate.get(
+              order.certificateNumber
+            );
+            const assignedAcreRange = allocation
+              ? allocation.startingAcre === allocation.endingAcre
+                ? `Acre ${allocation.startingAcre.toLocaleString()}`
+                : `Acres ${allocation.startingAcre.toLocaleString()} through ${allocation.endingAcre.toLocaleString()}`
+              : "";
+            const certificateQuery = encodeURIComponent(
+              order.certificateNumber
+            );
+            const location = [property?.city, property?.town, property?.state]
+              .filter(Boolean)
+              .join(" • ");
 
-          <div className="rounded-2xl border border-yellow-400 p-6 md:col-span-2">
-            <p className="text-sm uppercase text-gray-400">
-              Certificate Number
-            </p>
-            <p className="mt-2 text-3xl font-black text-yellow-400">
-              {certificateNumber}
-            </p>
-          </div>
-        </div>
+            return (
+              <section
+                key={order.id}
+                className="rounded-3xl border border-yellow-400/40 bg-white/5 p-8"
+              >
+                <div className="grid gap-5 md:grid-cols-[1fr_auto]">
+                  <div>
+                    <p className="text-sm font-bold uppercase tracking-[0.2em] text-gray-500">
+                      {order.propertyType}
+                    </p>
+                    <h2 className="mt-2 break-words text-3xl font-black text-yellow-400">
+                      {order.propertyId}
+                    </h2>
+                    <p className="mt-3 text-gray-300">
+                      {location || order.lunarState} · {property?.size || "Recorded property"}
+                    </p>
+                  </div>
+                  <div className="rounded-2xl border border-white/15 bg-black/30 p-4">
+                    <p className="text-xs uppercase text-gray-500">Certificate</p>
+                    <p className="mt-2 break-all font-black text-yellow-400">
+                      {order.certificateNumber}
+                    </p>
+                    <p className="mt-2 text-sm text-gray-400">
+                      Recorded value: ${order.amountPaid.toFixed(2)}
+                    </p>
+                  </div>
+                </div>
 
-        <div className="mx-auto mt-10 max-w-4xl rounded-3xl border border-yellow-400/40 bg-white/5 p-8">
-          <h2 className="text-3xl font-black text-yellow-400">
-            Your Lunar Welcome Package Is Ready
-          </h2>
+                {assignedAcreRange && (
+                  <div className="mt-5 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4">
+                    <p className="font-black text-yellow-400">{assignedAcreRange}</p>
+                  </div>
+                )}
 
-          <p className="mt-4 text-gray-300">
-            Download your personalized documents below. A copy has also been
-            sent to the email address used during checkout.
-          </p>
+                <div className="mt-6 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                  <a
+                    href={`/api/generate-deed?certificateNumber=${certificateQuery}`}
+                    className="rounded-xl bg-yellow-400 px-4 py-3 text-center font-black text-black"
+                  >
+                    Lunar Deed
+                  </a>
+                  <a
+                    href={`/api/generate-welcome-letter?certificateNumber=${certificateQuery}`}
+                    className="rounded-xl border border-yellow-400 px-4 py-3 text-center font-black text-yellow-400"
+                  >
+                    Welcome Letter
+                  </a>
+                  <a
+                    href={`/api/generate-hoa-certificate?certificateNumber=${certificateQuery}`}
+                    className="rounded-xl border border-yellow-400 px-4 py-3 text-center font-black text-yellow-400"
+                  >
+                    HOA Certificate
+                  </a>
+                  {order.passportPurchased && (
+                    <a
+                      href={`/api/generate-passport?certificateNumber=${certificateQuery}`}
+                      className="rounded-xl border border-yellow-400 px-4 py-3 text-center font-black text-yellow-400"
+                    >
+                      Lunar Passport
+                    </a>
+                  )}
+                </div>
 
-          <div className="mt-8 grid gap-4 md:grid-cols-2">
-            <a
-              href={`/api/generate-deed?propertyId=${propertyId}&deedName=${encodeURIComponent(
-                deedName
-              )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
-              className="rounded-xl bg-yellow-400 px-6 py-4 font-black text-black"
-            >
-              Download Lunar Deed
-            </a>
-
-            <a
-              href={`/api/generate-welcome-letter?propertyId=${propertyId}&deedName=${encodeURIComponent(
-                deedName
-              )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
-              className="rounded-xl border border-yellow-400 px-6 py-4 font-black text-yellow-400"
-            >
-              Download Welcome Letter
-            </a>
-
-            <a
-              href={`/api/generate-passport?propertyId=${propertyId}&deedName=${encodeURIComponent(
-                deedName
-              )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
-              className="rounded-xl border border-yellow-400 px-6 py-4 font-black text-yellow-400"
-            >
-              Download Lunar Passport
-            </a>
-
-            <a
-              href={`/api/generate-hoa-certificate?propertyId=${propertyId}&deedName=${encodeURIComponent(
-                deedName
-              )}&certificateNumber=${encodeURIComponent(certificateNumber)}`}
-              className="rounded-xl border border-yellow-400 px-6 py-4 font-black text-yellow-400"
-            >
-              Download HOA Certificate
-            </a>
-          </div>
-        </div>
-
-        <div className="mx-auto mt-8 max-w-4xl rounded-3xl border border-white/20 bg-white/5 p-8">
-          <h2 className="text-2xl font-black text-yellow-400">
-            Verify Your Certificate
-          </h2>
-
-          <p className="mt-4 text-gray-300">
-            Your certificate can be verified in the official Orbital One Realty
-            registry.
-          </p>
-
-          <a
-            href={verificationUrl}
-            className="mt-6 inline-block rounded-xl border border-yellow-400 px-6 py-4 font-black text-yellow-400"
-          >
-            Verify Certificate
-          </a>
+                <Link
+                  href={`/verify/${certificateQuery}`}
+                  className="mt-5 inline-block text-sm font-black text-yellow-400 hover:underline"
+                >
+                  Verify this certificate →
+                </Link>
+              </section>
+            );
+          })}
         </div>
 
         <div className="mt-10 flex flex-wrap justify-center gap-4">
-          <a
+          <Link
             href="/moon-map"
             className="rounded-xl bg-yellow-400 px-8 py-4 font-black text-black"
           >
             Return to Lunar Atlas
-          </a>
-
-          <a
-            href="/explore"
+          </Link>
+          <Link
+            href="/account"
             className="rounded-xl border border-yellow-400 px-8 py-4 font-black text-yellow-400"
           >
-            Explore More Properties
-          </a>
+            View My Account
+          </Link>
         </div>
       </div>
     </main>

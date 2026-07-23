@@ -26,7 +26,6 @@ export default async function PropertyExplorerPage({
   }
 
   const isSold = property.status === "Sold";
-  const isRuralAcre = property.type === "Rural Acre";
   const locationName =
   property.type === "City Block" && property.city
     ? property.city
@@ -230,69 +229,19 @@ export default async function PropertyExplorerPage({
           </div>
         </div>
 
-        {isRuralAcre && !isSold && (
-          <div className="mt-8 rounded-2xl border border-yellow-400/30 p-6">
-            <h3 className="text-xl font-black text-yellow-400">
-              Choose Your Acreage
-            </h3>
-
-            <p className="mt-2 text-gray-300">
-              Select the amount of rural lunar acreage you would like to
-              purchase.
-            </p>
-
-            <div className="mt-4 grid gap-3 md:grid-cols-2">
-              <a
-                href={`/cart?propertyId=${property.id}&acres=1`}
-                className="rounded-xl border border-white/20 p-4 hover:border-yellow-400 hover:bg-yellow-400/10"
-              >
-                1 Acre — $24.95
-              </a>
-
-              <a
-                href={`/cart?propertyId=${property.id}&acres=2`}
-                className="rounded-xl border border-white/20 p-4 hover:border-yellow-400 hover:bg-yellow-400/10"
-              >
-                2 Acres — $32.90
-              </a>
-
-              <a
-                href={`/cart?propertyId=${property.id}&acres=3`}
-                className="rounded-xl border border-white/20 p-4 hover:border-yellow-400 hover:bg-yellow-400/10"
-              >
-                3 Acres — $40.85
-              </a>
-
-              <a
-                href={`/cart?propertyId=${property.id}&acres=5`}
-                className="rounded-xl border border-white/20 p-4 hover:border-yellow-400 hover:bg-yellow-400/10"
-              >
-                5 Acres — $56.75
-              </a>
-
-              <a
-                href={`/cart?propertyId=${property.id}&acres=10`}
-                className="rounded-xl border border-white/20 p-4 hover:border-yellow-400 hover:bg-yellow-400/10"
-              >
-                10 Acres — $96.50
-              </a>
-            </div>
-          </div>
-        )}
-
         <div className="mt-10 flex flex-wrap gap-4">
-          {!isSold && !isRuralAcre ? (
+          {!isSold ? (
             <a
-              href={`/cart?propertyId=${property.id}`}
+              href={`/moon-map?property=${encodeURIComponent(property.id)}`}
               className="rounded-xl bg-yellow-400 px-8 py-4 font-black text-black"
             >
-              Purchase This Property
+              Reserve on Moon Map
             </a>
-          ) : isSold ? (
+          ) : (
             <div className="rounded-xl bg-red-600 px-8 py-4 font-black text-white">
               Sold
             </div>
-          ) : null}
+          )}
 
           <a
             href={`/states/${encodeURIComponent(property.state)}`}

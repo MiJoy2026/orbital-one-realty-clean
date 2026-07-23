@@ -183,9 +183,7 @@ export default async function AdminOrderDetailPage({
           </a>
 
           <a
-            href={`/api/generate-deed?propertyId=${order.propertyId}&deedName=${encodeURIComponent(
-              order.deedName
-            )}&certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
+            href={`/api/generate-deed?certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
             className="rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
           >
             Download Deed

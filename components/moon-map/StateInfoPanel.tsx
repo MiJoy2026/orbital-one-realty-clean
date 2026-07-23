@@ -17,7 +17,7 @@ export default function StateInfoPanel({
 }) {
   if (!selectedState || !stateSummary) {
     return (
-      <div className="rounded-3xl border border-yellow-400/30 bg-black/70 p-6">
+      <div className="rounded-3xl border border-yellow-400/30 bg-black/70 p-6 lg:h-full lg:overflow-y-auto">
         <p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-400">
           State Information
         </p>
@@ -33,7 +33,7 @@ export default function StateInfoPanel({
   const details = lunarStateDetails[selectedState];
 
   return (
-    <div className="rounded-3xl border border-yellow-400/30 bg-black/70 p-6">
+    <div className="rounded-3xl border border-yellow-400/30 bg-black/70 p-6 lg:h-full lg:overflow-y-auto">
       <p className="text-sm font-black uppercase tracking-[0.25em] text-yellow-400">
         Orbital One Lunar State
       </p>

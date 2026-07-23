@@ -11,6 +11,93 @@ function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
+
+async function releaseExpiredReservations(parcelKeys: string[]) {
+  await prisma.$transaction(async (transaction) => {
+    const expiredReservations =
+      await transaction.propertyReservation.findMany({
+        where: {
+          parcelKey: {
+            in: parcelKeys,
+          },
+          status: "Reserved",
+          expiresAt: {
+            lte: new Date(),
+          },
+        },
+        select: {
+          id: true,
+          parcelKey: true,
+        },
+      });
+
+    if (expiredReservations.length === 0) {
+      return;
+    }
+
+    const expiredIds = expiredReservations.map(
+      (reservation) => reservation.id
+    );
+    const expiredKeys = Array.from(
+      new Set(
+        expiredReservations.map(
+          (reservation) => reservation.parcelKey
+        )
+      )
+    );
+
+    await transaction.propertyReservation.updateMany({
+      where: {
+        id: {
+          in: expiredIds,
+        },
+        status: "Reserved",
+      },
+      data: {
+        status: "Expired",
+      },
+    });
+
+    const stillActiveReservations =
+      await transaction.propertyReservation.findMany({
+        where: {
+          parcelKey: {
+            in: expiredKeys,
+          },
+          status: "Reserved",
+          expiresAt: {
+            gt: new Date(),
+          },
+        },
+        select: {
+          parcelKey: true,
+        },
+      });
+    const activeKeys = new Set(
+      stillActiveReservations.map(
+        (reservation) => reservation.parcelKey
+      )
+    );
+    const availableKeys = expiredKeys.filter(
+      (parcelKey) => !activeKeys.has(parcelKey)
+    );
+
+    if (availableKeys.length > 0) {
+      await transaction.property.updateMany({
+        where: {
+          id: {
+            in: availableKeys,
+          },
+          status: "Reserved",
+        },
+        data: {
+          status: "Available",
+        },
+      });
+    }
+  });
+}
+
 async function queryPropertyStatuses(parcelKeys: string[]) {
   let lastError: unknown;
 
@@ -87,6 +174,8 @@ export async function POST(request: Request) {
     if (parcelKeys.length === 0) {
       return NextResponse.json({ statuses: {} });
     }
+
+    await releaseExpiredReservations(parcelKeys);
 
     const { properties, reservations } =
       await queryPropertyStatuses(parcelKeys);

@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { NextResponse } from "next/server";
-import { prisma } from "../../../lib/prisma";
+import { getOrderDocumentData, OrderDocumentError } from "../../../lib/order-document-data";
 
 function centerText(
   page: any,
@@ -21,28 +21,33 @@ function centerText(
 }
 
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const propertyId = searchParams.get("propertyId");
-  const deedName = searchParams.get("deedName") || "Orbital One Member";
-  const certificateNumber =
-  searchParams.get("certificateNumber") || `OOR-2026-${propertyId || "UNKNOWN"}`;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  let documentData;
 
-  const verificationUrl =
-  `${appUrl}/verify/${certificateNumber}`;
-  if (!propertyId) {
-  return new NextResponse("Missing property ID", { status: 400 });
-}
+  try {
+    documentData = await getOrderDocumentData(request);
+  } catch (error) {
+    if (error instanceof OrderDocumentError) {
+      return NextResponse.json(
+        { error: error.message },
+        { status: error.status }
+      );
+    }
 
-const property = await prisma.property.findUnique({
-  where: {
-    id: propertyId,
-  },
-});
-
-  if (!property) {
-    return NextResponse.json({ error: "Property not found" }, { status: 404 });
+    throw error;
   }
+
+  const {
+    property,
+    member,
+    certificateNumber,
+    deedName,
+    issueDate,
+    locationLabel,
+  } = documentData;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const verificationUrl = `${appUrl}/verify/${encodeURIComponent(
+    certificateNumber
+  )}`;
 
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([612, 792]);
@@ -99,7 +104,7 @@ const property = await prisma.property.findUnique({
     color: dark,
   });
 
-  page.drawText(certificateNumber, {
+  page.drawText(member?.hoaNumber || certificateNumber, {
     x: 260,
     y: 390,
     size: 13,
@@ -115,7 +120,7 @@ const property = await prisma.property.findUnique({
     color: dark,
   });
 
-  page.drawText(`${property.id} • ${property.state}`, {
+  page.drawText(`${property.id} • ${locationLabel}`, {
     x: 260,
     y: 360,
     size: 13,
@@ -131,7 +136,7 @@ const property = await prisma.property.findUnique({
     color: dark,
   });
 
-  page.drawText(new Date().toLocaleDateString(), {
+  page.drawText(issueDate, {
     x: 260,
     y: 330,
     size: 13,
