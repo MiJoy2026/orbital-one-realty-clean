@@ -270,6 +270,7 @@ export default function LunarLeafletMap({
   publicSettlements,
   publicProtectedAreas,
   activeGeographyReleaseNumber = null,
+  frozenGeographyLabel = null,
   inventoryGridVersion = 2,
   inventorySubdivisionFactor = 5,
   selectedProperty,
@@ -280,6 +281,7 @@ export default function LunarLeafletMap({
   publicSettlements: PublicLunaSphereSettlement[];
   publicProtectedAreas: PublicLunaSphereProtectedArea[];
   activeGeographyReleaseNumber?: number | null;
+  frozenGeographyLabel?: string | null;
   inventoryGridVersion?: number;
   inventorySubdivisionFactor?: number;
   selectedProperty?: SelectedProperty | null;
@@ -808,6 +810,11 @@ export default function LunarLeafletMap({
           {activeGeographyReleaseNumber !== null && (
             <span className="rounded-full border border-purple-400/60 px-3 py-1 text-purple-300">
               Geography R{activeGeographyReleaseNumber}
+            </span>
+          )}
+          {frozenGeographyLabel && (
+            <span className="rounded-full border border-emerald-400/60 bg-emerald-400/10 px-3 py-1 text-emerald-300">
+              {frozenGeographyLabel} · Frozen
             </span>
           )}
           <span className="rounded-full border border-cyan-400/60 px-3 py-1 text-cyan-300">

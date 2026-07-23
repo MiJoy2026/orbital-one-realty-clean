@@ -351,10 +351,14 @@ type DatabaseStatus =
   | "publishing"
   | "previewing"
   | "activating"
+  | "freezing"
+  | "unfreezing"
   | "error";
 
 type DatabaseDraftMetadata = {
   savedAt: string;
+  inventoryGridVersion: number;
+  inventorySubdivisionFactor: number;
   topologyRevision: number;
   territoryRevision: number;
   protectedAreaRevision: number;
@@ -364,6 +368,8 @@ type DatabaseDraftMetadata = {
 type GeographyReleaseMetadata = {
   releaseNumber: number;
   publishedAt: string;
+  inventoryGridVersion: number;
+  inventorySubdivisionFactor: number;
   topologyRevision: number;
   territoryRevision: number;
   protectedAreaRevision: number;
@@ -378,10 +384,37 @@ type GeographyReleaseDetail = GeographyReleaseMetadata & {
   geography: LunaSphereGeographyDocument;
 };
 
+type GeographyFreezeMetadata = {
+  id: string;
+  label: string;
+  frozenAt: string;
+  unfrozenAt: string | null;
+  releaseNumber: number;
+  topologyHash: string;
+  inventoryGridVersion: number;
+  inventorySubdivisionFactor: number;
+  topologyRevision: number;
+  territoryRevision: number;
+  protectedAreaRevision: number;
+  readinessStatus: "ready" | "review";
+  readyStateCount: number;
+  reviewStateCount: number;
+  blockedStateCount: number;
+  totalRuralParcels: number;
+  totalCityBlocks: number;
+  totalTownBlocks: number;
+  totalSaleableProperties: number;
+  totalProtectedAreas: number;
+  auditReport: GeographyReadinessReport;
+  freezeNote: string | null;
+  unfreezeNote: string | null;
+};
+
 type GeographyWorkspaceResponse = {
   draft: DatabaseDraftMetadata | null;
   latestRelease: GeographyReleaseMetadata | null;
   activeRelease: GeographyActivationMetadata | null;
+  activeFreeze: GeographyFreezeMetadata | null;
   releases: GeographyReleaseMetadata[];
   error?: string;
 };
@@ -690,6 +723,8 @@ export default function LunaSphereDesigner() {
     useState<GeographyReleaseMetadata | null>(null);
   const [activeRelease, setActiveRelease] =
     useState<GeographyActivationMetadata | null>(null);
+  const [activeFreeze, setActiveFreeze] =
+    useState<GeographyFreezeMetadata | null>(null);
   const [releases, setReleases] = useState<
     GeographyReleaseMetadata[]
   >([]);
@@ -715,6 +750,7 @@ export default function LunaSphereDesigner() {
   const territoryLayout = geography.territories;
   const protectedAreaLayout = geography.protectedAreas;
   const isPreviewingRelease = releasePreview !== null;
+  const editingLocked = isPreviewingRelease || activeFreeze !== null;
 
   const regions = useMemo(
     () =>
@@ -1130,7 +1166,32 @@ export default function LunaSphereDesigner() {
         setDatabaseDraft(workspace.draft);
         setLatestRelease(workspace.latestRelease);
         setActiveRelease(workspace.activeRelease);
+        setActiveFreeze(workspace.activeFreeze);
         setReleases(workspace.releases);
+
+        if (workspace.activeFreeze) {
+          const releaseResponse = await fetch(
+            `${GEOGRAPHY_API_PATH}/releases/${workspace.activeFreeze.releaseNumber}`,
+            { cache: "no-store" }
+          );
+          const releaseResult = await readResponseBody<{
+            release: GeographyReleaseDetail;
+          }>(releaseResponse);
+
+          if (
+            !hasCompatibleGeographyDocumentStructure(
+              releaseResult.release.geography,
+              baselineGeography
+            )
+          ) {
+            throw new Error(
+              "The frozen Geography 1.0 release is incompatible with this Studio version."
+            );
+          }
+
+          setReleasePreview(releaseResult.release);
+        }
+
         setDatabaseStatus("ready");
 
         if (announce) {
@@ -1236,7 +1297,7 @@ export default function LunaSphereDesigner() {
 
   useEffect(() => {
     function handleKeyboardShortcut(event: KeyboardEvent) {
-      if (isPreviewingRelease || isTextEntryElement(event.target)) {
+      if (editingLocked || isTextEntryElement(event.target)) {
         return;
       }
 
@@ -1335,7 +1396,7 @@ export default function LunaSphereDesigner() {
         handleKeyboardShortcut
       );
   }, [
-    isPreviewingRelease,
+    editingLocked,
     removableNodeEdge,
     selectedNodeId,
     selectedProtectedAreaCanRemovePoint,
@@ -2305,6 +2366,13 @@ export default function LunaSphereDesigner() {
       return;
     }
 
+    if (activeFreeze) {
+      setDatabaseNotice(
+        `${activeFreeze.label} is frozen. The Studio remains on its protected release until it is explicitly unfrozen.`
+      );
+      return;
+    }
+
     const releaseNumber = releasePreview.releaseNumber;
     setReleasePreview(null);
     setSelectedNodeId(null);
@@ -2315,7 +2383,7 @@ export default function LunaSphereDesigner() {
   }
 
   function copyReleasePreviewToDraft() {
-    if (!releasePreview) {
+    if (!releasePreview || activeFreeze) {
       return;
     }
 
@@ -2409,6 +2477,161 @@ export default function LunaSphereDesigner() {
     }
   }
 
+  async function freezeGeography1() {
+    if (!activeRelease) {
+      setDatabaseNotice(
+        "Activate the approved numbered release before freezing Geography 1.0."
+      );
+      return;
+    }
+
+    const confirmation = window.prompt(
+      `This will freeze active release ${activeRelease.releaseNumber}, lock Studio geography editing, store a server-generated Grid V2 audit, and protect sold properties. Type FREEZE GEOGRAPHY 1.0 to continue.`
+    );
+
+    if (confirmation !== "FREEZE GEOGRAPHY 1.0") {
+      setDatabaseNotice("The Geography 1.0 freeze was cancelled.");
+      return;
+    }
+
+    const acceptWarnings = window.confirm(
+      "Freeze the active release if the server audit has no blockers? Selecting OK also accepts any remaining non-blocking review warnings."
+    );
+
+    if (!acceptWarnings) {
+      setDatabaseNotice("The Geography 1.0 freeze was cancelled.");
+      return;
+    }
+
+    setDatabaseStatus("freezing");
+
+    try {
+      const response = await fetch(`${GEOGRAPHY_API_PATH}/freeze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          releaseNumber: activeRelease.releaseNumber,
+          confirmation,
+          acceptWarnings,
+          note: "Approved in LunaSphere Studio",
+        }),
+      });
+      const result = await readResponseBody<{
+        freeze: GeographyFreezeMetadata;
+      }>(response);
+
+      setActiveFreeze(result.freeze);
+      setReadinessReport(result.freeze.auditReport);
+      setReadinessNotice(
+        `Server audit stored with ${result.freeze.totalSaleableProperties.toLocaleString()} saleable properties.`
+      );
+
+      try {
+        const releaseResult = await readResponseBody<{
+          release: GeographyReleaseDetail;
+        }>(
+          await fetch(
+            `${GEOGRAPHY_API_PATH}/releases/${result.freeze.releaseNumber}`,
+            { cache: "no-store" }
+          )
+        );
+        setReleasePreview(releaseResult.release);
+      } catch (previewError) {
+        console.error(
+          "The frozen release preview could not be loaded immediately.",
+          previewError
+        );
+      }
+
+      setDatabaseStatus("ready");
+      setDatabaseNotice(
+        `${result.freeze.label} is now frozen at release ${result.freeze.releaseNumber}. Studio geography editing and release switching are locked.`
+      );
+    } catch (error) {
+      setDatabaseStatus("error");
+      setDatabaseNotice(
+        error instanceof Error
+          ? error.message
+          : "Geography 1.0 could not be frozen."
+      );
+    }
+  }
+
+  async function unfreezeGeography1() {
+    if (!activeFreeze) {
+      return;
+    }
+
+    const confirmation = window.prompt(
+      `Unfreezing restores editing, but sold Grid V2 properties will remain protected from movement. Type UNFREEZE GEOGRAPHY 1.0 to continue.`
+    );
+
+    if (confirmation !== "UNFREEZE GEOGRAPHY 1.0") {
+      setDatabaseNotice("The Geography 1.0 unfreeze was cancelled.");
+      return;
+    }
+
+    const note = window.prompt(
+      "Optional: record why Geography 1.0 is being unlocked.",
+      "Administrative geography revision"
+    );
+
+    setDatabaseStatus("unfreezing");
+
+    try {
+      await readResponseBody<{ freeze: GeographyFreezeMetadata }>(
+        await fetch(`${GEOGRAPHY_API_PATH}/freeze`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ confirmation, note }),
+        })
+      );
+
+      if (releasePreview) {
+        const editableGeography = cloneGeographyDocument(
+          releasePreview.geography
+        );
+        editableGeography.topology.status = "draft";
+        editableGeography.territories.status = "draft";
+        editableGeography.protectedAreas.status = "draft";
+        dispatchHistory({
+          type: "replace",
+          geography: editableGeography,
+          recordCurrent: true,
+        });
+      }
+
+      setActiveFreeze(null);
+      setReleasePreview(null);
+      setDatabaseStatus("ready");
+      setDatabaseNotice(
+        "Geography 1.0 is unlocked. Any future save, publication, or activation will still be rejected if it moves or removes a sold Grid V2 property."
+      );
+    } catch (error) {
+      setDatabaseStatus("error");
+      setDatabaseNotice(
+        error instanceof Error
+          ? error.message
+          : "Geography 1.0 could not be unfrozen."
+      );
+    }
+  }
+
+  function exportFrozenLaunchSummary() {
+    if (!activeFreeze) {
+      return;
+    }
+
+    downloadJson(
+      `lunasphere-${activeFreeze.label.toLowerCase().replaceAll(" ", "-")}-release-${activeFreeze.releaseNumber}.json`,
+      {
+        format: "lunasphere-frozen-launch-summary",
+        schemaVersion: 1,
+        ...activeFreeze,
+      }
+    );
+  }
+
   function exportSelectedState() {
     if (
       !validation.valid ||
@@ -2468,7 +2691,7 @@ export default function LunaSphereDesigner() {
   }
 
   async function runReadinessReport() {
-    if (isPreviewingRelease) {
+    if (editingLocked) {
       return;
     }
 
@@ -2528,7 +2751,9 @@ export default function LunaSphereDesigner() {
     databaseStatus === "saving" ||
     databaseStatus === "publishing" ||
     databaseStatus === "previewing" ||
-    databaseStatus === "activating";
+    databaseStatus === "activating" ||
+    databaseStatus === "freezing" ||
+    databaseStatus === "unfreezing";
   const databaseDraftIsCurrent =
     databaseDraft !== null &&
     geographiesHaveSameContent(
@@ -2546,6 +2771,10 @@ export default function LunaSphereDesigner() {
             ? "Loading release preview…"
             : databaseStatus === "activating"
               ? "Activating release…"
+              : databaseStatus === "freezing"
+                ? "Freezing Geography 1.0…"
+                : databaseStatus === "unfreezing"
+                  ? "Unfreezing Geography 1.0…"
           : databaseStatus === "error"
             ? "Database error"
             : databaseDraft
@@ -2574,6 +2803,22 @@ export default function LunaSphereDesigner() {
             geography while Moon-perimeter handles remain locked to the
             circular saleable boundary.
           </p>
+
+          {activeFreeze && (
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-emerald-300/40 bg-emerald-400/10 p-4 text-emerald-50">
+              <div>
+                <p className="text-xs font-black uppercase tracking-[0.24em] text-emerald-200">
+                  {activeFreeze.label} Frozen
+                </p>
+                <p className="mt-1 text-sm text-emerald-50/80">
+                  Release {activeFreeze.releaseNumber} is the protected launch geography. Editing, database draft changes, publication, and release switching are locked until an explicit unfreeze.
+                </p>
+              </div>
+              <span className="rounded-xl bg-emerald-200 px-4 py-2 text-xs font-black uppercase tracking-wider text-emerald-950">
+                {activeFreeze.totalSaleableProperties.toLocaleString()} Properties
+              </span>
+            </div>
+          )}
 
           <div className="mt-5 flex flex-wrap items-end gap-3">
             <label className="min-w-64">
@@ -2694,7 +2939,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={undo}
-              disabled={isPreviewingRelease || history.past.length === 0}
+              disabled={editingLocked || history.past.length === 0}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Undo
@@ -2703,7 +2948,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={redo}
-              disabled={isPreviewingRelease || history.future.length === 0}
+              disabled={editingLocked || history.future.length === 0}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Redo
@@ -2712,7 +2957,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={saveDraftNow}
-              disabled={isPreviewingRelease}
+              disabled={editingLocked}
               className="rounded-xl border border-sky-300/30 bg-sky-400/10 px-4 py-3 text-sm font-black text-sky-100 hover:bg-sky-400/20"
             >
               Save Draft Now
@@ -2727,7 +2972,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={resetSelectedState}
-              disabled={isPreviewingRelease}
+              disabled={editingLocked}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold hover:bg-white/10"
             >
               Reset State
@@ -2736,7 +2981,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={resetAllStates}
-              disabled={isPreviewingRelease}
+              disabled={editingLocked}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold hover:bg-white/10"
             >
               Reset All
@@ -2746,7 +2991,7 @@ export default function LunaSphereDesigner() {
               type="button"
               onClick={naturalizeSelectedStateBorders}
               disabled={
-                isPreviewingRelease ||
+                editingLocked ||
                 selectedEdges.every(
                   (edge) =>
                     edge.kind !== "shared-state-border" ||
@@ -2762,7 +3007,7 @@ export default function LunaSphereDesigner() {
               type="button"
               onClick={smoothSelectedStateBorders}
               disabled={
-                isPreviewingRelease ||
+                editingLocked ||
                 selectedEdges.every((edge) => edge.nodeIds.length <= 2)
               }
               className="rounded-xl border border-indigo-300/30 bg-indigo-400/10 px-4 py-3 text-sm font-bold text-indigo-100 enabled:hover:bg-indigo-400/20 disabled:cursor-not-allowed disabled:opacity-35"
@@ -2773,7 +3018,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={resetSelectedTerritory}
-              disabled={isPreviewingRelease || !selectedTerritoryId}
+              disabled={editingLocked || !selectedTerritoryId}
               className="rounded-xl border border-cyan-300/30 px-4 py-3 text-sm font-bold text-cyan-100 enabled:hover:bg-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Reset Selected Territory
@@ -2782,7 +3027,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={resetSelectedStateTerritories}
-              disabled={isPreviewingRelease}
+              disabled={editingLocked}
               className="rounded-xl border border-amber-300/30 px-4 py-3 text-sm font-bold text-amber-100 enabled:hover:bg-amber-400/10 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Reset State Cities & Towns
@@ -2791,7 +3036,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={createProtectedArea}
-              disabled={isPreviewingRelease}
+              disabled={editingLocked}
               className="rounded-xl border border-rose-300/30 bg-rose-400/10 px-4 py-3 text-sm font-bold text-rose-100 enabled:hover:bg-rose-400/20 disabled:opacity-35"
             >
               Add Protected Area
@@ -2800,7 +3045,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={resetSelectedStateProtectedAreas}
-              disabled={isPreviewingRelease}
+              disabled={editingLocked}
               className="rounded-xl border border-rose-300/30 px-4 py-3 text-sm font-bold text-rose-100 enabled:hover:bg-rose-400/10 disabled:opacity-35"
             >
               Reset State Protected Areas
@@ -2809,7 +3054,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={reloadSavedDraft}
-              disabled={isPreviewingRelease || !lastSavedAt}
+              disabled={editingLocked || !lastSavedAt}
               className="rounded-xl border border-white/20 px-4 py-3 text-sm font-bold enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-35"
             >
               Reload Saved Draft
@@ -2845,7 +3090,7 @@ export default function LunaSphereDesigner() {
             <button
               type="button"
               onClick={() => void runReadinessReport()}
-              disabled={isPreviewingRelease || readinessBusy}
+              disabled={editingLocked || readinessBusy}
               title={
                 workingValidation.valid
                   ? "Audit the current working geography"
@@ -3066,7 +3311,7 @@ export default function LunaSphereDesigner() {
                 type="button"
                 onClick={() => void saveDatabaseDraft()}
                 disabled={
-                  isPreviewingRelease ||
+                  editingLocked ||
                   !workingValidation.valid ||
                   databaseBusy
                 }
@@ -3079,7 +3324,7 @@ export default function LunaSphereDesigner() {
                 type="button"
                 onClick={loadDatabaseDraft}
                 disabled={
-                  isPreviewingRelease ||
+                  editingLocked ||
                   !databaseDraft ||
                   databaseBusy
                 }
@@ -3101,7 +3346,7 @@ export default function LunaSphereDesigner() {
                 type="button"
                 onClick={() => void publishDatabaseRelease()}
                 disabled={
-                  isPreviewingRelease ||
+                  editingLocked ||
                   !workingValidation.valid ||
                   !databaseDraftIsCurrent ||
                   databaseBusy
@@ -3153,6 +3398,103 @@ export default function LunaSphereDesigner() {
               </div>
             </div>
 
+            <div className={`mt-4 rounded-2xl border p-4 ${
+              activeFreeze
+                ? "border-emerald-300/35 bg-emerald-400/10"
+                : "border-yellow-300/30 bg-yellow-400/10"
+            }`}>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className={`text-xs font-black uppercase tracking-[0.2em] ${
+                    activeFreeze ? "text-emerald-200" : "text-yellow-200"
+                  }`}>
+                    Geography 1.0 Approval & Freeze
+                  </p>
+                  <p className={`mt-1 max-w-4xl text-sm ${
+                    activeFreeze ? "text-emerald-50/75" : "text-yellow-50/75"
+                  }`}>
+                    {activeFreeze
+                      ? `Frozen release ${activeFreeze.releaseNumber} is the permanent launch baseline. Its server-generated readiness audit and Grid V2 totals are stored with the freeze record.`
+                      : "Freeze the approved active release only after its final audit. The server reruns the complete audit, records exact inventory totals, and verifies every sold Grid V2 property before locking Studio."}
+                  </p>
+                </div>
+
+                {activeFreeze ? (
+                  <span className="rounded-xl bg-emerald-200 px-3 py-2 text-xs font-black uppercase tracking-wider text-emerald-950">
+                    Frozen {formatDatabaseDate(activeFreeze.frozenAt)}
+                  </span>
+                ) : (
+                  <span className="rounded-xl border border-yellow-200/30 bg-black/25 px-3 py-2 text-xs font-black text-yellow-100">
+                    {activeRelease
+                      ? `Active Release ${activeRelease.releaseNumber}`
+                      : "No Active Release"}
+                  </span>
+                )}
+              </div>
+
+              {activeFreeze ? (
+                <>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                      <p className="text-xs uppercase text-emerald-100/60">Rural Acres</p>
+                      <p className="mt-1 text-xl font-black text-white">{activeFreeze.totalRuralParcels.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                      <p className="text-xs uppercase text-emerald-100/60">City Blocks</p>
+                      <p className="mt-1 text-xl font-black text-white">{activeFreeze.totalCityBlocks.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                      <p className="text-xs uppercase text-emerald-100/60">Town Blocks</p>
+                      <p className="mt-1 text-xl font-black text-white">{activeFreeze.totalTownBlocks.toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-xl border border-emerald-200/20 bg-emerald-300/10 p-3">
+                      <p className="text-xs uppercase text-emerald-100/70">Total Saleable</p>
+                      <p className="mt-1 text-xl font-black text-emerald-100">{activeFreeze.totalSaleableProperties.toLocaleString()}</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={exportFrozenLaunchSummary}
+                      className="rounded-xl bg-emerald-200 px-4 py-3 text-sm font-black text-emerald-950 hover:bg-white"
+                    >
+                      Export Frozen Launch Summary
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void unfreezeGeography1()}
+                      disabled={databaseBusy}
+                      className="rounded-xl border border-red-300/35 bg-red-400/10 px-4 py-3 text-sm font-black text-red-100 enabled:hover:bg-red-400/20 disabled:cursor-not-allowed disabled:opacity-35"
+                    >
+                      Explicitly Unfreeze
+                    </button>
+                    <p className="text-xs text-emerald-50/65">
+                      Grid V{activeFreeze.inventoryGridVersion} · {activeFreeze.inventorySubdivisionFactor}×{activeFreeze.inventorySubdivisionFactor} · {activeFreeze.readyStateCount} ready · {activeFreeze.reviewStateCount} accepted review · 0 blocked
+                    </p>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-4 flex flex-wrap items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void freezeGeography1()}
+                    disabled={
+                      !activeRelease ||
+                      databaseBusy ||
+                      isPreviewingRelease
+                    }
+                    className="rounded-xl bg-yellow-300 px-4 py-3 text-sm font-black text-yellow-950 enabled:hover:bg-white disabled:cursor-not-allowed disabled:opacity-35"
+                  >
+                    Freeze Geography 1.0
+                  </button>
+                  <p className="text-xs text-yellow-50/70">
+                    Requires an active valid Grid V2 release. Blocked audit results cannot be frozen; non-blocking warnings require explicit acceptance.
+                  </p>
+                </div>
+              )}
+            </div>
+
             <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -3181,6 +3523,9 @@ export default function LunaSphereDesigner() {
                     const isActive =
                       activeRelease?.releaseNumber ===
                       release.releaseNumber;
+                    const isFrozenRelease =
+                      activeFreeze?.releaseNumber ===
+                      release.releaseNumber;
                     const isPreviewed =
                       releasePreview?.releaseNumber ===
                       release.releaseNumber;
@@ -3204,6 +3549,11 @@ export default function LunaSphereDesigner() {
                                 Active
                               </span>
                             )}
+                            {isFrozenRelease && (
+                              <span className="rounded-full border border-emerald-200/40 bg-emerald-400/15 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-emerald-100">
+                                Geography 1.0
+                              </span>
+                            )}
                             {isPreviewed && (
                               <span className="rounded-full bg-amber-300 px-2 py-1 text-[10px] font-black uppercase tracking-wider text-amber-950">
                                 Preview
@@ -3225,7 +3575,11 @@ export default function LunaSphereDesigner() {
                                 release.releaseNumber
                               )
                             }
-                            disabled={databaseBusy || isPreviewed}
+                            disabled={
+                              databaseBusy ||
+                              isPreviewed ||
+                              (activeFreeze !== null && !isFrozenRelease)
+                            }
                             className="rounded-lg border border-violet-200/30 px-3 py-2 text-xs font-black text-violet-50 enabled:hover:bg-violet-100/10 disabled:cursor-not-allowed disabled:opacity-35"
                           >
                             {isPreviewed ? "Previewing" : "Preview"}
@@ -3238,7 +3592,11 @@ export default function LunaSphereDesigner() {
                                 release.releaseNumber
                               )
                             }
-                            disabled={databaseBusy || isActive}
+                            disabled={
+                              databaseBusy ||
+                              isActive ||
+                              activeFreeze !== null
+                            }
                             className="rounded-lg border border-emerald-300/30 bg-emerald-400/10 px-3 py-2 text-xs font-black text-emerald-100 enabled:hover:bg-emerald-400/20 disabled:cursor-not-allowed disabled:opacity-35"
                           >
                             {isActive
@@ -3273,14 +3631,16 @@ export default function LunaSphereDesigner() {
                 <button
                   type="button"
                   onClick={copyReleasePreviewToDraft}
-                  className="rounded-lg bg-amber-200 px-3 py-2 text-xs font-black text-amber-950 hover:bg-white"
+                  disabled={activeFreeze !== null}
+                  className="rounded-lg bg-amber-200 disabled:cursor-not-allowed disabled:opacity-35 px-3 py-2 text-xs font-black text-amber-950 hover:bg-white"
                 >
                   Copy Release to Draft
                 </button>
                 <button
                   type="button"
                   onClick={exitReleasePreview}
-                  className="rounded-lg border border-amber-100/30 px-3 py-2 text-xs font-black text-amber-50 hover:bg-amber-100/10"
+                  disabled={activeFreeze !== null}
+                  className="rounded-lg border border-amber-100/30 disabled:cursor-not-allowed disabled:opacity-35 px-3 py-2 text-xs font-black text-amber-50 hover:bg-amber-100/10"
                 >
                   Exit Preview
                 </button>
@@ -3495,7 +3855,7 @@ export default function LunaSphereDesigner() {
                   />
                 ))}
 
-              {!isPreviewingRelease &&
+              {!editingLocked &&
                 showStateEditingHandles &&
                 edgeSegmentTargets.map((target) => (
                   <Marker
@@ -3520,7 +3880,7 @@ export default function LunaSphereDesigner() {
                         ? selectedVertexIcon
                         : vertexIcon
                     }
-                    draggable={!isPreviewingRelease}
+                    draggable={!editingLocked}
                     eventHandlers={{
                       click: () => {
                         setSelectedNodeId(node.id);
@@ -3591,7 +3951,7 @@ export default function LunaSphereDesigner() {
                           ? cityTerritoryCenterIcon
                           : townTerritoryCenterIcon
                       }
-                      draggable={!isPreviewingRelease}
+                      draggable={!editingLocked}
                       eventHandlers={{
                         dragstart: () => {
                           dragBaselineRef.current =
@@ -3629,7 +3989,7 @@ export default function LunaSphereDesigner() {
                       <Popup>Drag to move the entire territory</Popup>
                     </Marker>
 
-                    {!isPreviewingRelease &&
+                    {!editingLocked &&
                       selectedTerritorySegmentTargets.map((target) => (
                         <Marker
                           key={target.key}
@@ -3666,7 +4026,7 @@ export default function LunaSphereDesigner() {
                                 ? selectedTownTerritoryVertexIcon
                                 : townTerritoryVertexIcon
                           }
-                          draggable={!isPreviewingRelease}
+                          draggable={!editingLocked}
                           eventHandlers={{
                             click: () => {
                               setSelectedTerritoryPointIndex(
@@ -3730,7 +4090,7 @@ export default function LunaSphereDesigner() {
                       key={`${selectedResolvedProtectedArea.id}-center`}
                       position={selectedResolvedProtectedArea.center}
                       icon={protectedAreaCenterIcon}
-                      draggable={!isPreviewingRelease}
+                      draggable={!editingLocked}
                       eventHandlers={{
                         dragstart: () => {
                           dragBaselineRef.current =
@@ -3771,7 +4131,7 @@ export default function LunaSphereDesigner() {
                       <Popup>Drag to move the entire protected area</Popup>
                     </Marker>
 
-                    {!isPreviewingRelease &&
+                    {!editingLocked &&
                       selectedProtectedAreaSegmentTargets.map((target) => (
                         <Marker
                           key={target.key}
@@ -3799,7 +4159,7 @@ export default function LunaSphereDesigner() {
                               ? selectedProtectedAreaVertexIcon
                               : protectedAreaVertexIcon
                           }
-                          draggable={!isPreviewingRelease}
+                          draggable={!editingLocked}
                           eventHandlers={{
                             click: () => {
                               setSelectedProtectedAreaPointIndex(
@@ -3860,7 +4220,11 @@ export default function LunaSphereDesigner() {
 
           <aside className="rounded-3xl border border-white/10 bg-zinc-950 p-5">
             <p className="text-xs font-black uppercase tracking-[0.25em] text-yellow-400">
-              {isPreviewingRelease ? "Release Preview" : "Editing"}
+              {isPreviewingRelease
+                ? "Release Preview"
+                : activeFreeze
+                  ? `${activeFreeze.label} Frozen`
+                  : "Editing"}
             </p>
 
             <h2 className="mt-2 text-2xl font-black">
@@ -4133,7 +4497,7 @@ export default function LunaSphereDesigner() {
                             ? nudgeSelectedTerritoryCenter(-0.005, 0)
                             : nudgeSelectedTerritoryPoint(-0.005, 0)
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         ↑
@@ -4146,7 +4510,7 @@ export default function LunaSphereDesigner() {
                             ? nudgeSelectedTerritoryCenter(0, -0.005)
                             : nudgeSelectedTerritoryPoint(0, -0.005)
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         ←
@@ -4158,7 +4522,7 @@ export default function LunaSphereDesigner() {
                             ? nudgeSelectedTerritoryCenter(0.005, 0)
                             : nudgeSelectedTerritoryPoint(0.005, 0)
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         ↓
@@ -4170,7 +4534,7 @@ export default function LunaSphereDesigner() {
                             ? nudgeSelectedTerritoryCenter(0, 0.005)
                             : nudgeSelectedTerritoryPoint(0, 0.005)
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         →
@@ -4188,7 +4552,7 @@ export default function LunaSphereDesigner() {
                         type="button"
                         onClick={removeSelectedTerritoryPoint}
                         disabled={
-                          isPreviewingRelease ||
+                          editingLocked ||
                           !selectedTerritoryCanRemovePoint
                         }
                         className="rounded-lg border border-white/25 px-3 py-2 text-xs font-black enabled:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40"
@@ -4202,7 +4566,7 @@ export default function LunaSphereDesigner() {
                       <button
                         type="button"
                         onClick={resetSelectedTerritory}
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="rounded-lg border border-white/25 px-3 py-2 text-xs font-black enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         Reset This Territory
@@ -4227,7 +4591,7 @@ export default function LunaSphereDesigner() {
                             name: event.target.value,
                           })
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="mt-1 w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-white disabled:opacity-40"
                       />
                     </label>
@@ -4241,7 +4605,7 @@ export default function LunaSphereDesigner() {
                             category: event.target.value as LunaSphereProtectedAreaCategory,
                           })
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="mt-1 w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-white disabled:opacity-40"
                       >
                         {PROTECTED_AREA_CATEGORIES.map((category) => (
@@ -4261,7 +4625,7 @@ export default function LunaSphereDesigner() {
                             description: event.target.value,
                           })
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         rows={4}
                         className="mt-1 w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-white disabled:opacity-40"
                       />
@@ -4276,7 +4640,7 @@ export default function LunaSphereDesigner() {
                             minZoom: Number(event.target.value),
                           })
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="mt-1 w-full rounded-lg border border-white/20 bg-black/40 px-3 py-2 text-white disabled:opacity-40"
                       >
                         {[2, 3, 4, 5, 6, 7].map((zoom) => (
@@ -4305,7 +4669,7 @@ export default function LunaSphereDesigner() {
                             ? nudgeSelectedProtectedAreaCenter(-0.005, 0)
                             : nudgeSelectedProtectedAreaPoint(-0.005, 0)
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         ↑
@@ -4318,7 +4682,7 @@ export default function LunaSphereDesigner() {
                             ? nudgeSelectedProtectedAreaCenter(0, -0.005)
                             : nudgeSelectedProtectedAreaPoint(0, -0.005)
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         ←
@@ -4330,7 +4694,7 @@ export default function LunaSphereDesigner() {
                             ? nudgeSelectedProtectedAreaCenter(0.005, 0)
                             : nudgeSelectedProtectedAreaPoint(0.005, 0)
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         ↓
@@ -4342,7 +4706,7 @@ export default function LunaSphereDesigner() {
                             ? nudgeSelectedProtectedAreaCenter(0, 0.005)
                             : nudgeSelectedProtectedAreaPoint(0, 0.005)
                         }
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="rounded-lg border border-white/25 px-2 py-2 enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         →
@@ -4360,7 +4724,7 @@ export default function LunaSphereDesigner() {
                         type="button"
                         onClick={removeSelectedProtectedAreaPoint}
                         disabled={
-                          isPreviewingRelease ||
+                          editingLocked ||
                           !selectedProtectedAreaCanRemovePoint
                         }
                         className="rounded-lg border border-white/25 px-3 py-2 text-xs font-black enabled:hover:bg-white/10 disabled:opacity-40"
@@ -4374,7 +4738,7 @@ export default function LunaSphereDesigner() {
                       <button
                         type="button"
                         onClick={resetSelectedProtectedArea}
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="rounded-lg border border-white/25 px-3 py-2 text-xs font-black enabled:hover:bg-white/10 disabled:opacity-40"
                       >
                         Reset This Protected Area
@@ -4382,7 +4746,7 @@ export default function LunaSphereDesigner() {
                       <button
                         type="button"
                         onClick={removeSelectedProtectedArea}
-                        disabled={isPreviewingRelease}
+                        disabled={editingLocked}
                         className="rounded-lg border border-red-300/40 bg-red-400/10 px-3 py-2 text-xs font-black text-red-100 enabled:hover:bg-red-400/20 disabled:opacity-40"
                       >
                         Delete This Protected Area
@@ -4420,7 +4784,7 @@ export default function LunaSphereDesigner() {
                       onClick={() =>
                         nudgeSelectedNode(-NUDGE_DISTANCE, 0)
                       }
-                      disabled={isPreviewingRelease}
+                      disabled={editingLocked}
                       className="rounded-lg border border-yellow-100/30 px-2 py-2 enabled:hover:bg-yellow-100/10 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Nudge selected handle up"
                     >
@@ -4432,7 +4796,7 @@ export default function LunaSphereDesigner() {
                       onClick={() =>
                         nudgeSelectedNode(0, -NUDGE_DISTANCE)
                       }
-                      disabled={isPreviewingRelease}
+                      disabled={editingLocked}
                       className="rounded-lg border border-yellow-100/30 px-2 py-2 enabled:hover:bg-yellow-100/10 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Nudge selected handle left"
                     >
@@ -4443,7 +4807,7 @@ export default function LunaSphereDesigner() {
                       onClick={() =>
                         nudgeSelectedNode(NUDGE_DISTANCE, 0)
                       }
-                      disabled={isPreviewingRelease}
+                      disabled={editingLocked}
                       className="rounded-lg border border-yellow-100/30 px-2 py-2 enabled:hover:bg-yellow-100/10 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Nudge selected handle down"
                     >
@@ -4454,7 +4818,7 @@ export default function LunaSphereDesigner() {
                       onClick={() =>
                         nudgeSelectedNode(0, NUDGE_DISTANCE)
                       }
-                      disabled={isPreviewingRelease}
+                      disabled={editingLocked}
                       className="rounded-lg border border-yellow-100/30 px-2 py-2 enabled:hover:bg-yellow-100/10 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label="Nudge selected handle right"
                     >
@@ -4465,7 +4829,7 @@ export default function LunaSphereDesigner() {
                   <button
                     type="button"
                     onClick={removeSelectedControlPoint}
-                    disabled={isPreviewingRelease || !removableNodeEdge}
+                    disabled={editingLocked || !removableNodeEdge}
                     className="mt-3 w-full rounded-lg border border-yellow-100/30 px-3 py-2 text-xs font-black text-yellow-50 enabled:hover:bg-yellow-100/10 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     {removableNodeEdge

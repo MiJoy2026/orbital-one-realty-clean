@@ -86,9 +86,13 @@ const ownedProperties = (
           </div>
 
           <div className="rounded-2xl border border-white/20 bg-white/5 p-6 text-center">
-            <p className="text-4xl font-black">Grid V2</p>
+            <p className="text-4xl font-black">
+              {publicGeography.frozenGeographyLabel ?? "Grid V2"}
+            </p>
             <p className="mt-2 text-sm uppercase text-gray-400">
-              5×5 Property Subdivision
+              {publicGeography.frozenGeographyLabel
+                ? "Frozen Launch Geography"
+                : "5×5 Property Subdivision"}
             </p>
           </div>
         </div>
@@ -166,6 +170,9 @@ const ownedProperties = (
         publicProtectedAreas={publicGeography.protectedAreas}
         activeGeographyReleaseNumber={
           publicGeography.activeReleaseNumber
+        }
+        frozenGeographyLabel={
+          publicGeography.frozenGeographyLabel
         }
         inventoryGridVersion={publicGeography.inventoryGridVersion}
         inventorySubdivisionFactor={

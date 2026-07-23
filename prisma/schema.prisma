@@ -198,6 +198,7 @@ model LunaSphereGeographyRelease {
   topology         Json
 
   activations      LunaSphereGeographyActivation[]
+  freezes          LunaSphereGeographyFreeze[]
 
   @@unique([worldId, worldVersion, releaseNumber], map: "LunaSphereGeoRelease_world_version_number_key")
   @@index([worldId, worldVersion, publishedAt], map: "LunaSphereGeoRelease_world_version_published_idx")
@@ -215,5 +216,45 @@ model LunaSphereGeographyActivation {
   release       LunaSphereGeographyRelease @relation(fields: [releaseId], references: [id], onDelete: Restrict)
 
   @@index([worldId, worldVersion, createdAt], map: "LunaSphereGeoActivation_world_version_created_idx")
+  @@index([releaseId])
+}
+
+model LunaSphereGeographyFreeze {
+  id                          String   @id @default(cuid())
+  createdAt                   DateTime @default(now())
+  frozenAt                    DateTime @default(now())
+  unfrozenAt                  DateTime?
+
+  worldId                     String
+  worldVersion                String
+  label                       String   @default("Geography 1.0")
+  releaseNumber               Int
+  releaseId                   String
+  topologyHash                String
+
+  inventoryGridVersion        Int
+  inventorySubdivisionFactor  Int
+  topologyRevision            Int
+  territoryRevision           Int
+  protectedAreaRevision       Int
+
+  readinessStatus             String
+  readyStateCount             Int
+  reviewStateCount            Int
+  blockedStateCount           Int
+  totalRuralParcels           Int
+  totalCityBlocks             Int
+  totalTownBlocks             Int
+  totalSaleableProperties     Int
+  totalProtectedAreas         Int
+  auditReport                 Json
+
+  freezeNote                  String?
+  unfreezeNote                String?
+
+  release                     LunaSphereGeographyRelease @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+
+  @@index([worldId, worldVersion, frozenAt], map: "LunaSphereGeoFreeze_world_version_frozen_idx")
+  @@index([worldId, worldVersion, unfrozenAt], map: "LunaSphereGeoFreeze_world_version_unfrozen_idx")
   @@index([releaseId])
 }

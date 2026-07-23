@@ -32,6 +32,15 @@ import {
   topologyToLunarMapRegions,
   type LunaSphereTopologyStatus,
 } from "./lunasphere-topology";
+import {
+  runGeographyReadinessAudit,
+  type GeographyReadinessReport,
+} from "./lunasphere-geography-diagnostics";
+import {
+  LUNASPHERE_INVENTORY_GRID_VERSION,
+  LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR,
+} from "./inventory-grid";
+import { validateSoldPropertiesAgainstGeography } from "./lunasphere-sold-property-guard";
 
 const baselineTopology = createTopologyFromRegions(lunarMapRegions, {
   status: "draft",
@@ -68,6 +77,32 @@ export type GeographyActivationRecord = GeographyReleaseRecord & {
   activatedAt: string;
 };
 
+export type GeographyFreezeRecord = {
+  id: string;
+  label: string;
+  frozenAt: string;
+  unfrozenAt: string | null;
+  releaseNumber: number;
+  topologyHash: string;
+  inventoryGridVersion: number;
+  inventorySubdivisionFactor: number;
+  topologyRevision: number;
+  territoryRevision: number;
+  protectedAreaRevision: number;
+  readinessStatus: "ready" | "review";
+  readyStateCount: number;
+  reviewStateCount: number;
+  blockedStateCount: number;
+  totalRuralParcels: number;
+  totalCityBlocks: number;
+  totalTownBlocks: number;
+  totalSaleableProperties: number;
+  totalProtectedAreas: number;
+  auditReport: GeographyReadinessReport;
+  freezeNote: string | null;
+  unfreezeNote: string | null;
+};
+
 export type PublicGeographySource =
   | "active-release"
   | "built-in-fallback";
@@ -86,6 +121,8 @@ export type PublicGeographySnapshot = {
   inventorySubdivisionFactor: number;
   activeReleaseNumber: number | null;
   activatedAt: string | null;
+  frozenGeographyLabel: string | null;
+  frozenAt: string | null;
   fallbackReason: PublicGeographyFallbackReason | null;
 };
 
@@ -93,6 +130,7 @@ export type GeographyWorkspace = {
   draft: GeographyDraftRecord | null;
   latestRelease: GeographyReleaseRecord | null;
   activeRelease: GeographyActivationRecord | null;
+  activeFreeze: GeographyFreezeRecord | null;
   releases: GeographyReleaseRecord[];
 };
 
@@ -114,6 +152,60 @@ export class LunaSphereGeographyNotFoundError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "LunaSphereGeographyNotFoundError";
+  }
+}
+
+async function assertSoldPropertiesPreserved(
+  geography: LunaSphereGeographyDocument,
+  client: PrismaClient | Prisma.TransactionClient
+): Promise<void> {
+  const report = await validateSoldPropertiesAgainstGeography(
+    geography,
+    client
+  );
+
+  if (report.valid) {
+    return;
+  }
+
+  const firstIssues = report.issues
+    .slice(0, 3)
+    .map((issue) => issue.message)
+    .join(" ");
+
+  throw new LunaSphereGeographyConflictError(
+    `This geography would move or remove ${report.issueCount} sold Grid V2 propert${
+      report.issueCount === 1 ? "y" : "ies"
+    }. ${firstIssues} Use a dedicated sold-property migration workflow instead.`
+  );
+}
+
+async function getActiveFreeze(
+  client: PrismaClient | Prisma.TransactionClient
+) {
+  return client.lunaSphereGeographyFreeze.findFirst({
+    where: {
+      worldId: baselineTopology.worldId,
+      worldVersion: baselineTopology.worldVersion,
+      unfrozenAt: null,
+    },
+    orderBy: [{ frozenAt: "desc" }, { id: "desc" }],
+  });
+}
+
+async function assertGeographyIsEditable(
+  geography: LunaSphereGeographyDocument,
+  client: PrismaClient | Prisma.TransactionClient
+): Promise<void> {
+  const activeFreeze = await getActiveFreeze(client);
+
+  if (
+    activeFreeze &&
+    createGeographyHash(geography) !== activeFreeze.topologyHash
+  ) {
+    throw new LunaSphereGeographyConflictError(
+      `${activeFreeze.label} is frozen at release ${activeFreeze.releaseNumber}. Unfreeze it explicitly before changing the shared geography.`
+    );
   }
 }
 
@@ -198,7 +290,7 @@ function canonicalizeHashValue(value: unknown): unknown {
   return value;
 }
 
-function createGeographyHash(
+export function createGeographyHash(
   geography: LunaSphereGeographyDocument
 ): string {
   const hashableGeography = setGeographyStatus(
@@ -236,10 +328,71 @@ function mapReleaseRecord(
   };
 }
 
+type FreezeDatabaseRecord = {
+  id: string;
+  label: string;
+  frozenAt: Date;
+  unfrozenAt: Date | null;
+  releaseNumber: number;
+  topologyHash: string;
+  inventoryGridVersion: number;
+  inventorySubdivisionFactor: number;
+  topologyRevision: number;
+  territoryRevision: number;
+  protectedAreaRevision: number;
+  readinessStatus: string;
+  readyStateCount: number;
+  reviewStateCount: number;
+  blockedStateCount: number;
+  totalRuralParcels: number;
+  totalCityBlocks: number;
+  totalTownBlocks: number;
+  totalSaleableProperties: number;
+  totalProtectedAreas: number;
+  auditReport: Prisma.JsonValue;
+  freezeNote: string | null;
+  unfreezeNote: string | null;
+};
+
+function mapFreezeRecord(
+  record: FreezeDatabaseRecord
+): GeographyFreezeRecord {
+  const readinessStatus =
+    record.readinessStatus === "ready" ? "ready" : "review";
+
+  return {
+    id: record.id,
+    label: record.label,
+    frozenAt: record.frozenAt.toISOString(),
+    unfrozenAt: record.unfrozenAt?.toISOString() ?? null,
+    releaseNumber: record.releaseNumber,
+    topologyHash: record.topologyHash,
+    inventoryGridVersion: record.inventoryGridVersion,
+    inventorySubdivisionFactor: record.inventorySubdivisionFactor,
+    topologyRevision: record.topologyRevision,
+    territoryRevision: record.territoryRevision,
+    protectedAreaRevision: record.protectedAreaRevision,
+    readinessStatus,
+    readyStateCount: record.readyStateCount,
+    reviewStateCount: record.reviewStateCount,
+    blockedStateCount: record.blockedStateCount,
+    totalRuralParcels: record.totalRuralParcels,
+    totalCityBlocks: record.totalCityBlocks,
+    totalTownBlocks: record.totalTownBlocks,
+    totalSaleableProperties: record.totalSaleableProperties,
+    totalProtectedAreas: record.totalProtectedAreas,
+    auditReport: JSON.parse(
+      JSON.stringify(record.auditReport)
+    ) as GeographyReadinessReport,
+    freezeNote: record.freezeNote,
+    unfreezeNote: record.unfreezeNote,
+  };
+}
+
 export async function getGeographyWorkspace(
   client: PrismaClient = prisma
 ): Promise<GeographyWorkspace> {
-  const [draft, releases, activeActivation] = await Promise.all([
+  const [draft, releases, activeActivation, activeFreeze] = await Promise.all([
     client.lunaSphereGeographyDraft.findUnique({
       where: {
         worldId_worldVersion: {
@@ -267,6 +420,14 @@ export async function getGeographyWorkspace(
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     }),
+    client.lunaSphereGeographyFreeze.findFirst({
+      where: {
+        worldId: baselineTopology.worldId,
+        worldVersion: baselineTopology.worldVersion,
+        unfrozenAt: null,
+      },
+      orderBy: [{ frozenAt: "desc" }, { id: "desc" }],
+    }),
   ]);
 
   const releaseRecords = releases.map(mapReleaseRecord);
@@ -293,6 +454,7 @@ export async function getGeographyWorkspace(
           activatedAt: activeActivation.createdAt.toISOString(),
         }
       : null,
+    activeFreeze: activeFreeze ? mapFreezeRecord(activeFreeze) : null,
     releases: releaseRecords,
   };
 }
@@ -433,6 +595,8 @@ function createBuiltInPublicGeography(
       baselineGeography.inventory.subdivisionFactor,
     activeReleaseNumber: null,
     activatedAt: null,
+    frozenGeographyLabel: null,
+    frozenAt: null,
     fallbackReason,
   };
 }
@@ -445,8 +609,8 @@ export async function getPublicGeographySnapshot(
   client: PrismaClient = prisma
 ): Promise<PublicGeographySnapshot> {
   try {
-    const activation =
-      await client.lunaSphereGeographyActivation.findFirst({
+    const [activation, activeFreeze] = await Promise.all([
+      client.lunaSphereGeographyActivation.findFirst({
         where: {
           worldId: baselineTopology.worldId,
           worldVersion: baselineTopology.worldVersion,
@@ -455,7 +619,16 @@ export async function getPublicGeographySnapshot(
           release: true,
         },
         orderBy: [{ createdAt: "desc" }, { id: "desc" }],
-      });
+      }),
+      client.lunaSphereGeographyFreeze.findFirst({
+        where: {
+          worldId: baselineTopology.worldId,
+          worldVersion: baselineTopology.worldVersion,
+          unfrozenAt: null,
+        },
+        orderBy: [{ frozenAt: "desc" }, { id: "desc" }],
+      }),
+    ]);
 
     if (!activation) {
       return createBuiltInPublicGeography("no-active-release");
@@ -479,6 +652,14 @@ export async function getPublicGeographySnapshot(
         inventorySubdivisionFactor: geography.inventory.subdivisionFactor,
         activeReleaseNumber: activation.release.releaseNumber,
         activatedAt: activation.createdAt.toISOString(),
+        frozenGeographyLabel:
+          activeFreeze?.releaseNumber === activation.release.releaseNumber
+            ? activeFreeze.label
+            : null,
+        frozenAt:
+          activeFreeze?.releaseNumber === activation.release.releaseNumber
+            ? activeFreeze.frozenAt.toISOString()
+            : null,
         fallbackReason: null,
       };
     } catch (error) {
@@ -509,6 +690,9 @@ export async function saveGeographyDraft(
   const geography = parseAndValidateGeography(value, "draft");
 
   return client.$transaction(async (transaction) => {
+    await assertGeographyIsEditable(geography, transaction);
+    await assertSoldPropertiesPreserved(geography, transaction);
+
     const currentDraft =
       await transaction.lunaSphereGeographyDraft.findUnique({
         where: {
@@ -580,6 +764,12 @@ export async function publishGeographyRelease(
   const geographyHash = createGeographyHash(publishedGeography);
 
   return client.$transaction(async (transaction) => {
+    await assertGeographyIsEditable(publishedGeography, transaction);
+    await assertSoldPropertiesPreserved(
+      publishedGeography,
+      transaction
+    );
+
     const currentDraft =
       await transaction.lunaSphereGeographyDraft.findUnique({
         where: {
@@ -713,7 +903,25 @@ export async function activateGeographyRelease(
       );
     }
 
-    parseAndValidateGeography(release.topology, "published");
+    const releaseGeography = parseAndValidateGeography(
+      release.topology,
+      "published"
+    );
+    const activeFreeze = await getActiveFreeze(transaction);
+
+    if (
+      activeFreeze &&
+      activeFreeze.releaseNumber !== release.releaseNumber
+    ) {
+      throw new LunaSphereGeographyConflictError(
+        `${activeFreeze.label} is frozen at release ${activeFreeze.releaseNumber}. Unfreeze it before activating a different release.`
+      );
+    }
+
+    await assertSoldPropertiesPreserved(
+      releaseGeography,
+      transaction
+    );
 
     const currentActivation =
       await transaction.lunaSphereGeographyActivation.findFirst({
@@ -747,5 +955,211 @@ export async function activateGeographyRelease(
       ...mapReleaseRecord(release),
       activatedAt: activation.createdAt.toISOString(),
     };
+  });
+}
+
+async function acquireGeographyFreezeLock(
+  transaction: Prisma.TransactionClient
+): Promise<void> {
+  await transaction.$queryRaw<Array<{ lockAcquired: number }>>`
+    WITH geography_freeze_lock AS (
+      SELECT pg_advisory_xact_lock(
+        hashtext(${`${baselineTopology.worldId}:${baselineTopology.worldVersion}:freeze`})
+      )
+    )
+    SELECT 1 AS "lockAcquired"
+    FROM geography_freeze_lock
+  `;
+}
+
+export type FreezeGeographyInput = {
+  releaseNumber: number;
+  confirmation: string;
+  acceptWarnings: boolean;
+  note?: string | null;
+};
+
+export async function freezeActiveGeographyRelease(
+  input: FreezeGeographyInput,
+  client: PrismaClient = prisma
+): Promise<GeographyFreezeRecord> {
+  if (input.confirmation !== "FREEZE GEOGRAPHY 1.0") {
+    throw new LunaSphereGeographyConflictError(
+      'Type "FREEZE GEOGRAPHY 1.0" exactly to confirm the launch freeze.'
+    );
+  }
+
+  if (!Number.isInteger(input.releaseNumber) || input.releaseNumber < 1) {
+    throw new LunaSphereGeographyNotFoundError(
+      "A valid active release is required before Geography 1.0 can be frozen."
+    );
+  }
+
+  const activation =
+    await client.lunaSphereGeographyActivation.findFirst({
+      where: {
+        worldId: baselineTopology.worldId,
+        worldVersion: baselineTopology.worldVersion,
+      },
+      include: { release: true },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    });
+
+  if (!activation) {
+    throw new LunaSphereGeographyConflictError(
+      "Activate the approved numbered geography release before freezing Geography 1.0."
+    );
+  }
+
+  if (activation.release.releaseNumber !== input.releaseNumber) {
+    throw new LunaSphereGeographyConflictError(
+      `Release ${input.releaseNumber} is not the active public geography release.`
+    );
+  }
+
+  const geography = parseAndValidateGeography(
+    activation.release.topology,
+    "published"
+  );
+
+  if (
+    geography.inventory.version !==
+      LUNASPHERE_INVENTORY_GRID_VERSION ||
+    geography.inventory.subdivisionFactor !==
+      LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR
+  ) {
+    throw new LunaSphereGeographyConflictError(
+      `Geography 1.0 must use Inventory Grid V${LUNASPHERE_INVENTORY_GRID_VERSION} with ${LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR}×${LUNASPHERE_INVENTORY_SUBDIVISION_FACTOR} saleable subdivisions.`
+    );
+  }
+
+  const auditReport = runGeographyReadinessAudit(geography);
+
+  if (auditReport.status === "blocked") {
+    const blockerCount =
+      auditReport.blockedStateCount + auditReport.globalIssues.length;
+
+    throw new LunaSphereGeographyValidationError(
+      `The active release has ${blockerCount} launch blocker${
+        blockerCount === 1 ? "" : "s"
+      } and cannot be frozen. Run the Geography 1.0 audit and resolve every blocking issue first.`
+    );
+  }
+
+  if (auditReport.status === "review" && !input.acceptWarnings) {
+    throw new LunaSphereGeographyConflictError(
+      `The active release has ${auditReport.reviewStateCount} state${
+        auditReport.reviewStateCount === 1 ? "" : "s"
+      } requiring review. Confirm that the remaining warnings are accepted before freezing.`
+    );
+  }
+
+  const freezeNote = input.note?.trim().slice(0, 500) || null;
+
+  return client.$transaction(async (transaction) => {
+    await acquireGeographyFreezeLock(transaction);
+
+    const [currentActivation, existingFreeze] = await Promise.all([
+      transaction.lunaSphereGeographyActivation.findFirst({
+        where: {
+          worldId: baselineTopology.worldId,
+          worldVersion: baselineTopology.worldVersion,
+        },
+        include: { release: true },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      }),
+      getActiveFreeze(transaction),
+    ]);
+
+    if (existingFreeze) {
+      throw new LunaSphereGeographyConflictError(
+        `${existingFreeze.label} is already frozen at release ${existingFreeze.releaseNumber}.`
+      );
+    }
+
+    if (
+      !currentActivation ||
+      currentActivation.release.id !== activation.release.id ||
+      currentActivation.release.topologyHash !==
+        activation.release.topologyHash
+    ) {
+      throw new LunaSphereGeographyConflictError(
+        "The active geography changed while the freeze audit was running. Refresh Studio and run the freeze again."
+      );
+    }
+
+    await assertSoldPropertiesPreserved(geography, transaction);
+
+    const record = await transaction.lunaSphereGeographyFreeze.create({
+      data: {
+        worldId: activation.release.worldId,
+        worldVersion: activation.release.worldVersion,
+        label: "Geography 1.0",
+        releaseNumber: activation.release.releaseNumber,
+        releaseId: activation.release.id,
+        topologyHash: activation.release.topologyHash,
+        inventoryGridVersion: geography.inventory.version,
+        inventorySubdivisionFactor:
+          geography.inventory.subdivisionFactor,
+        topologyRevision: geography.topology.revision,
+        territoryRevision: geography.territories.revision,
+        protectedAreaRevision: geography.protectedAreas.revision,
+        readinessStatus: auditReport.status,
+        readyStateCount: auditReport.readyStateCount,
+        reviewStateCount: auditReport.reviewStateCount,
+        blockedStateCount: auditReport.blockedStateCount,
+        totalRuralParcels: auditReport.totalRuralParcels,
+        totalCityBlocks: auditReport.totalCityBlocks,
+        totalTownBlocks: auditReport.totalTownBlocks,
+        totalSaleableProperties:
+          auditReport.totalSaleableProperties,
+        totalProtectedAreas: auditReport.totalProtectedAreas,
+        auditReport: JSON.parse(
+          JSON.stringify(auditReport)
+        ) as Prisma.InputJsonValue,
+        freezeNote,
+      },
+    });
+
+    return mapFreezeRecord(record);
+  });
+}
+
+export type UnfreezeGeographyInput = {
+  confirmation: string;
+  note?: string | null;
+};
+
+export async function unfreezeActiveGeography(
+  input: UnfreezeGeographyInput,
+  client: PrismaClient = prisma
+): Promise<GeographyFreezeRecord> {
+  if (input.confirmation !== "UNFREEZE GEOGRAPHY 1.0") {
+    throw new LunaSphereGeographyConflictError(
+      'Type "UNFREEZE GEOGRAPHY 1.0" exactly to unlock Studio editing.'
+    );
+  }
+
+  const unfreezeNote = input.note?.trim().slice(0, 500) || null;
+
+  return client.$transaction(async (transaction) => {
+    await acquireGeographyFreezeLock(transaction);
+    const activeFreeze = await getActiveFreeze(transaction);
+
+    if (!activeFreeze) {
+      throw new LunaSphereGeographyConflictError(
+        "Geography 1.0 is not currently frozen."
+      );
+    }
+
+    const record = await transaction.lunaSphereGeographyFreeze.update({
+      where: { id: activeFreeze.id },
+      data: {
+        unfrozenAt: new Date(),
+        unfreezeNote,
+      },
+    });
+
+    return mapFreezeRecord(record);
   });
 }
