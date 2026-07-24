@@ -36,8 +36,54 @@ model Order {
   giftMessage    String?
   hoaClaimed     Boolean @default(false)
 
+  propertySnapshot OwnedPropertySnapshot?
+
   @@unique([stripeSessionId, propertyId], map: "Order_stripe_session_property_key")
   @@index([stripeSessionId], map: "Order_stripe_session_idx")
+}
+
+model OwnedPropertySnapshot {
+  id                          String   @id @default(cuid())
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  orderId                     String   @unique
+  propertyId                  String   @unique
+  certificateNumber           String   @unique
+  propertyType                String
+
+  stateName                   String
+  cityName                    String?
+  townName                    String?
+  locationLabel               String
+
+  geographySource             String
+  geographyReleaseNumber      Int?
+  geographyLabel              String?
+  geographyFrozenAt           DateTime?
+  inventoryGridVersion        Int
+  inventorySubdivisionFactor  Int
+  imageRendererVersion        Int      @default(1)
+  terrainImageSource          String   @default("/atlas/moon-atlas-v2.jpg")
+
+  centerX                     Float
+  centerY                     Float
+  minimumX                    Float
+  minimumY                    Float
+  maximumX                    Float
+  maximumY                    Float
+  propertyWidth               Float
+  propertyHeight              Float
+
+  polygon                     Json
+  contextBoundary             Json
+  gridCoordinates             Json
+
+  order                       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([stateName, propertyType], map: "OwnedPropertySnapshot_state_type_idx")
+  @@index([geographyReleaseNumber], map: "OwnedPropertySnapshot_release_idx")
+  @@index([createdAt], map: "OwnedPropertySnapshot_created_idx")
 }
 
 model PropertyReservation {

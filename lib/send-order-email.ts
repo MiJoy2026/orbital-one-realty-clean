@@ -10,6 +10,7 @@ type OrderEmailItem = {
   cityName: string | null;
   townName: string | null;
   certificateNumber: string;
+  propertySnapshotId?: string | null;
 };
 
 type SendOrderEmailParams = {
@@ -78,6 +79,13 @@ export async function sendOrderEmail({
             <li><a href="${appUrl}/api/generate-deed?certificateNumber=${certificateQuery}">Download Lunar Property Deed</a></li>
             <li><a href="${appUrl}/api/generate-welcome-letter?certificateNumber=${certificateQuery}">Download Welcome Letter</a></li>
             <li><a href="${appUrl}/api/generate-hoa-certificate?certificateNumber=${certificateQuery}">Download HOA Membership Certificate</a></li>
+            ${
+              item.propertySnapshotId
+                ? `<li><a href="${appUrl}/api/property-image/${encodeURIComponent(
+                    item.propertySnapshotId
+                  )}?download=1">Download Your Lunar Property Image</a></li>`
+                : ""
+            }
             ${
               passportPurchased
                 ? `<li><a href="${appUrl}/api/generate-passport?certificateNumber=${certificateQuery}">Download Lunar Passport</a></li>`

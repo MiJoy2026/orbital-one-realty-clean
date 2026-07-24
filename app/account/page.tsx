@@ -1,26 +1,7 @@
-import Image from "next/image";
 import { redirect } from "next/navigation";
+
+import { prisma } from "../../lib/prisma";
 import { getSessionUserId } from "../../lib/session";
-import { prisma } from "../../lib/prisma";type AccountOrder = {
-  id: string;
-  certificateNumber: string;
-  acreagePurchased: number | null;
-  hoaClaimed: boolean;
-  propertyType: string;
-  amountPaid: number;
-  propertyId: string;
-  lunarState: string;
-  deedName: string;
-  passportPurchased: boolean;
-  createdAt: Date;
-};
-
-type AccountAllocation = {
-  certificateNumber: string;
-  startingAcre: number;
-  endingAcre: number;
-};
-
 
 export default async function AccountPage() {
   const userId = await getSessionUserId();
@@ -30,88 +11,76 @@ export default async function AccountPage() {
   }
 
   const user = await prisma.user.findUnique({
-  where: { id: userId },
-});
+    where: { id: userId },
+  });
 
-if (!user) {
-  redirect("/login");
-}
+  if (!user) {
+    redirect("/login");
+  }
 
-const member = await prisma.member.findUnique({
-  where: {
-    email: user.email,
-  },
-});
+  const [member, orders] = await Promise.all([
+    prisma.member.findUnique({
+      where: { email: user.email },
+    }),
+    prisma.order.findMany({
+      where: {
+        paymentStatus: {
+          equals: "Paid",
+          mode: "insensitive",
+        },
+        OR: [
+          { userId: user.id },
+          { email: { equals: user.email, mode: "insensitive" } },
+          {
+            recipientEmail: {
+              equals: user.email,
+              mode: "insensitive",
+            },
+          },
+        ],
+      },
+      include: {
+        propertySnapshot: true,
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+  ]);
 
-const orders = (await prisma.order.findMany({
-  where: {
-    paymentStatus: {
-      equals: "Paid",
-      mode: "insensitive",
-    },
-    OR: [
-      { userId: user.id },
-      { email: { equals: user.email, mode: "insensitive" } },
-      { recipientEmail: { equals: user.email, mode: "insensitive" } },
-    ],
-  },
-  orderBy: {
-    createdAt: "desc",
-  },
-})) as AccountOrder[];
-
-  const email = user.email;
-
-  const allocations = (await prisma.acreageAllocation.findMany({
+  const allocations = await prisma.acreageAllocation.findMany({
     where: {
       certificateNumber: {
-        in: orders.map(
-         (order: { certificateNumber: string }) => order.certificateNumber
-        ),
+        in: orders.map((order) => order.certificateNumber),
       },
     },
-  })) as AccountAllocation[];
-
+  });
+  const allocationByCertificate = new Map(
+    allocations.map((allocation) => [
+      allocation.certificateNumber,
+      allocation,
+    ])
+  );
   const totalProperties = orders.length;
   const totalAcres = orders.reduce(
-  (
-    sum: number,
-    order: { acreagePurchased: number | null }
-  ) => sum + (order.acreagePurchased || 0),
-  0
+    (sum, order) => sum + (order.acreagePurchased || 0),
+    0
   );
-  const totalCertificates = orders.length;
   const hoaStatus =
-  member || orders.some((order: { hoaClaimed: boolean }) => order.hoaClaimed)
-    ? "2026 Charter HOA Member"
-    : orders.length > 0
-    ? "Pending Activation"
-    : "Inactive";
-  const ruralAcresOwned = orders.reduce(
-  (
-    sum: number,
-    order: { acreagePurchased: number | null }
-  ) => sum + (order.acreagePurchased || 0),
-  0
-);
+    member || orders.some((order) => order.hoaClaimed)
+      ? "2026 Charter HOA Member"
+      : orders.length > 0
+        ? "Pending Activation"
+        : "Inactive";
+  const townBlocksOwned = orders.filter(
+    (order) => order.propertyType === "Town Block"
+  ).length;
+  const cityBlocksOwned = orders.filter(
+    (order) => order.propertyType === "City Block"
+  ).length;
+  const portfolioValue = orders.reduce(
+    (sum, order) => sum + order.amountPaid,
+    0
+  );
 
-const townBlocksOwned = orders.filter(
-  (order: { propertyType: string }) =>
-    order.propertyType === "Town Block"
-).length;
-
-const cityBlocksOwned = orders.filter(
-  (order: { propertyType: string }) =>
-    order.propertyType === "City Block"
-).length;
-
-const portfolioValue = orders.reduce(
-  (
-    sum: number,
-    order: { amountPaid: number }
-  ) => sum + order.amountPaid,
-  0
-);
   return (
     <main
       className="min-h-screen px-6 py-20 text-white"
@@ -122,62 +91,55 @@ const portfolioValue = orders.reduce(
         backgroundAttachment: "fixed",
       }}
     >
-      <div className="mx-auto max-w-6xl rounded-3xl bg-black/75 p-8 backdrop-blur-sm">
-        <h1 className="text-5xl font-black uppercase text-yellow-400">
-          My Orbital One Account
+      <div className="mx-auto max-w-7xl rounded-3xl bg-black/80 p-8 backdrop-blur-sm">
+        <p className="text-sm font-bold uppercase tracking-[0.35em] text-yellow-400">
+          Orbital One Customer Portal
+        </p>
+        <h1 className="mt-3 text-5xl font-black uppercase text-yellow-400">
+          My Lunar Portfolio
         </h1>
-
         <p className="mt-4 text-xl text-gray-300">
-          View your lunar portfolio, documents, and HOA membership.
+          View your owned properties, LunaScape images, documents, and HOA
+          membership.
         </p>
 
-          <div className="mt-10 grid gap-6 md:grid-cols-4">
+        <div className="mt-10 grid gap-6 md:grid-cols-4">
           <div className="rounded-2xl border border-yellow-400 bg-white/5 p-6">
-           <p className="text-sm uppercase text-gray-400">Properties Owned</p>
-           <p className="mt-2 text-4xl font-black text-yellow-400">
-            {totalProperties}
-           </p>
+            <p className="text-sm uppercase text-gray-400">Properties Owned</p>
+            <p className="mt-2 text-4xl font-black text-yellow-400">
+              {totalProperties}
+            </p>
           </div>
-
           <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
-           <p className="text-sm uppercase text-gray-400">Certificates</p>
-           <p className="mt-2 text-4xl font-black">{totalCertificates}</p>
+            <p className="text-sm uppercase text-gray-400">Certificates</p>
+            <p className="mt-2 text-4xl font-black">{orders.length}</p>
           </div>
-
           <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
-           <p className="text-sm uppercase text-gray-400">Acres Owned</p>
-           <p className="mt-2 text-4xl font-black">{totalAcres}</p>
+            <p className="text-sm uppercase text-gray-400">Rural Acres</p>
+            <p className="mt-2 text-4xl font-black">{totalAcres}</p>
           </div>
-
           <div className="rounded-2xl border border-green-500 bg-green-950/30 p-6">
-           <p className="text-sm uppercase text-gray-400">HOA Status</p>
-           <p className="mt-2 text-xl font-black text-green-400">
-             {hoaStatus}
-           </p>
+            <p className="text-sm uppercase text-gray-400">HOA Status</p>
+            <p className="mt-2 text-xl font-black text-green-400">
+              {hoaStatus}
+            </p>
           </div>
-         </div>
+        </div>
 
-          <div className="mt-6 grid gap-6 md:grid-cols-4">
+        <div className="mt-6 grid gap-6 md:grid-cols-3">
           <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
-           <p className="text-sm uppercase text-gray-400">Rural Acres</p>
-           <p className="mt-2 text-4xl font-black">{ruralAcresOwned}</p>
+            <p className="text-sm uppercase text-gray-400">Town Blocks</p>
+            <p className="mt-2 text-4xl font-black">{townBlocksOwned}</p>
           </div>
-
           <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
-           <p className="text-sm uppercase text-gray-400">Town Blocks</p>
-           <p className="mt-2 text-4xl font-black">{townBlocksOwned}</p>
+            <p className="text-sm uppercase text-gray-400">City Blocks</p>
+            <p className="mt-2 text-4xl font-black">{cityBlocksOwned}</p>
           </div>
-
-          <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
-           <p className="text-sm uppercase text-gray-400">City Blocks</p>
-           <p className="mt-2 text-4xl font-black">{cityBlocksOwned}</p>
-          </div>
-
           <div className="rounded-2xl border border-yellow-400 bg-yellow-400/10 p-6">
-           <p className="text-sm uppercase text-gray-400">Portfolio Value</p>
-           <p className="mt-2 text-4xl font-black text-yellow-400">
+            <p className="text-sm uppercase text-gray-400">Portfolio Value</p>
+            <p className="mt-2 text-4xl font-black text-yellow-400">
               ${portfolioValue.toFixed(2)}
-           </p>
+            </p>
           </div>
         </div>
 
@@ -188,18 +150,16 @@ const portfolioValue = orders.reduce(
           >
             View HOA Membership
           </a>
-
-           {orders.length > 0 && (
-          <a
-            href={`/moon-map?property=${orders[0].propertyId}&owned=${orders
-             .map((order: { propertyId: string }) => order.propertyId)
-            .join(",")}`}
-            className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
-          >
-            Explore My Properties
-          </a>
+          {orders.length > 0 && (
+            <a
+              href={`/moon-map?property=${orders[0].propertyId}&owned=${orders
+                .map((order) => order.propertyId)
+                .join(",")}`}
+              className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
+            >
+              Explore My Properties
+            </a>
           )}
-
           <a
             href="/logout"
             className="rounded-xl border border-white/30 px-5 py-3 font-black text-white"
@@ -213,94 +173,126 @@ const portfolioValue = orders.reduce(
         ) : (
           <>
             <section className="mt-16">
-              <h2 className="text-3xl font-black uppercase text-yellow-400">
-                My Lunar Properties
-              </h2>
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <p className="text-sm font-bold uppercase tracking-[0.3em] text-yellow-400">
+                    LunaScape
+                  </p>
+                  <h2 className="mt-2 text-3xl font-black uppercase text-white">
+                    My Owned Properties
+                  </h2>
+                </div>
+                <p className="max-w-xl text-sm text-gray-400">
+                  Each image is generated from the permanent Grid V2 boundary
+                  recorded for the property you purchased.
+                </p>
+              </div>
 
-              <div className="mt-8 grid gap-6 md:grid-cols-2">
+              <div className="mt-8 grid gap-7 lg:grid-cols-2">
                 {orders.map((order) => {
-                  const allocation = allocations.find(
-                    (item) =>
-                      item.certificateNumber === order.certificateNumber
+                  const allocation = allocationByCertificate.get(
+                    order.certificateNumber
                   );
+                  const snapshot = order.propertySnapshot;
+                  const location = snapshot?.locationLabel || order.lunarState;
 
                   return (
-                    <div
+                    <article
                       key={`property-${order.id}`}
-                      className="overflow-hidden rounded-3xl border border-white/20 bg-white/5 p-6 transition hover:border-yellow-400 hover:bg-yellow-400/5"
+                      className="overflow-hidden rounded-3xl border border-white/20 bg-white/5 transition hover:border-yellow-400 hover:bg-yellow-400/5"
                     >
-                      <Image
-                       src={
-                       order.propertyType === "City Block"
-                       ? "/property-images/city-block.jpg"
-                       : order.propertyType === "Town Block"
-                       ? "/property-images/town-block.jpg"
-                       : "/property-images/rural-acre.jpg"
-                       }
-                       alt={order.propertyType}
-                       width={800}
-                       height={500}
-                       className="mb-5 h-64 w-full rounded-2xl object-cover"
-                      />
-                      <div className="mb-3 inline-block rounded-full bg-yellow-400 px-4 py-1 text-sm font-black text-black">
-                      {order.propertyType}
-                      </div>
-                      <div className="flex items-center justify-between">
-                      <p className="text-3xl font-black text-yellow-400">
-    {order.propertyId}
-                      </p>
-
-                      <span className="rounded-full border border-yellow-400 px-3 py-1 text-xs font-black uppercase text-yellow-400">
-                        Owned
-                      </span>
-                      </div>
-
-                      <p className="mt-2 text-gray-300">
-                        {order.propertyType}
-                      </p>
-
-                      <div className="mt-4 grid gap-3 rounded-2xl border border-white/10 bg-black/30 p-4">
-                      <p>
-                      <span className="font-bold text-gray-400">Lunar State:</span>{" "}
-                        {order.lunarState}
-                      </p>
-
-                        {order.acreagePurchased && (
-                      <p>
-                      <span className="font-bold text-gray-400">Acres Owned:</span>{" "}
-                        {order.acreagePurchased}
-                      </p>
-                      )}
-                      </div>
-
-                      {allocation && (
-                       <div className="mt-4 rounded-2xl border border-yellow-400/40 bg-yellow-400/10 p-4">
-                        <p className="text-sm font-bold uppercase text-yellow-400">
-                          Assigned Acre Range
-                        </p>
-
-                        <p className="mt-2 text-2xl font-black text-yellow-400">
-                          Acre {allocation.startingAcre.toLocaleString()}
-                           {allocation.startingAcre !== allocation.endingAcre
-                            ? ` - ${allocation.endingAcre.toLocaleString()}`
-                            : ""}
-                        </p>
-                       </div>
+                      {snapshot ? (
+                        <img
+                          src={`/api/property-image/${snapshot.id}?size=thumb`}
+                          alt={`Owned lunar property ${order.propertyId}`}
+                          loading="lazy"
+                          className="aspect-[8/5] w-full object-cover"
+                        />
+                      ) : (
+                        <div className="flex aspect-[8/5] items-center justify-center bg-slate-950 p-8 text-center">
+                          <div>
+                            <p className="text-lg font-black text-yellow-400">
+                              Property image preparation pending
+                            </p>
+                            <p className="mt-2 text-sm text-gray-400">
+                              Your property and documents remain fully recorded.
+                            </p>
+                          </div>
+                        </div>
                       )}
 
-                      <div className="mt-6 flex items-center justify-between">
-                       <span className="text-sm uppercase tracking-wider text-gray-500">
-                         Orbital One Realty
-                       </span>
+                      <div className="p-6">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <span className="rounded-full bg-yellow-400 px-4 py-1 text-sm font-black text-black">
+                            {order.propertyType}
+                          </span>
+                          <span className="rounded-full border border-green-500/70 px-3 py-1 text-xs font-black uppercase text-green-300">
+                            Owned
+                          </span>
+                        </div>
 
-                       <a
-                        href={`/explore/${order.propertyId}`}
-                        className="rounded-xl bg-yellow-400 px-6 py-3 font-black text-black transition hover:scale-105"
-                       >
-                         View Property →
-                       </a>
+                        <p className="mt-5 break-words text-2xl font-black text-yellow-400">
+                          {order.propertyId}
+                        </p>
+                        <p className="mt-2 text-gray-300">{location}</p>
+
+                        <div className="mt-5 grid gap-3 rounded-2xl border border-white/10 bg-black/30 p-4 sm:grid-cols-2">
+                          <p>
+                            <span className="block text-xs font-bold uppercase text-gray-500">
+                              Certificate
+                            </span>
+                            <span className="mt-1 block break-all font-bold">
+                              {order.certificateNumber}
+                            </span>
+                          </p>
+                          <p>
+                            <span className="block text-xs font-bold uppercase text-gray-500">
+                              Purchased
+                            </span>
+                            <span className="mt-1 block font-bold">
+                              {order.createdAt.toLocaleDateString()}
+                            </span>
+                          </p>
+                        </div>
+
+                        {allocation && (
+                          <div className="mt-4 rounded-2xl border border-yellow-400/40 bg-yellow-400/10 p-4">
+                            <p className="text-sm font-bold uppercase text-yellow-400">
+                              Assigned Acre Range
+                            </p>
+                            <p className="mt-2 text-xl font-black text-yellow-400">
+                              Acre {allocation.startingAcre.toLocaleString()}
+                              {allocation.startingAcre !== allocation.endingAcre
+                                ? ` - ${allocation.endingAcre.toLocaleString()}`
+                                : ""}
+                            </p>
+                          </div>
+                        )}
+
+                        <div className="mt-6 flex flex-wrap gap-3">
+                          <a
+                            href={`/explore/${order.propertyId}`}
+                            className="rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
+                          >
+                            View Property
+                          </a>
+                          <a
+                            href={`/moon-map?property=${encodeURIComponent(order.propertyId)}&owned=${encodeURIComponent(order.propertyId)}`}
+                            className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
+                          >
+                            View on Moon Map
+                          </a>
+                          {snapshot && (
+                            <a
+                              href={`/api/property-image/${snapshot.id}?download=1`}
+                              className="rounded-xl border border-white/30 px-5 py-3 font-black text-white"
+                            >
+                              Download Image
+                            </a>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    </article>
                   );
                 })}
               </div>
@@ -313,9 +305,11 @@ const portfolioValue = orders.reduce(
 
               <div className="mt-8 grid gap-6">
                 {orders.map((order) => {
-                  const allocation = allocations.find(
-                    (item) =>
-                      item.certificateNumber === order.certificateNumber
+                  const allocation = allocationByCertificate.get(
+                    order.certificateNumber
+                  );
+                  const certificateQuery = encodeURIComponent(
+                    order.certificateNumber
                   );
 
                   return (
@@ -326,23 +320,13 @@ const portfolioValue = orders.reduce(
                       <p className="text-2xl font-black text-yellow-400">
                         {order.certificateNumber}
                       </p>
-
                       <p className="mt-2 text-gray-300">
                         {order.propertyType} · {order.lunarState}
                       </p>
-
                       <p className="mt-2">Property ID: {order.propertyId}</p>
-
                       <p className="mt-2">
                         Purchase Date: {order.createdAt.toLocaleDateString()}
                       </p>
-
-                      {order.acreagePurchased && (
-                        <p className="mt-2">
-                          Acreage Purchased: {order.acreagePurchased} Acre
-                          {order.acreagePurchased === 1 ? "" : "s"}
-                        </p>
-                      )}
 
                       {allocation && (
                         <p className="mt-2 font-bold text-yellow-400">
@@ -361,36 +345,40 @@ const portfolioValue = orders.reduce(
                         >
                           Verify Certificate
                         </a>
-
                         <a
-                          href={`/api/generate-deed?certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
+                          href={`/api/generate-deed?certificateNumber=${certificateQuery}`}
                           className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
                         >
                           Download Deed
                         </a>
-
                         <a
-                          href={`/api/generate-welcome-letter?certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
+                          href={`/api/generate-welcome-letter?certificateNumber=${certificateQuery}`}
                           className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
                         >
-                          Download Welcome Letter
+                          Welcome Letter
                         </a>
-
+                        <a
+                          href={`/api/generate-hoa-certificate?certificateNumber=${certificateQuery}`}
+                          className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
+                        >
+                          HOA Certificate
+                        </a>
                         {order.passportPurchased && (
                           <a
-                            href={`/api/generate-passport?certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
+                            href={`/api/generate-passport?certificateNumber=${certificateQuery}`}
                             className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
                           >
-                            Download Passport
+                            Lunar Passport
                           </a>
                         )}
-
-                        <a
-                          href={`/api/generate-hoa-certificate?certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
-                          className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
-                        >
-                          Download HOA Certificate
-                        </a>
+                        {order.propertySnapshot && (
+                          <a
+                            href={`/api/property-image/${order.propertySnapshot.id}?download=1`}
+                            className="rounded-xl border border-white/30 px-5 py-3 font-black text-white"
+                          >
+                            Property Image
+                          </a>
+                        )}
                       </div>
                     </div>
                   );

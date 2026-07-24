@@ -29,6 +29,13 @@ export default function AdminNav() {
         </a>
 
         <a
+          href="/admin/property-images"
+          className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
+        >
+          Property Images
+        </a>
+
+        <a
           href="/"
           className="rounded-xl border border-white/30 px-5 py-3 font-black text-white"
         >

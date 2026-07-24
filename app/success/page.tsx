@@ -87,6 +87,9 @@ export default async function SuccessPage({
     where: {
       stripeSessionId: session.id,
     },
+    include: {
+      propertySnapshot: true,
+    },
     orderBy: {
       createdAt: "asc",
     },
@@ -160,8 +163,16 @@ export default async function SuccessPage({
             return (
               <section
                 key={order.id}
-                className="rounded-3xl border border-yellow-400/40 bg-white/5 p-8"
+                className="overflow-hidden rounded-3xl border border-yellow-400/40 bg-white/5"
               >
+                {order.propertySnapshot && (
+                  <img
+                    src={`/api/property-image/${order.propertySnapshot.id}?size=thumb`}
+                    alt={`Owned lunar property ${order.propertyId}`}
+                    className="aspect-[8/5] w-full object-cover"
+                  />
+                )}
+                <div className="p-8">
                 <div className="grid gap-5 md:grid-cols-[1fr_auto]">
                   <div>
                     <p className="text-sm font-bold uppercase tracking-[0.2em] text-gray-500">
@@ -220,12 +231,23 @@ export default async function SuccessPage({
                   )}
                 </div>
 
-                <Link
-                  href={`/verify/${certificateQuery}`}
-                  className="mt-5 inline-block text-sm font-black text-yellow-400 hover:underline"
-                >
-                  Verify this certificate →
-                </Link>
+                <div className="mt-5 flex flex-wrap items-center gap-4">
+                  <Link
+                    href={`/verify/${certificateQuery}`}
+                    className="text-sm font-black text-yellow-400 hover:underline"
+                  >
+                    Verify this certificate →
+                  </Link>
+                  {order.propertySnapshot && (
+                    <a
+                      href={`/api/property-image/${order.propertySnapshot.id}?download=1`}
+                      className="rounded-xl border border-white/30 px-4 py-2 text-sm font-black text-white"
+                    >
+                      Download Property Image
+                    </a>
+                  )}
+                </div>
+                </div>
               </section>
             );
           })}

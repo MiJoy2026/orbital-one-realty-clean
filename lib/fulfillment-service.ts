@@ -9,6 +9,7 @@ import {
   isPurchasablePropertyType,
   PASSPORT_PRICE,
 } from "./purchase-constants";
+import { ensureOwnedPropertySnapshotsForOrderIds } from "./owned-property-snapshot";
 import { prisma } from "./prisma";
 import { sendOrderEmail } from "./send-order-email";
 
@@ -162,6 +163,17 @@ export async function fulfillStripeCheckoutSession(
       alreadyFulfilledOrders.some((order) => order.propertyId === propertyId)
     )
   ) {
+    try {
+      await ensureOwnedPropertySnapshotsForOrderIds(
+        alreadyFulfilledOrders.map((order) => order.id)
+      );
+    } catch (error) {
+      console.error(
+        "[Orbital One] Existing orders were found, but their property snapshots could not be verified.",
+        error
+      );
+    }
+
     return {
       orders: alreadyFulfilledOrders,
       fulfilled: true,
@@ -468,6 +480,33 @@ export async function fulfillStripeCheckoutSession(
     )
   );
 
+  const snapshotByPropertyId = new Map<string, string>();
+
+  try {
+    await ensureOwnedPropertySnapshotsForOrderIds(
+      fulfillmentResult.allOrders.map((order) => order.id)
+    );
+
+    const snapshots = await prisma.ownedPropertySnapshot.findMany({
+      where: {
+        orderId: { in: fulfillmentResult.allOrders.map((order) => order.id) },
+      },
+      select: {
+        id: true,
+        propertyId: true,
+      },
+    });
+
+    for (const snapshot of snapshots) {
+      snapshotByPropertyId.set(snapshot.propertyId, snapshot.id);
+    }
+  } catch (error) {
+    console.error(
+      "[Orbital One] Orders completed, but one or more property images could not be prepared.",
+      error
+    );
+  }
+
   if (fulfillmentResult.createdOrders.length > 0) {
     try {
       const propertyById = new Map(
@@ -501,6 +540,8 @@ export async function fulfillStripeCheckoutSession(
             cityName: property.city,
             townName: property.town,
             certificateNumber: order.certificateNumber,
+            propertySnapshotId:
+              snapshotByPropertyId.get(order.propertyId) || null,
           };
         }),
       });

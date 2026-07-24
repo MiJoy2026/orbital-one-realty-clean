@@ -1,4 +1,6 @@
 import AdminNav from "../../../../components/AdminNav";
+import PropertySnapshotAdminControls from "../../../../components/PropertySnapshotAdminControls";
+import { inspectOwnedPropertySnapshotEligibilityForOrderIds } from "../../../../lib/owned-property-snapshot";
 import { prisma } from "../../../../lib/prisma";
 
 export default async function AdminOrderDetailPage({
@@ -11,6 +13,9 @@ export default async function AdminOrderDetailPage({
   const order = await prisma.order.findUnique({
     where: {
       id: orderId,
+    },
+    include: {
+      propertySnapshot: true,
     },
   });
 
@@ -38,6 +43,11 @@ export default async function AdminOrderDetailPage({
       certificateNumber: order.certificateNumber,
     },
   });
+  const [snapshotEligibility] = order.propertySnapshot
+    ? []
+    : await inspectOwnedPropertySnapshotEligibilityForOrderIds([order.id]);
+  const isHistoricalPriorGeography =
+    Boolean(snapshotEligibility) && !snapshotEligibility.eligible;
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -75,6 +85,66 @@ export default async function AdminOrderDetailPage({
             </p>
           </div>
         </div>
+
+        {order.propertySnapshot ? (
+          <section className="mt-10 overflow-hidden rounded-3xl border border-yellow-400/40 bg-white/5">
+            <img
+              src={`/api/property-image/${order.propertySnapshot.id}?size=thumb`}
+              alt={`Owned property image for ${order.propertyId}`}
+              loading="lazy"
+              className="aspect-[8/5] w-full object-cover"
+            />
+            <div className="flex flex-wrap items-center justify-between gap-4 p-6">
+              <div>
+                <p className="font-black text-yellow-400">
+                  LunaScape property image ready
+                </p>
+                <p className="mt-1 text-sm text-gray-400">
+                  Renderer V{order.propertySnapshot.imageRendererVersion} · Grid V{order.propertySnapshot.inventoryGridVersion}
+                </p>
+              </div>
+              <a
+                href={`/api/property-image/${order.propertySnapshot.id}?download=1`}
+                className="rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
+              >
+                Download Image
+              </a>
+            </div>
+          </section>
+        ) : isHistoricalPriorGeography ? (
+          <section className="mt-10 rounded-3xl border border-sky-400/50 bg-sky-950/20 p-7">
+            <p className="text-sm font-bold uppercase tracking-[0.2em] text-sky-300">
+              Historical Grid V2 order
+            </p>
+            <h2 className="mt-2 text-2xl font-black text-sky-200">
+              Prior-geography property preserved
+            </h2>
+            <p className="mt-3 max-w-3xl text-gray-300">
+              This sale was completed before the active parcel-grid expansion.
+              The order, certificate, ownership record, and sold status remain
+              valid. Its former geometry is not selectable in the current
+              geography, so a current LunaScape image cannot be recreated
+              accurately.
+            </p>
+            {snapshotEligibility?.reason && (
+              <p className="mt-3 text-sm text-sky-300">
+                {snapshotEligibility.reason}
+              </p>
+            )}
+          </section>
+        ) : (
+          <section className="mt-10 rounded-3xl border border-orange-400/50 bg-orange-950/20 p-7">
+            <h2 className="text-2xl font-black text-orange-300">
+              Property image missing
+            </h2>
+            <p className="mt-3 text-gray-300">
+              Create the immutable Grid V2 snapshot for this paid order.
+            </p>
+            <div className="mt-5">
+              <PropertySnapshotAdminControls orderId={order.id} />
+            </div>
+          </section>
+        )}
 
         <div className="mt-10 grid gap-6 md:grid-cols-2">
           <section className="rounded-3xl border border-white/20 bg-white/5 p-8">
