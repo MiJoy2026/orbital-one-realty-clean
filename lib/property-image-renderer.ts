@@ -3,6 +3,12 @@ import path from "node:path";
 import type { OwnedPropertySnapshot } from "@prisma/client";
 import sharp from "sharp";
 
+import { getNearbyLunarAttractions } from "./lunar-attractions";
+import {
+  renderLrocTerrainCrop,
+  type LunarTerrainCrop,
+} from "./lroc-terrain-renderer";
+
 const MAP_MINIMUM = 0;
 const MAP_MAXIMUM = 1000;
 const FULL_WIDTH = 1600;
@@ -13,7 +19,8 @@ const IMAGE_AREA_RATIO = 0.76;
 
 type LunarPoint = [number, number];
 
-type RenderSize = "full" | "thumb";
+export type RenderSize = "full" | "thumb";
+export type PropertyImageView = "scenic" | "locator";
 
 function clamp(value: number, minimum: number, maximum: number): number {
   return Math.min(maximum, Math.max(minimum, value));
@@ -128,7 +135,7 @@ function propertyTypeLabel(propertyType: string): string {
   return "RURAL ACRE";
 }
 
-function buildOverlaySvg(input: {
+function buildLocatorOverlaySvg(input: {
   snapshot: OwnedPropertySnapshot;
   outputWidth: number;
   outputHeight: number;
@@ -271,7 +278,7 @@ function buildOverlaySvg(input: {
   `);
 }
 
-export async function renderOwnedPropertyImage(
+export async function renderOwnedPropertyLocatorImage(
   snapshot: OwnedPropertySnapshot,
   size: RenderSize = "full"
 ): Promise<Buffer> {
@@ -359,7 +366,7 @@ export async function renderOwnedPropertyImage(
     .sharpen()
     .png()
     .toBuffer();
-  const overlay = buildOverlaySvg({
+  const overlay = buildLocatorOverlaySvg({
     snapshot,
     outputWidth,
     outputHeight,
@@ -384,4 +391,219 @@ export async function renderOwnedPropertyImage(
     ])
     .png({ compressionLevel: 9, adaptiveFiltering: true })
     .toBuffer();
+}
+
+function scenicCoordinateTransformer(input: {
+  crop: LunarTerrainCrop;
+  outputWidth: number;
+  outputHeight: number;
+}) {
+  const cropWidth = input.crop.maximumX - input.crop.minimumX;
+  const cropHeight = input.crop.maximumY - input.crop.minimumY;
+
+  return ([y, x]: LunarPoint): [number, number] => [
+    ((x - input.crop.minimumX) / cropWidth) * input.outputWidth,
+    ((input.crop.maximumY - y) / cropHeight) * input.outputHeight,
+  ];
+}
+
+function scenicCropForSnapshot(
+  snapshot: OwnedPropertySnapshot,
+  outputWidth: number,
+  outputHeight: number
+): LunarTerrainCrop {
+  const cellSpan = Math.max(
+    snapshot.propertyWidth,
+    snapshot.propertyHeight,
+    0.001
+  );
+  const cropWidth = clamp(cellSpan * 22, 80, 180);
+  const cropHeight = cropWidth * (outputHeight / outputWidth);
+
+  return {
+    minimumX: snapshot.centerX - cropWidth / 2,
+    maximumX: snapshot.centerX + cropWidth / 2,
+    minimumY: snapshot.centerY - cropHeight / 2,
+    maximumY: snapshot.centerY + cropHeight / 2,
+  };
+}
+
+function formatDistance(distanceKilometers: number): string {
+  if (distanceKilometers < 10) {
+    return `${distanceKilometers.toFixed(1)} km`;
+  }
+
+  return `${Math.round(distanceKilometers).toLocaleString("en-US")} km`;
+}
+
+function scenicOverlaySvg(input: {
+  snapshot: OwnedPropertySnapshot;
+  crop: LunarTerrainCrop;
+  outputWidth: number;
+  outputHeight: number;
+}): Buffer {
+  const transform = scenicCoordinateTransformer(input);
+  const propertyPolygon = parsePolygon(input.snapshot.polygon).map(transform);
+  const propertyPoints = pointsToSvg(propertyPolygon);
+  const nearby = getNearbyLunarAttractions(
+    input.snapshot.centerX,
+    input.snapshot.centerY,
+    3
+  );
+  const inFrame = nearby.filter(
+    (attraction) =>
+      attraction.x >= input.crop.minimumX &&
+      attraction.x <= input.crop.maximumX &&
+      attraction.y >= input.crop.minimumY &&
+      attraction.y <= input.crop.maximumY
+  );
+  const nearest = nearby[0];
+  const padding = Math.round(input.outputWidth * 0.045);
+  const titleSize = Math.round(input.outputWidth * 0.04);
+  const propertyIdSize = Math.round(input.outputWidth * 0.025);
+  const detailSize = Math.round(input.outputWidth * 0.0145);
+  const smallSize = Math.round(input.outputWidth * 0.0115);
+  const footerHeight = Math.round(input.outputHeight * 0.25);
+  const footerTop = input.outputHeight - footerHeight;
+  const location = escapeXml(input.snapshot.locationLabel);
+  const propertyId = escapeXml(input.snapshot.propertyId);
+  const certificate = escapeXml(input.snapshot.certificateNumber);
+  const propertyType = escapeXml(propertyTypeLabel(input.snapshot.propertyType));
+  const nearestFeature = nearest
+    ? `${escapeXml(nearest.name)} · ${formatDistance(
+        nearest.distanceKilometers
+      )} ${escapeXml(nearest.direction)}`
+    : "Lunar terrain surrounding your recorded property";
+  const featureMarkers = inFrame
+    .map((attraction, index) => {
+      const [x, y] = transform([attraction.y, attraction.x]);
+      const labelY = y < input.outputHeight * 0.25 ? y + 38 : y - 26;
+      const anchor = x > input.outputWidth * 0.68 ? "end" : "start";
+      const labelX = anchor === "end" ? x - 14 : x + 14;
+      const opacity = index === 0 ? 0.96 : 0.72;
+
+      return `
+        <g opacity="${opacity}">
+          <circle cx="${x.toFixed(1)}" cy="${y.toFixed(
+            1
+          )}" r="7" fill="#f8fafc" stroke="#facc15" stroke-width="3" />
+          <line x1="${x.toFixed(1)}" y1="${y.toFixed(
+            1
+          )}" x2="${labelX.toFixed(1)}" y2="${labelY.toFixed(
+            1
+          )}" stroke="#facc15" stroke-width="2" stroke-opacity="0.8" />
+          <text x="${labelX.toFixed(1)}" y="${labelY.toFixed(
+            1
+          )}" text-anchor="${anchor}" font-family="Arial, Helvetica, sans-serif" font-size="${smallSize}" font-weight="800" fill="#ffffff" paint-order="stroke" stroke="#020617" stroke-width="5" stroke-linejoin="round">${escapeXml(
+            attraction.name
+          )}</text>
+        </g>`;
+    })
+    .join("");
+
+  return Buffer.from(`
+    <svg width="${input.outputWidth}" height="${input.outputHeight}" viewBox="0 0 ${input.outputWidth} ${input.outputHeight}" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="scenicTopShade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#020617" stop-opacity="0.64" />
+          <stop offset="0.30" stop-color="#020617" stop-opacity="0.05" />
+          <stop offset="0.67" stop-color="#020617" stop-opacity="0.08" />
+          <stop offset="1" stop-color="#020617" stop-opacity="0.96" />
+        </linearGradient>
+        <radialGradient id="scenicVignette" cx="50%" cy="42%" r="72%">
+          <stop offset="0" stop-color="#ffffff" stop-opacity="0" />
+          <stop offset="0.68" stop-color="#020617" stop-opacity="0.08" />
+          <stop offset="1" stop-color="#020617" stop-opacity="0.72" />
+        </radialGradient>
+        <linearGradient id="glassPanel" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#020617" stop-opacity="0.93" />
+          <stop offset="1" stop-color="#0f172a" stop-opacity="0.87" />
+        </linearGradient>
+        <filter id="scenicGoldGlow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="6" result="blur" />
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <rect x="0" y="0" width="${input.outputWidth}" height="${input.outputHeight}" fill="url(#scenicTopShade)" />
+      <rect x="0" y="0" width="${input.outputWidth}" height="${input.outputHeight}" fill="url(#scenicVignette)" />
+
+      ${
+        propertyPolygon.length >= 3
+          ? `<polygon points="${propertyPoints}" fill="#facc15" fill-opacity="0.08" stroke="#facc15" stroke-width="${Math.max(
+              3,
+              input.outputWidth * 0.0025
+            )}" stroke-opacity="0.88" filter="url(#scenicGoldGlow)" />`
+          : ""
+      }
+
+      ${featureMarkers}
+
+      <g transform="translate(${padding} ${Math.round(
+        input.outputHeight * 0.075
+      )})">
+        <text x="0" y="0" font-family="Arial, Helvetica, sans-serif" font-size="${smallSize}" font-weight="800" fill="#facc15" letter-spacing="5">LUNASCAPE</text>
+        <text x="0" y="${Math.round(
+          titleSize * 1.05
+        )}" font-family="Arial, Helvetica, sans-serif" font-size="${titleSize}" font-weight="900" fill="#ffffff" letter-spacing="1">SCENIC PROPERTY VIEW</text>
+        <text x="0" y="${Math.round(
+          titleSize * 1.75
+        )}" font-family="Arial, Helvetica, sans-serif" font-size="${smallSize}" font-weight="700" fill="#cbd5e1" letter-spacing="2">REAL LROC LUNAR TERRAIN · CENTERED ON YOUR RECORDED PARCEL</text>
+      </g>
+
+      <rect x="0" y="${footerTop}" width="${input.outputWidth}" height="${footerHeight}" fill="url(#glassPanel)" />
+      <rect x="0" y="${footerTop}" width="${input.outputWidth}" height="${Math.max(
+        4,
+        input.outputHeight * 0.006
+      )}" fill="#facc15" />
+
+      <text x="${padding}" y="${footerTop + titleSize * 0.95}" font-family="Arial, Helvetica, sans-serif" font-size="${propertyIdSize}" font-weight="900" fill="#facc15">${propertyId}</text>
+      <text x="${padding}" y="${footerTop + titleSize * 1.60}" font-family="Arial, Helvetica, sans-serif" font-size="${detailSize}" font-weight="700" fill="#ffffff">${propertyType} · ${location}</text>
+      <text x="${padding}" y="${footerTop + titleSize * 2.18}" font-family="Arial, Helvetica, sans-serif" font-size="${smallSize}" font-weight="700" fill="#cbd5e1">NEAREST FEATURE · ${nearestFeature}</text>
+      <text x="${input.outputWidth - padding}" y="${footerTop + titleSize * 0.93}" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="${smallSize}" font-weight="700" fill="#94a3b8">CERTIFICATE</text>
+      <text x="${input.outputWidth - padding}" y="${footerTop + titleSize * 1.57}" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="${detailSize}" font-weight="900" fill="#facc15">${certificate}</text>
+      <text x="${input.outputWidth - padding}" y="${footerTop + titleSize * 2.18}" text-anchor="end" font-family="Arial, Helvetica, sans-serif" font-size="${smallSize}" font-weight="700" fill="#cbd5e1">ORBITAL ONE REALTY · 2026 FOUNDING COLLECTION</text>
+
+      <text x="${input.outputWidth / 2}" y="${footerTop + titleSize * 2.88}" text-anchor="middle" font-family="Arial, Helvetica, sans-serif" font-size="${Math.max(12, Math.round(smallSize * 0.86))}" fill="#64748b">Real LROC terrain · Boundary shown for orientation · Distances approximate · NASA/GSFC/Arizona State University · Novelty commemorative image</text>
+    </svg>
+  `);
+}
+
+export async function renderOwnedPropertyScenicImage(
+  snapshot: OwnedPropertySnapshot,
+  size: RenderSize = "full"
+): Promise<Buffer> {
+  const outputWidth = size === "thumb" ? THUMB_WIDTH : FULL_WIDTH;
+  const outputHeight = size === "thumb" ? THUMB_HEIGHT : FULL_HEIGHT;
+  const requestedCrop = scenicCropForSnapshot(
+    snapshot,
+    outputWidth,
+    outputHeight
+  );
+  const { image: terrain, crop } = await renderLrocTerrainCrop({
+    crop: requestedCrop,
+    outputWidth,
+    outputHeight,
+  });
+  const overlay = scenicOverlaySvg({
+    snapshot,
+    crop,
+    outputWidth,
+    outputHeight,
+  });
+
+  return sharp(terrain)
+    .composite([{ input: overlay, top: 0, left: 0 }])
+    .png({ compressionLevel: 9, adaptiveFiltering: true })
+    .toBuffer();
+}
+
+export async function renderOwnedPropertyImage(
+  snapshot: OwnedPropertySnapshot,
+  size: RenderSize = "full",
+  view: PropertyImageView = "scenic"
+): Promise<Buffer> {
+  return view === "locator"
+    ? renderOwnedPropertyLocatorImage(snapshot, size)
+    : renderOwnedPropertyScenicImage(snapshot, size);
 }

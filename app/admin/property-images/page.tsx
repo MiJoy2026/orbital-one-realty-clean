@@ -1,4 +1,5 @@
 import AdminNav from "../../../components/AdminNav";
+import LunaScapeImageGallery from "../../../components/LunaScapeImageGallery";
 import PropertySnapshotAdminControls from "../../../components/PropertySnapshotAdminControls";
 import { inspectOwnedPropertySnapshotEligibilityForOrderIds } from "../../../lib/owned-property-snapshot";
 import { prisma } from "../../../lib/prisma";
@@ -46,12 +47,12 @@ export default async function AdminPropertyImagesPage() {
           LunaScape Launch Foundation
         </p>
         <h1 className="mt-3 text-5xl font-black uppercase text-yellow-400">
-          Owned Property Images
+          LunaScape Image Collections
         </h1>
         <p className="mt-4 max-w-3xl text-gray-300">
-          Monitor immutable property snapshots for purchases made in the active
-          Grid V2 geography. Earlier Grid V2 sales remain preserved as
-          historical orders when their original geometry is no longer active.
+          Monitor scenic LROC terrain portraits and exact parcel locators for
+          purchases made in the active Grid V2 geography. Earlier Grid V2
+          sales remain preserved when their original geometry is no longer active.
         </p>
 
         <AdminNav />
@@ -126,23 +127,23 @@ export default async function AdminPropertyImagesPage() {
 
         <section className="mt-12">
           <h2 className="text-3xl font-black uppercase text-yellow-400">
-            Recent property images
+            Recent LunaScape collections
           </h2>
 
           {recentSnapshots.length === 0 ? (
             <p className="mt-6 text-gray-400">No property snapshots yet.</p>
           ) : (
-            <div className="mt-7 grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+            <div className="mt-7 grid gap-6 xl:grid-cols-2">
               {recentSnapshots.map((snapshot) => (
                 <article
                   key={snapshot.id}
                   className="overflow-hidden rounded-3xl border border-white/20 bg-white/5"
                 >
-                  <img
-                    src={`/api/property-image/${snapshot.id}?size=thumb`}
-                    alt={`Owned property image for ${snapshot.propertyId}`}
-                    loading="lazy"
-                    className="aspect-[8/5] w-full object-cover"
+                  <LunaScapeImageGallery
+                    snapshotId={snapshot.id}
+                    propertyId={snapshot.propertyId}
+                    compact
+                    showDescription={false}
                   />
                   <div className="p-5">
                     <p className="text-xs font-bold uppercase tracking-wider text-yellow-400">
@@ -159,10 +160,10 @@ export default async function AdminPropertyImagesPage() {
                     </p>
                     <div className="mt-4 flex flex-wrap gap-3">
                       <a
-                        href={`/api/property-image/${snapshot.id}?download=1`}
+                        href={`/api/property-image/${snapshot.id}?view=scenic&download=1`}
                         className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-black text-black"
                       >
-                        Download
+                        Scenic View
                       </a>
                       <a
                         href={`/admin/orders/${snapshot.order.id}`}

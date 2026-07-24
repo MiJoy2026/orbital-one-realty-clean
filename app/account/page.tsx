@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 
+import LunaScapeImageGallery from "../../components/LunaScapeImageGallery";
 import { prisma } from "../../lib/prisma";
 import { getSessionUserId } from "../../lib/session";
 
@@ -183,8 +184,8 @@ export default async function AccountPage() {
                   </h2>
                 </div>
                 <p className="max-w-xl text-sm text-gray-400">
-                  Each image is generated from the permanent Grid V2 boundary
-                  recorded for the property you purchased.
+                  Each property now includes a shareable scenic portrait made from
+                  real LROC terrain plus an exact parcel locator.
                 </p>
               </div>
 
@@ -202,11 +203,11 @@ export default async function AccountPage() {
                       className="overflow-hidden rounded-3xl border border-white/20 bg-white/5 transition hover:border-yellow-400 hover:bg-yellow-400/5"
                     >
                       {snapshot ? (
-                        <img
-                          src={`/api/property-image/${snapshot.id}?size=thumb`}
-                          alt={`Owned lunar property ${order.propertyId}`}
-                          loading="lazy"
-                          className="aspect-[8/5] w-full object-cover"
+                        <LunaScapeImageGallery
+                          snapshotId={snapshot.id}
+                          propertyId={order.propertyId}
+                          compact
+                          showDescription={false}
                         />
                       ) : (
                         <div className="flex aspect-[8/5] items-center justify-center bg-slate-950 p-8 text-center">
@@ -284,10 +285,10 @@ export default async function AccountPage() {
                           </a>
                           {snapshot && (
                             <a
-                              href={`/api/property-image/${snapshot.id}?download=1`}
+                              href={`/api/property-image/${snapshot.id}?view=scenic&download=1`}
                               className="rounded-xl border border-white/30 px-5 py-3 font-black text-white"
                             >
-                              Download Image
+                              Download Scenic View
                             </a>
                           )}
                         </div>
@@ -373,10 +374,10 @@ export default async function AccountPage() {
                         )}
                         {order.propertySnapshot && (
                           <a
-                            href={`/api/property-image/${order.propertySnapshot.id}?download=1`}
+                            href={`/api/property-image/${order.propertySnapshot.id}?view=scenic&download=1`}
                             className="rounded-xl border border-white/30 px-5 py-3 font-black text-white"
                           >
-                            Property Image
+                            Scenic Property View
                           </a>
                         )}
                       </div>

@@ -2,6 +2,7 @@ import Link from "next/link";
 import Stripe from "stripe";
 
 import ClearCartCookie from "../../components/ClearCartCookie";
+import LunaScapeImageGallery from "../../components/LunaScapeImageGallery";
 import { fulfillStripeCheckoutSession } from "../../lib/fulfillment-service";
 import { prisma } from "../../lib/prisma";
 
@@ -166,10 +167,10 @@ export default async function SuccessPage({
                 className="overflow-hidden rounded-3xl border border-yellow-400/40 bg-white/5"
               >
                 {order.propertySnapshot && (
-                  <img
-                    src={`/api/property-image/${order.propertySnapshot.id}?size=thumb`}
-                    alt={`Owned lunar property ${order.propertyId}`}
-                    className="aspect-[8/5] w-full object-cover"
+                  <LunaScapeImageGallery
+                    snapshotId={order.propertySnapshot.id}
+                    propertyId={order.propertyId}
+                    compact
                   />
                 )}
                 <div className="p-8">
@@ -240,10 +241,10 @@ export default async function SuccessPage({
                   </Link>
                   {order.propertySnapshot && (
                     <a
-                      href={`/api/property-image/${order.propertySnapshot.id}?download=1`}
+                      href={`/api/property-image/${order.propertySnapshot.id}?view=scenic&download=1`}
                       className="rounded-xl border border-white/30 px-4 py-2 text-sm font-black text-white"
                     >
-                      Download Property Image
+                      Download Scenic View
                     </a>
                   )}
                 </div>

@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "../../../../lib/prisma";
-import { renderOwnedPropertyImage } from "../../../../lib/property-image-renderer";
+import {
+  renderOwnedPropertyImage,
+  type PropertyImageView,
+} from "../../../../lib/property-image-renderer";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,14 +30,19 @@ export async function GET(
     );
   }
 
-  const size = request.nextUrl.searchParams.get("size") === "thumb"
-    ? "thumb"
-    : "full";
+  const size =
+    request.nextUrl.searchParams.get("size") === "thumb" ? "thumb" : "full";
+  const requestedView = request.nextUrl.searchParams.get("view");
+  const view: PropertyImageView =
+    requestedView === "locator" ? "locator" : "scenic";
   const shouldDownload = request.nextUrl.searchParams.get("download") === "1";
 
   try {
-    const image = await renderOwnedPropertyImage(snapshot, size);
-    const filename = `${safeFilename(snapshot.propertyId)}-property-image.png`;
+    const image = await renderOwnedPropertyImage(snapshot, size, view);
+    const filename =
+      view === "locator"
+        ? `${safeFilename(snapshot.propertyId)}-parcel-locator.png`
+        : `${safeFilename(snapshot.propertyId)}-lunascape-scenic-view.png`;
 
     return new NextResponse(new Uint8Array(image), {
       status: 200,
@@ -46,11 +54,12 @@ export async function GET(
           ? `attachment; filename="${filename}"`
           : `inline; filename="${filename}"`,
         "X-Content-Type-Options": "nosniff",
+        "X-LunaScape-View": view,
       },
     });
   } catch (error) {
     console.error(
-      `[Orbital One] Unable to render property image ${snapshot.id}.`,
+      `[Orbital One] Unable to render ${view} property image ${snapshot.id}.`,
       error
     );
 

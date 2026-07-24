@@ -1,4 +1,5 @@
 import AdminNav from "../../../../components/AdminNav";
+import LunaScapeImageGallery from "../../../../components/LunaScapeImageGallery";
 import PropertySnapshotAdminControls from "../../../../components/PropertySnapshotAdminControls";
 import { inspectOwnedPropertySnapshotEligibilityForOrderIds } from "../../../../lib/owned-property-snapshot";
 import { prisma } from "../../../../lib/prisma";
@@ -88,26 +89,24 @@ export default async function AdminOrderDetailPage({
 
         {order.propertySnapshot ? (
           <section className="mt-10 overflow-hidden rounded-3xl border border-yellow-400/40 bg-white/5">
-            <img
-              src={`/api/property-image/${order.propertySnapshot.id}?size=thumb`}
-              alt={`Owned property image for ${order.propertyId}`}
-              loading="lazy"
-              className="aspect-[8/5] w-full object-cover"
+            <LunaScapeImageGallery
+              snapshotId={order.propertySnapshot.id}
+              propertyId={order.propertyId}
             />
-            <div className="flex flex-wrap items-center justify-between gap-4 p-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 px-6 py-5">
               <div>
                 <p className="font-black text-yellow-400">
-                  LunaScape property image ready
+                  LunaScape image collection ready
                 </p>
                 <p className="mt-1 text-sm text-gray-400">
-                  Renderer V{order.propertySnapshot.imageRendererVersion} · Grid V{order.propertySnapshot.inventoryGridVersion}
+                  Scenic renderer and parcel locator · Grid V{order.propertySnapshot.inventoryGridVersion}
                 </p>
               </div>
               <a
-                href={`/api/property-image/${order.propertySnapshot.id}?download=1`}
+                href={`/api/property-image/${order.propertySnapshot.id}?view=scenic&download=1`}
                 className="rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
               >
-                Download Image
+                Download Scenic View
               </a>
             </div>
           </section>
