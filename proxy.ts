@@ -1,32 +1,50 @@
 import { NextRequest, NextResponse } from "next/server";
 
-export function proxy(request: NextRequest) {
-  const adminPassword = process.env.ADMIN_PASSWORD;
-  const authHeader = request.headers.get("authorization");
+import {
+  ADMIN_SESSION_COOKIE,
+  verifyAdminSessionToken,
+} from "./lib/admin-session";
 
-  if (!authHeader) {
-    return new NextResponse("Authentication required", {
-      status: 401,
-      headers: {
-        "WWW-Authenticate": 'Basic realm="Admin Area"',
-      },
-    });
+function isPublicAdminRoute(pathname: string): boolean {
+  return (
+    pathname === "/admin/login" ||
+    pathname === "/admin/api/login" ||
+    pathname === "/admin/logout"
+  );
+}
+
+export async function proxy(request: NextRequest) {
+  const { pathname, search } = request.nextUrl;
+
+  if (isPublicAdminRoute(pathname)) {
+    return NextResponse.next();
   }
 
-  const encoded = authHeader.split(" ")[1];
-  const decoded = atob(encoded);
-  const [username, password] = decoded.split(":");
+  const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
+  const authenticated = await verifyAdminSessionToken(token);
 
-  if (username !== "admin" || password !== adminPassword) {
-    return new NextResponse("Invalid credentials", {
-      status: 401,
-      headers: {
-        "WWW-Authenticate": 'Basic realm="Admin Area"',
-      },
-    });
+  if (authenticated) {
+    return NextResponse.next();
   }
 
-  return NextResponse.next();
+  if (pathname.startsWith("/admin/api/")) {
+    return NextResponse.json(
+      {
+        error: "Administrator authentication is required.",
+      },
+      {
+        status: 401,
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
+  }
+
+  const loginUrl = new URL("/admin/login", request.url);
+  loginUrl.searchParams.set("next", `${pathname}${search}`);
+
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {

@@ -36,6 +36,12 @@ export default function AdminNav() {
         </a>
 
         <a
+          href="/admin/logout"
+          className="rounded-xl border border-red-400 px-5 py-3 font-black text-red-300 transition hover:bg-red-500 hover:text-white"
+        >
+          Log Out
+        </a>
+        <a
           href="/"
           className="rounded-xl border border-white/30 px-5 py-3 font-black text-white"
         >
