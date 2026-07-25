@@ -82,6 +82,44 @@ const LunarCRS = {
   ),
 };
 
+function MoonFallbackLayer({
+  bounds,
+}: {
+  bounds: [[number, number], [number, number]];
+}) {
+  const map = useMap();
+  const [paneReady, setPaneReady] = useState(false);
+
+  useEffect(() => {
+    let pane = map.getPane("moon-fallback-pane");
+
+    if (!pane) {
+      pane = map.createPane("moon-fallback-pane");
+    }
+
+    // Leaflet's normal tile pane is 200 and overlay pane is 400.
+    // Keep this fallback below both so it can never cover terrain,
+    // boundaries, settlements, parcels, or markers on mobile devices.
+    pane.style.zIndex = "150";
+    pane.style.pointerEvents = "none";
+    setPaneReady(true);
+  }, [map]);
+
+  if (!paneReady) {
+    return null;
+  }
+
+  return (
+    <ImageOverlay
+      url="/atlas/moon-atlas-mobile.jpg?v=mobile-pane-1"
+      bounds={bounds}
+      pane="moon-fallback-pane"
+      opacity={1}
+      interactive={false}
+    />
+  );
+}
+
 function TrackZoomLevel({
   onZoomChange,
 }: {
@@ -1040,11 +1078,15 @@ export default function LunarLeafletMap({
               }}
             />
 
-            {useTileAtlas ? (
-               <LunarTileLayer />
-                ) : (
-               <ImageOverlay url="/atlas/moon-atlas-v2.jpg" bounds={bounds} />
-            )}
+            {/*
+              A correctly encoded, mobile-friendly Moon image sits in a
+              dedicated pane beneath Leaflet's terrain tiles and all vector
+              overlays. It can never cover the interactive map layers.
+            */}
+            <MoonFallbackLayer bounds={bounds} />
+
+            {/* High-resolution terrain remains layered above the fallback. */}
+            {useTileAtlas && <LunarTileLayer />}
 
             <StateLayer
               regions={mapRegions}

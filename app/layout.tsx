@@ -1,10 +1,11 @@
-import CartButton from "../components/CartButton";
+import { CartProvider } from "@/context/CartContext";
+import CartButton from "@/components/CartButton";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import "./globals.css";
 
-import { getSessionUserId } from "../lib/session";
+import { getSessionUserId } from "@/lib/session";
 
 export const metadata: Metadata = {
   title: "Orbital One Realty",
@@ -22,6 +23,7 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <body>
+        <CartProvider>
         <nav className="sticky top-0 z-50 border-b border-yellow-400/20 bg-black/95 text-white backdrop-blur">
           <div className="mx-auto max-w-7xl px-6">
             <div className="flex items-center justify-between gap-4 py-1">
@@ -94,6 +96,7 @@ export default async function RootLayout({
         </nav>
 
         {children}
+        </CartProvider>
       </body>
     </html>
   );

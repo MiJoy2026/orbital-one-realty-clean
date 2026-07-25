@@ -57,6 +57,9 @@ export type CartItem = {
    * Reservation and product information
    */
   reservationId?: string;
+  reservationExpiresAt?: string;
+  mapX?: number;
+  mapY?: number;
   category?: string;
   image?: string;
 };
@@ -135,12 +138,19 @@ export function CartProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      const validItems = parsedCart.filter(isCartItem).map((item) => ({
-        ...item,
-        quantity: item.quantity ?? 1,
-        additionalAcres: item.additionalAcres ?? 0,
-        passportQuantity: item.passportQuantity ?? 1,
-      }));
+      const now = Date.now();
+      const validItems = parsedCart
+        .filter(isCartItem)
+        .filter((item) => {
+          if (!item.reservationExpiresAt) return true;
+          return new Date(item.reservationExpiresAt).getTime() > now;
+        })
+        .map((item) => ({
+          ...item,
+          quantity: item.quantity ?? 1,
+          additionalAcres: item.additionalAcres ?? 0,
+          passportQuantity: item.passportQuantity ?? 1,
+        }));
 
       setItems(validItems);
     } catch (error) {
@@ -173,9 +183,27 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems((currentItems) => [...currentItems, normalizedItem]);
   };
 
+  const releaseReservation = (item: CartItem) => {
+    if (!item.reservationId) return;
+
+    void fetch("/api/release-reservation", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reservationId: item.reservationId }),
+    }).catch((error) => {
+      console.error("Unable to release cart reservation:", error);
+    });
+  };
+
   const removeItem = (id: string) => {
+    const item = items.find((candidate) => candidate.id === id);
+
+    if (item) {
+      releaseReservation(item);
+    }
+
     setItems((currentItems) =>
-      currentItems.filter((item) => item.id !== id)
+      currentItems.filter((candidate) => candidate.id !== id)
     );
   };
 
@@ -208,6 +236,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   };
 
   const clearCart = () => {
+    items.forEach(releaseReservation);
     setItems([]);
   };
 

@@ -1,79 +1,8 @@
-import Stripe from "stripe";
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 
-import { removeCartReservation } from "../../../lib/cart-reservations";
-import { prisma } from "../../../lib/prisma";
+import { prisma } from "@/lib/prisma";
 
-class ReservationReleaseError extends Error {
-  constructor(
-    message: string,
-    readonly status: number
-  ) {
-    super(message);
-  }
-}
-
-async function expireLinkedCheckoutSession(sessionId: string): Promise<void> {
-  const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
-
-  if (!stripeSecretKey) {
-    throw new ReservationReleaseError(
-      "Secure checkout is temporarily unavailable. Please try again.",
-      503
-    );
-  }
-
-  const stripe = new Stripe(stripeSecretKey);
-  let checkoutSession = await stripe.checkout.sessions.retrieve(sessionId);
-
-  if (checkoutSession.status === "complete") {
-    throw new ReservationReleaseError(
-      "Payment has already completed for this reservation.",
-      409
-    );
-  }
-
-  if (checkoutSession.status === "open") {
-    try {
-      checkoutSession = await stripe.checkout.sessions.expire(sessionId);
-    } catch (error) {
-      const latestSession = await stripe.checkout.sessions.retrieve(sessionId);
-
-      if (latestSession.status === "complete") {
-        throw new ReservationReleaseError(
-          "Payment has already completed for this reservation.",
-          409
-        );
-      }
-
-      throw error;
-    }
-  }
-
-  if (checkoutSession.status === "complete") {
-    throw new ReservationReleaseError(
-      "Payment has already completed for this reservation.",
-      409
-    );
-  }
-
-  /*
-   * One Stripe session may contain several cart reservations. Once that
-   * session is expired, detach it from every still-active reservation so the
-   * remaining properties can be checked out again in a fresh cart session.
-   */
-  await prisma.propertyReservation.updateMany({
-    where: {
-      stripeCheckoutSessionId: sessionId,
-      status: "Reserved",
-    },
-    data: {
-      stripeCheckoutSessionId: null,
-    },
-  });
-}
-
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const reservationId = String(body.reservationId || "").trim();
@@ -86,119 +15,66 @@ export async function POST(request: NextRequest) {
     }
 
     const reservation = await prisma.propertyReservation.findUnique({
-      where: {
-        id: reservationId,
-      },
+      where: { id: reservationId },
     });
 
     if (!reservation) {
-      return NextResponse.json(
-        { error: "Reservation not found." },
-        { status: 404 }
-      );
+      return NextResponse.json({ success: true, released: false });
     }
 
     if (reservation.status !== "Reserved") {
-      return NextResponse.json(
-        { error: "This reservation is no longer active." },
-        { status: 409 }
-      );
+      return NextResponse.json({
+        success: true,
+        released: false,
+        parcelKey: reservation.parcelKey,
+      });
     }
 
-    if (reservation.stripeCheckoutSessionId) {
-      await expireLinkedCheckoutSession(
-        reservation.stripeCheckoutSessionId
-      );
-    }
-
-    const result = await prisma.$transaction(async (transaction) => {
+    await prisma.$transaction(async (transaction) => {
       await transaction.$queryRaw<Array<{ lockAcquired: number }>>`
-        WITH reservation_lock AS (
-          SELECT pg_advisory_xact_lock(
-            hashtext(${reservation.parcelKey})
-          )
+        WITH release_lock AS (
+          SELECT pg_advisory_xact_lock(hashtext(${reservation.parcelKey}))
         )
         SELECT 1 AS "lockAcquired"
-        FROM reservation_lock
+        FROM release_lock
       `;
 
-      const currentReservation =
-        await transaction.propertyReservation.findUnique({
-          where: {
-            id: reservation.id,
-          },
-        });
-
-      if (!currentReservation) {
-        throw new ReservationReleaseError(
-          "Reservation not found.",
-          404
-        );
-      }
-
-      if (currentReservation.status !== "Reserved") {
-        throw new ReservationReleaseError(
-          "This reservation is no longer active.",
-          409
-        );
-      }
-
-      await transaction.propertyReservation.update({
+      await transaction.propertyReservation.updateMany({
         where: {
-          id: currentReservation.id,
+          id: reservation.id,
+          status: "Reserved",
         },
-        data: {
-          status: "Cancelled",
-          stripeCheckoutSessionId: null,
-        },
+        data: { status: "Expired" },
       });
 
       const anotherActiveReservation =
         await transaction.propertyReservation.findFirst({
           where: {
-            parcelKey: currentReservation.parcelKey,
-            id: {
-              not: currentReservation.id,
-            },
+            parcelKey: reservation.parcelKey,
+            id: { not: reservation.id },
             status: "Reserved",
-            expiresAt: {
-              gt: new Date(),
-            },
+            expiresAt: { gt: new Date() },
           },
-          select: {
-            id: true,
-          },
+          select: { id: true },
         });
 
       if (!anotherActiveReservation) {
         await transaction.property.updateMany({
           where: {
-            id: currentReservation.parcelKey,
+            id: reservation.parcelKey,
             status: "Reserved",
           },
-          data: {
-            status: "Available",
-          },
+          data: { status: "Available" },
         });
       }
-
-      return currentReservation;
     });
 
-    const response = NextResponse.json({
+    return NextResponse.json({
       success: true,
-      parcelKey: result.parcelKey,
+      released: true,
+      parcelKey: reservation.parcelKey,
     });
-    removeCartReservation(request, response, reservationId);
-    return response;
   } catch (error) {
-    if (error instanceof ReservationReleaseError) {
-      return NextResponse.json(
-        { error: error.message },
-        { status: error.status }
-      );
-    }
-
     console.error("[Orbital One] Unable to release reservation.", error);
 
     return NextResponse.json(

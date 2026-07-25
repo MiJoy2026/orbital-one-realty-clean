@@ -1,211 +1,177 @@
+"use client";
+
 import Link from "next/link";
-import { cookies } from "next/headers";
 
-import CartCheckoutPanel from "../../components/CartCheckoutPanel";
-import ClearCartCookie from "../../components/ClearCartCookie";
-import {
-  CART_RESERVATION_COOKIE,
-  normalizeReservationIds,
-  parseReservationCookie,
-} from "../../lib/cart-reservations";
-import {
-  getCanonicalPropertyPrice,
-  isPurchasablePropertyType,
-} from "../../lib/purchase-constants";
-import { prisma } from "../../lib/prisma";
+import QuickPickCheckoutButton from "@/components/QuickPickCheckoutButton";
+import { useCart } from "@/context/CartContext";
 
-export const dynamic = "force-dynamic";
-
-type CartItem = {
-  reservationId: string;
-  expiresAt: string;
-  propertyId: string;
-  propertyType: string;
-  propertySize: string;
-  stateName: string;
-  cityName: string | null;
-  townName: string | null;
-  price: number;
-};
-
-function EmptyCart() {
-  return (
-    <main className="min-h-screen bg-black px-6 py-20 text-white">
-      <ClearCartCookie />
-      <div className="mx-auto max-w-3xl rounded-3xl border border-white/20 bg-white/5 p-10 text-center">
-        <h1 className="text-4xl font-black text-yellow-400">
-          Your Cart Is Empty
-        </h1>
-        <p className="mt-5 text-gray-300">
-          Select and reserve Rural Acres, City Blocks, or Town Blocks on the
-          Moon Map. You can combine up to ten active property reservations in
-          one secure checkout.
-        </p>
-        <Link
-          href="/moon-map"
-          className="mt-8 inline-block rounded-xl bg-yellow-400 px-7 py-4 font-black text-black"
-        >
-          Choose Properties
-        </Link>
-      </div>
-    </main>
-  );
+function formatLocation(input: {
+  lunarState?: string;
+  lunarCity?: string;
+  lunarTown?: string;
+}) {
+  return [input.lunarCity, input.lunarTown, input.lunarState]
+    .filter(Boolean)
+    .join(" • ");
 }
 
-export default async function CartPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ reservationId?: string | string[] }>;
-}) {
-  const params = await searchParams;
-  const cookieStore = await cookies();
-  const cookieReservationIds = parseReservationCookie(
-    cookieStore.get(CART_RESERVATION_COOKIE)?.value
-  );
-  const queryReservationIds = normalizeReservationIds(
-    params.reservationId
-  );
-  const reservationIds = normalizeReservationIds([
-    ...cookieReservationIds,
-    ...queryReservationIds,
-  ]);
-
-  if (reservationIds.length === 0) {
-    return <EmptyCart />;
-  }
-
-  const now = new Date();
-  const reservations = await prisma.propertyReservation.findMany({
-    where: {
-      id: { in: reservationIds },
-      status: "Reserved",
-      expiresAt: { gt: now },
-    },
-  });
-
-  if (reservations.length === 0) {
-    return <EmptyCart />;
-  }
-
-  const properties = await prisma.property.findMany({
-    where: {
-      id: {
-        in: reservations.map((reservation) => reservation.parcelKey),
-      },
-      status: {
-        not: "Sold",
-      },
-    },
-  });
-  const propertyById = new Map(
-    properties.map((property) => [property.id, property])
-  );
-  const reservationById = new Map(
-    reservations.map((reservation) => [reservation.id, reservation])
-  );
-
-  const items: CartItem[] = reservationIds.flatMap((reservationId) => {
-    const reservation = reservationById.get(reservationId);
-
-    if (!reservation) {
-      return [];
-    }
-
-    const property = propertyById.get(reservation.parcelKey);
-
-    if (!property || !isPurchasablePropertyType(property.type)) {
-      return [];
-    }
-
-    return [
-      {
-        reservationId: reservation.id,
-        expiresAt: reservation.expiresAt.toISOString(),
-        propertyId: property.id,
-        propertyType: property.type,
-        propertySize: property.size,
-        stateName: property.state,
-        cityName: property.city,
-        townName: property.town,
-        price: getCanonicalPropertyPrice(property.type),
-      },
-    ];
-  });
-
-  if (items.length === 0) {
-    return <EmptyCart />;
-  }
+export default function CartPage() {
+  const { items, subtotal, removeItem } = useCart();
 
   return (
-    <main className="min-h-screen bg-black px-6 py-20 text-white">
+    <main className="min-h-screen bg-[#02040a] px-6 py-16 text-white sm:py-20">
       <div className="mx-auto max-w-6xl">
-        <p className="text-sm font-black uppercase tracking-[0.3em] text-yellow-400">
-          Reserved Properties
+        <p className="text-sm font-black uppercase tracking-[0.28em] text-yellow-400">
+          Orbital One Mission Cart
         </p>
-        <h1 className="mt-3 text-5xl font-black">Shopping Cart</h1>
-        <p className="mt-4 text-gray-300">
-          Each property keeps its own permanent ID, deed, certificate, and HOA
-          record. All active reservations below can be paid together in one
-          Stripe checkout.
+        <h1 className="mt-3 text-4xl font-black sm:text-5xl">
+          Your Reserved Properties
+        </h1>
+        <p className="mt-4 max-w-3xl text-lg leading-8 text-slate-400">
+          Quick Pick properties are real available Grid V2 parcels held for a
+          limited time. Each property keeps its own permanent ID and location.
         </p>
 
-        <div className="mt-10 grid gap-8 lg:grid-cols-[1.2fr_0.8fr]">
-          <section className="space-y-5">
-            {items.map((item) => {
-              const location = [
-                item.cityName,
-                item.townName,
-                item.stateName,
-              ]
-                .filter(Boolean)
-                .join(" • ");
-
-              return (
-                <article
-                  key={item.reservationId}
-                  className="rounded-3xl border border-white/20 bg-white/5 p-7"
-                >
-                  <div className="flex flex-wrap items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-[0.2em] text-gray-500">
-                        {item.propertyType}
-                      </p>
-                      <h2 className="mt-2 break-words text-2xl font-black text-yellow-400">
-                        {item.propertyId}
-                      </h2>
-                    </div>
-                    <p className="text-2xl font-black">
-                      ${item.price.toFixed(2)}
-                    </p>
-                  </div>
-
-                  <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
-                    <p>
-                      <span className="font-bold text-gray-500">Size:</span>{" "}
-                      {item.propertySize}
-                    </p>
-                    <p>
-                      <span className="font-bold text-gray-500">Location:</span>{" "}
-                      {location}
-                    </p>
-                  </div>
-                </article>
-              );
-            })}
-
-            <Link
-              href="/moon-map"
-              className="inline-block rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
-            >
-              + Reserve Another Property
-            </Link>
+        {items.length === 0 ? (
+          <section className="mt-10 rounded-[2rem] border border-white/10 bg-white/[0.035] p-10 text-center">
+            <h2 className="text-3xl font-black text-yellow-300">
+              Your cart is ready for a mission.
+            </h2>
+            <p className="mx-auto mt-4 max-w-xl leading-7 text-slate-400">
+              Use Quick Pick for the fastest assignment, or explore LunaSphere
+              to choose an exact location yourself.
+            </p>
+            <div className="mt-8 flex flex-wrap justify-center gap-4">
+              <Link
+                href="/pricing"
+                className="rounded-xl bg-yellow-400 px-6 py-3 font-black text-black"
+              >
+                Use Quick Pick
+              </Link>
+              <Link
+                href="/moon-map"
+                className="rounded-xl border border-white/20 px-6 py-3 font-black"
+              >
+                Explore LunaSphere
+              </Link>
+            </div>
           </section>
+        ) : (
+          <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_22rem]">
+            <section className="space-y-6">
+              {items.map((item) => {
+                const location = formatLocation(item);
 
-          <aside className="rounded-3xl border border-yellow-400/40 bg-white/5 p-8">
-            <h2 className="text-3xl font-black">Order Summary</h2>
-            <CartCheckoutPanel items={items} />
-          </aside>
-        </div>
+                return (
+                  <article
+                    key={item.id}
+                    className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] shadow-2xl shadow-black/25"
+                  >
+                    <div className="grid gap-0 md:grid-cols-[13rem_1fr]">
+                      <div
+                        className="min-h-48 bg-cover bg-center"
+                        style={{
+                          backgroundImage: `linear-gradient(to top, rgba(2,4,10,.72), rgba(2,4,10,.08)), url('${
+                            item.image || "/property-images/rural-acre.jpg"
+                          }')`,
+                        }}
+                      />
+                      <div className="p-6 sm:p-7">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div>
+                            <p className="text-xs font-black uppercase tracking-[0.2em] text-yellow-400">
+                              {item.propertyType}
+                            </p>
+                            <h2 className="mt-2 break-all text-2xl font-black">
+                              {item.propertyId}
+                            </h2>
+                            <p className="mt-2 text-sm text-slate-400">
+                              {location || "LunaSphere property"}
+                            </p>
+                          </div>
+                          <p className="text-2xl font-black text-yellow-300">
+                            ${item.unitPrice.toFixed(2)}
+                          </p>
+                        </div>
+
+                        <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">
+                          <p className="rounded-xl border border-white/10 bg-black/20 p-3">
+                            <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                              Deed owner
+                            </span>
+                            <span className="mt-1 block font-semibold">
+                              {item.ownerName || item.deedName}
+                            </span>
+                          </p>
+                          <p className="rounded-xl border border-white/10 bg-black/20 p-3">
+                            <span className="block text-xs font-bold uppercase tracking-wide text-slate-500">
+                              Reservation
+                            </span>
+                            <span className="mt-1 block font-semibold text-emerald-300">
+                              Active and secured
+                            </span>
+                          </p>
+                        </div>
+
+                        <div className="mt-5 flex flex-wrap gap-3">
+                          <Link
+                            href={`/moon-map?property=${encodeURIComponent(
+                              item.propertyId
+                            )}`}
+                            className="rounded-xl border border-yellow-300/35 px-4 py-2 text-sm font-black text-yellow-200"
+                          >
+                            View on Moon Map
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => removeItem(item.id)}
+                            className="rounded-xl border border-red-400/25 px-4 py-2 text-sm font-black text-red-200"
+                          >
+                            Release & Remove
+                          </button>
+                        </div>
+
+                        <QuickPickCheckoutButton item={item} />
+                      </div>
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
+
+            <aside className="h-fit rounded-[2rem] border border-yellow-300/25 bg-yellow-300/[0.055] p-7 lg:sticky lg:top-36">
+              <p className="text-xs font-black uppercase tracking-[0.22em] text-yellow-400">
+                Mission Summary
+              </p>
+              <div className="mt-5 flex items-center justify-between border-b border-white/10 pb-5">
+                <span className="text-slate-400">Reserved properties</span>
+                <span className="text-2xl font-black">{items.length}</span>
+              </div>
+              <div className="mt-5 flex items-center justify-between">
+                <span className="font-bold">Current subtotal</span>
+                <span className="text-3xl font-black text-yellow-300">
+                  ${subtotal.toFixed(2)}
+                </span>
+              </div>
+              <p className="mt-5 text-xs leading-6 text-slate-500">
+                Checkout is completed per reserved property so each deed,
+                recipient, certificate, and LunaScape record remains precise.
+              </p>
+              <Link
+                href="/pricing"
+                className="mt-6 block rounded-xl border border-white/15 px-5 py-3 text-center font-black"
+              >
+                Add Another Quick Pick
+              </Link>
+              <Link
+                href="/moon-map"
+                className="mt-3 block rounded-xl border border-white/15 px-5 py-3 text-center font-black"
+              >
+                Choose on LunaSphere
+              </Link>
+            </aside>
+          </div>
+        )}
       </div>
     </main>
   );
