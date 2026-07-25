@@ -1,36 +1,83 @@
+import Link from "next/link";
+
 import {
   getLunarTownByName,
+  getLunarTownMatches,
   getPropertiesByTown,
-} from "../../../lib/atlas-service";
+} from "@/lib/atlas-service";
+import { getLunarTownHref } from "@/lib/lunar-location-links";
 
 export default async function TownDetailPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ townName: string }>;
+  searchParams: Promise<{ state?: string }>;
 }) {
   const { townName } = await params;
+  const { state: requestedState } = await searchParams;
   const decodedTownName = decodeURIComponent(townName);
+  const decodedStateName = requestedState
+    ? decodeURIComponent(requestedState)
+    : undefined;
+  const matches = getLunarTownMatches(decodedTownName);
 
-  const town = await getLunarTownByName(decodedTownName);
+  if (!decodedStateName && matches.length > 1) {
+    return (
+      <main className="min-h-screen bg-[#02040a] px-6 py-24 text-white">
+        <div className="mx-auto max-w-4xl rounded-[2rem] border border-white/10 bg-white/[0.04] p-9">
+          <p className="text-sm font-black uppercase tracking-[0.35em] text-yellow-400">
+            LunaSphere Location Check
+          </p>
+          <h1 className="mt-5 text-4xl font-black uppercase sm:text-6xl">
+            Choose the Correct {decodedTownName}
+          </h1>
+          <p className="mt-5 text-lg leading-8 text-slate-400">
+            More than one lunar state contains a town with this name. Choose the
+            state you intended to visit.
+          </p>
+          <div className="mt-8 grid gap-4 sm:grid-cols-2">
+            {matches.map((match) => (
+              <Link
+                key={`${match.state.name}-${match.name}`}
+                href={getLunarTownHref(match.state.name, match.name)}
+                className="rounded-2xl border border-white/10 bg-black/30 p-5 transition hover:border-yellow-400/60"
+              >
+                <p className="text-xs font-black uppercase tracking-[0.24em] text-yellow-400">
+                  {match.state.name} State
+                </p>
+                <h2 className="mt-2 text-2xl font-black">{match.name}</h2>
+                <p className="mt-3 leading-7 text-slate-400">
+                  {match.description}
+                </p>
+              </Link>
+            ))}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  const town = await getLunarTownByName(decodedTownName, decodedStateName);
 
   if (!town) {
     return (
       <main className="min-h-screen bg-black px-6 py-20 text-white">
         <h1 className="text-5xl font-black">Town Not Found</h1>
-
-        <a href="/moon-map" className="mt-8 inline-block text-yellow-400">
+        <Link href="/moon-map" className="mt-8 inline-block text-yellow-400">
           Back to Lunar Atlas
-        </a>
+        </Link>
       </main>
     );
   }
 
-  const townProperties = await getPropertiesByTown(town.name);
-
+  const townProperties = await getPropertiesByTown(town.name, town.state.name);
   const available = townProperties.filter(
-    (property) => property.status !== "Sold"
+    (property) => property.status === "Available"
   );
-
+  const reserved = townProperties.filter(
+    (property) => property.status === "Reserved"
+  );
   const sold = townProperties.filter((property) => property.status === "Sold");
 
   return (
@@ -47,97 +94,92 @@ export default async function TownDetailPage({
         <p className="text-sm font-black uppercase tracking-[0.35em] text-yellow-400">
           {town.state.name} Town Region
         </p>
-
         <h1 className="mt-4 text-6xl font-black uppercase text-yellow-400">
           {town.name}
         </h1>
-
         <p className="mt-6 max-w-4xl text-lg text-gray-300">
-          {town.name} is one of 20 town regions within the lunar state of{" "}
-          {town.state.name}. Town Blocks offer a community-style novelty lunar
-          property experience within the Orbital One Realty atlas.
+          {town.description}
         </p>
-
         <div className="mt-8 flex flex-wrap gap-4">
-          <a
+          <Link
             href={`/states/${encodeURIComponent(town.state.name)}`}
             className="rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
           >
             Back to {town.state.name}
-          </a>
-
-          <a
+          </Link>
+          <Link
             href="/moon-map"
             className="rounded-xl border border-white/30 px-6 py-3 font-black text-white"
           >
             Back to Lunar Atlas
-          </a>
+          </Link>
         </div>
-
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
+        <div className="mt-10 grid gap-6 md:grid-cols-4">
           <div className="rounded-2xl border border-yellow-400 bg-white/5 p-6">
             <p className="text-4xl font-black text-yellow-400">
               {townProperties.length}
             </p>
-            <p className="mt-2 uppercase text-gray-400">Town Blocks Listed</p>
+            <p className="mt-2 uppercase text-gray-400">Town Blocks Recorded</p>
           </div>
-
           <div className="rounded-2xl border border-green-500 bg-green-950/30 p-6">
             <p className="text-4xl font-black text-green-400">
               {available.length}
             </p>
             <p className="mt-2 uppercase text-gray-400">Available</p>
           </div>
-
+          <div className="rounded-2xl border border-amber-500 bg-amber-950/30 p-6">
+            <p className="text-4xl font-black text-amber-300">
+              {reserved.length}
+            </p>
+            <p className="mt-2 uppercase text-gray-400">Reserved</p>
+          </div>
           <div className="rounded-2xl border border-red-500 bg-red-950/30 p-6">
             <p className="text-4xl font-black text-red-400">{sold.length}</p>
             <p className="mt-2 uppercase text-gray-400">Sold</p>
           </div>
         </div>
-
         <section className="mt-16">
           <h2 className="text-3xl font-black uppercase text-yellow-400">
             Town Block Properties
           </h2>
-
           <div className="mt-8 grid gap-6 md:grid-cols-2">
             {townProperties.length > 0 ? (
               townProperties.map((property) => (
-                <a
+                <Link
                   key={property.id}
                   href={`/explore/${property.id}`}
                   className="rounded-3xl border border-white/20 bg-white/5 p-6 transition hover:border-yellow-400 hover:bg-yellow-400/10"
                 >
                   <div className="flex items-center justify-between gap-4">
-                    <h3 className="text-3xl font-black text-yellow-400">
+                    <h3 className="break-all text-2xl font-black text-yellow-400">
                       {property.id}
                     </h3>
-
                     <span
                       className={`rounded-full px-3 py-1 text-xs font-black uppercase ${
                         property.status === "Sold"
                           ? "bg-red-600 text-white"
-                          : "bg-green-500 text-black"
+                          : property.status === "Reserved"
+                            ? "bg-amber-400 text-black"
+                            : "bg-green-500 text-black"
                       }`}
                     >
                       {property.status}
                     </span>
                   </div>
-
                   <p className="mt-3 font-bold text-yellow-400">
                     {property.type}
                   </p>
-
                   <p className="mt-2 text-gray-300">{property.size}</p>
-
                   <p className="mt-4 text-2xl font-black">
                     ${property.price.toFixed(2)}
                   </p>
-                </a>
+                </Link>
               ))
             ) : (
               <div className="rounded-3xl border border-white/20 bg-white/5 p-8 text-gray-400 md:col-span-2">
-                No town blocks are currently listed in this town.
+                No town-block records have been created in this town yet. Use
+                the Atlas to choose an exact location or Quick Pick for a faster
+                assignment.
               </div>
             )}
           </div>

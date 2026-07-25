@@ -22,50 +22,70 @@ export async function getLunarStateByName(stateName: string) {
   });
 }
 
-export async function getLunarCityByName(cityName: string) {
+export function getLunarCityMatches(cityName: string) {
   const normalizedCityName = cityName.trim().toLowerCase();
 
-  for (const [stateName, stateDetails] of Object.entries(
-    lunarStateDetails
-  )) {
-    const officialCity = stateDetails.cities.find(
-     (city) => city.name.toLowerCase() === normalizedCityName
-    );
-
-    if (officialCity) {
-      return {
-        ...officialCity,
-          state: {
-          name: stateName,
-        },
-      };
-    }
-  }
-
-  return null;
+  return Object.entries(lunarStateDetails).flatMap(
+    ([stateName, stateDetails]) =>
+      stateDetails.cities
+        .filter((city) => city.name.toLowerCase() === normalizedCityName)
+        .map((city) => ({
+          ...city,
+          state: { name: stateName },
+        }))
+  );
 }
 
-export async function getLunarTownByName(townName: string) {
-  const normalizedTownName = townName.trim().toLowerCase();
+export async function getLunarCityByName(
+  cityName: string,
+  stateName?: string
+) {
+  const matches = getLunarCityMatches(cityName);
 
-  for (const [stateName, stateDetails] of Object.entries(
-    lunarStateDetails
-  )) {
-    const officialTown = stateDetails.towns.find(
-      (town) => town.name.toLowerCase() === normalizedTownName
-    );
-
-    if (officialTown) {
-      return {
-        ...officialTown,
-        state: {
-          name: stateName,
-        },
-      };
-    }
+  if (!stateName) {
+    return matches[0] ?? null;
   }
 
-  return null;
+  const normalizedStateName = stateName.trim().toLowerCase();
+
+  return (
+    matches.find(
+      (city) => city.state.name.toLowerCase() === normalizedStateName
+    ) ?? null
+  );
+}
+
+export function getLunarTownMatches(townName: string) {
+  const normalizedTownName = townName.trim().toLowerCase();
+
+  return Object.entries(lunarStateDetails).flatMap(
+    ([stateName, stateDetails]) =>
+      stateDetails.towns
+        .filter((town) => town.name.toLowerCase() === normalizedTownName)
+        .map((town) => ({
+          ...town,
+          state: { name: stateName },
+        }))
+  );
+}
+
+export async function getLunarTownByName(
+  townName: string,
+  stateName?: string
+) {
+  const matches = getLunarTownMatches(townName);
+
+  if (!stateName) {
+    return matches[0] ?? null;
+  }
+
+  const normalizedStateName = stateName.trim().toLowerCase();
+
+  return (
+    matches.find(
+      (town) => town.state.name.toLowerCase() === normalizedStateName
+    ) ?? null
+  );
 }
 
 export async function getPropertyByIdFromDb(propertyId: string) {
@@ -81,8 +101,11 @@ export async function getPropertiesByState(stateName: string) {
   });
 }
 
-export async function getPropertiesByCity(cityName: string) {
-  const city = await getLunarCityByName(cityName);
+export async function getPropertiesByCity(
+  cityName: string,
+  stateName?: string
+) {
+  const city = await getLunarCityByName(cityName, stateName);
 
   if (!city) {
     return [];
@@ -91,6 +114,7 @@ export async function getPropertiesByCity(cityName: string) {
   return prisma.property.findMany({
     where: {
       city: city.name,
+      state: city.state.name,
     },
     orderBy: {
       id: "asc",
@@ -98,8 +122,11 @@ export async function getPropertiesByCity(cityName: string) {
   });
 }
 
-export async function getPropertiesByTown(townName: string) {
-  const town = await getLunarTownByName(townName);
+export async function getPropertiesByTown(
+  townName: string,
+  stateName?: string
+) {
+  const town = await getLunarTownByName(townName, stateName);
 
   if (!town) {
     return [];
@@ -108,6 +135,7 @@ export async function getPropertiesByTown(townName: string) {
   return prisma.property.findMany({
     where: {
       town: town.name,
+      state: town.state.name,
     },
     orderBy: {
       id: "asc",

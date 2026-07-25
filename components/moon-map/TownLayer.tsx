@@ -1,8 +1,11 @@
 "use client";
 
-import { divIcon } from "leaflet";
-import { Marker, Polygon } from "react-leaflet";
+import Link from "next/link";
 
+import { divIcon } from "leaflet";
+import { Marker, Polygon, Popup } from "react-leaflet";
+
+import { getLunarTownHref } from "@/lib/lunar-location-links";
 import type { PublicLunaSphereSettlement } from "@/lib/lunasphere-public-geography";
 
 export default function TownLayer({
@@ -55,7 +58,20 @@ export default function TownLayer({
                   });
                 },
               }}
-            />
+            >
+              <Popup>
+                <div style={{ minWidth: "190px" }}>
+                  <strong>{town.name}</strong>
+                  <br />
+                  Lunar Town · {town.stateName}
+                  <br />
+                  <br />
+                  <Link href={getLunarTownHref(town.stateName, town.name)}>
+                    View Town
+                  </Link>
+                </div>
+              </Popup>
+            </Polygon>
 
             <Marker
               position={town.center}
