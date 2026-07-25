@@ -1,3 +1,4 @@
+import { requestCanAccessOrder } from "./order-access-authorization";
 import { prisma } from "./prisma";
 
 export class OrderDocumentError extends Error {
@@ -31,6 +32,12 @@ export async function getOrderDocumentData(
   });
 
   if (!order || order.paymentStatus.toLowerCase() !== "paid") {
+    throw new OrderDocumentError("Certificate not found.", 404);
+  }
+
+  const authorized = await requestCanAccessOrder(request, order);
+
+  if (!authorized) {
     throw new OrderDocumentError("Certificate not found.", 404);
   }
 

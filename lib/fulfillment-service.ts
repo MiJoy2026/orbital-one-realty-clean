@@ -534,6 +534,7 @@ export async function fulfillStripeCheckoutSession(
           }
 
           return {
+            orderId: order.id,
             propertyId: order.propertyId,
             propertyType: order.propertyType,
             propertySize: property.size,

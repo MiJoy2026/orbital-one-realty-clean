@@ -2,6 +2,7 @@ import AdminNav from "../../../components/AdminNav";
 import LunaScapeImageGallery from "../../../components/LunaScapeImageGallery";
 import PropertySnapshotAdminControls from "../../../components/PropertySnapshotAdminControls";
 import { inspectOwnedPropertySnapshotEligibilityForOrderIds } from "../../../lib/owned-property-snapshot";
+import { createOrderAccessToken } from "../../../lib/order-access-token";
 import { prisma } from "../../../lib/prisma";
 
 export default async function AdminPropertyImagesPage() {
@@ -39,6 +40,21 @@ export default async function AdminPropertyImagesPage() {
   );
   const eligibleMissingCount = eligibility.filter((item) => item.eligible).length;
   const historicalCount = eligibility.filter((item) => !item.eligible).length;
+  const accessTokenBySnapshotId = new Map(
+    await Promise.all(
+      recentSnapshots.map(async (snapshot) => [
+        snapshot.id,
+        await createOrderAccessToken(
+          {
+            orderId: snapshot.order.id,
+            certificateNumber: snapshot.certificateNumber,
+            snapshotId: snapshot.id,
+          },
+          "2h"
+        ),
+      ] as const)
+    )
+  );
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -134,7 +150,11 @@ export default async function AdminPropertyImagesPage() {
             <p className="mt-6 text-gray-400">No property snapshots yet.</p>
           ) : (
             <div className="mt-7 grid gap-6 xl:grid-cols-2">
-              {recentSnapshots.map((snapshot) => (
+              {recentSnapshots.map((snapshot) => {
+                const accessToken = accessTokenBySnapshotId.get(snapshot.id) || "";
+                const accessQuery = encodeURIComponent(accessToken);
+
+                return (
                 <article
                   key={snapshot.id}
                   className="overflow-hidden rounded-3xl border border-white/20 bg-white/5"
@@ -144,6 +164,7 @@ export default async function AdminPropertyImagesPage() {
                     propertyId={snapshot.propertyId}
                     compact
                     showDescription={false}
+                    accessToken={accessToken}
                   />
                   <div className="p-5">
                     <p className="text-xs font-bold uppercase tracking-wider text-yellow-400">
@@ -160,7 +181,7 @@ export default async function AdminPropertyImagesPage() {
                     </p>
                     <div className="mt-4 flex flex-wrap gap-3">
                       <a
-                        href={`/api/property-image/${snapshot.id}?view=scenic&download=1`}
+                        href={`/api/property-image/${snapshot.id}?view=scenic&download=1&access=${accessQuery}`}
                         className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-black text-black"
                       >
                         Scenic View
@@ -174,7 +195,8 @@ export default async function AdminPropertyImagesPage() {
                     </div>
                   </div>
                 </article>
-              ))}
+                );
+              })}
             </div>
           )}
         </section>

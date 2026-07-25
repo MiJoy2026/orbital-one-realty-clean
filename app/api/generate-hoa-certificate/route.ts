@@ -182,6 +182,10 @@ export async function GET(request: Request) {
   return new NextResponse(Buffer.from(pdfBytes), {
     headers: {
       "Content-Type": "application/pdf",
+      "Cache-Control": "private, no-store, max-age=0",
+      Pragma: "no-cache",
+      "Referrer-Policy": "no-referrer",
+      "X-Content-Type-Options": "nosniff",
       "Content-Disposition": `attachment; filename="${property.id}-hoa-certificate.pdf"`,
     },
   });

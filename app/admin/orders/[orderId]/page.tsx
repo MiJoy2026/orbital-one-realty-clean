@@ -2,6 +2,7 @@ import AdminNav from "../../../../components/AdminNav";
 import LunaScapeImageGallery from "../../../../components/LunaScapeImageGallery";
 import PropertySnapshotAdminControls from "../../../../components/PropertySnapshotAdminControls";
 import { inspectOwnedPropertySnapshotEligibilityForOrderIds } from "../../../../lib/owned-property-snapshot";
+import { createOrderAccessToken } from "../../../../lib/order-access-token";
 import { prisma } from "../../../../lib/prisma";
 
 export default async function AdminOrderDetailPage({
@@ -49,6 +50,15 @@ export default async function AdminOrderDetailPage({
     : await inspectOwnedPropertySnapshotEligibilityForOrderIds([order.id]);
   const isHistoricalPriorGeography =
     Boolean(snapshotEligibility) && !snapshotEligibility.eligible;
+  const orderAccessToken = await createOrderAccessToken(
+    {
+      orderId: order.id,
+      certificateNumber: order.certificateNumber,
+      snapshotId: order.propertySnapshot?.id || null,
+    },
+    "2h"
+  );
+  const accessQuery = encodeURIComponent(orderAccessToken);
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -92,6 +102,7 @@ export default async function AdminOrderDetailPage({
             <LunaScapeImageGallery
               snapshotId={order.propertySnapshot.id}
               propertyId={order.propertyId}
+              accessToken={orderAccessToken}
             />
             <div className="flex flex-wrap items-center justify-between gap-4 border-t border-white/10 px-6 py-5">
               <div>
@@ -99,11 +110,11 @@ export default async function AdminOrderDetailPage({
                   LunaScape image collection ready
                 </p>
                 <p className="mt-1 text-sm text-gray-400">
-                  Scenic renderer and parcel locator · Grid V{order.propertySnapshot.inventoryGridVersion}
+                  Scenic renderer and parcel locator Â· Grid V{order.propertySnapshot.inventoryGridVersion}
                 </p>
               </div>
               <a
-                href={`/api/property-image/${order.propertySnapshot.id}?view=scenic&download=1`}
+                href={`/api/property-image/${order.propertySnapshot.id}?view=scenic&download=1&access=${accessQuery}`}
                 className="rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
               >
                 Download Scenic View
@@ -252,7 +263,7 @@ export default async function AdminOrderDetailPage({
           </a>
 
           <a
-            href={`/api/generate-deed?certificateNumber=${encodeURIComponent(order.certificateNumber)}`}
+            href={`/api/generate-deed?certificateNumber=${encodeURIComponent(order.certificateNumber)}&access=${accessQuery}`}
             className="rounded-xl border border-yellow-400 px-6 py-3 font-black text-yellow-400"
           >
             Download Deed

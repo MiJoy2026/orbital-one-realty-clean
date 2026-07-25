@@ -4,6 +4,7 @@ import Stripe from "stripe";
 import ClearCartCookie from "../../components/ClearCartCookie";
 import LunaScapeImageGallery from "../../components/LunaScapeImageGallery";
 import { fulfillStripeCheckoutSession } from "../../lib/fulfillment-service";
+import { createOrderAccessToken } from "../../lib/order-access-token";
 import { prisma } from "../../lib/prisma";
 
 function ProcessingMessage({ message }: { message: string }) {
@@ -125,6 +126,21 @@ export default async function SuccessPage({
   const totalPaid = session.amount_total
     ? session.amount_total / 100
     : orders.reduce((sum, order) => sum + order.amountPaid, 0);
+  const orderAccessTokenById = new Map(
+    await Promise.all(
+      orders.map(async (order) => [
+        order.id,
+        await createOrderAccessToken(
+          {
+            orderId: order.id,
+            certificateNumber: order.certificateNumber,
+            snapshotId: order.propertySnapshot?.id || null,
+          },
+          "24h"
+        ),
+      ] as const)
+    )
+  );
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -157,6 +173,8 @@ export default async function SuccessPage({
             const certificateQuery = encodeURIComponent(
               order.certificateNumber
             );
+            const accessToken = orderAccessTokenById.get(order.id) || "";
+            const accessQuery = encodeURIComponent(accessToken);
             const location = [property?.city, property?.town, property?.state]
               .filter(Boolean)
               .join(" • ");
@@ -171,6 +189,7 @@ export default async function SuccessPage({
                     snapshotId={order.propertySnapshot.id}
                     propertyId={order.propertyId}
                     compact
+                    accessToken={accessToken}
                   />
                 )}
                 <div className="p-8">
@@ -205,26 +224,26 @@ export default async function SuccessPage({
 
                 <div className="mt-6 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                   <a
-                    href={`/api/generate-deed?certificateNumber=${certificateQuery}`}
+                    href={`/api/generate-deed?certificateNumber=${certificateQuery}&access=${accessQuery}`}
                     className="rounded-xl bg-yellow-400 px-4 py-3 text-center font-black text-black"
                   >
                     Lunar Deed
                   </a>
                   <a
-                    href={`/api/generate-welcome-letter?certificateNumber=${certificateQuery}`}
+                    href={`/api/generate-welcome-letter?certificateNumber=${certificateQuery}&access=${accessQuery}`}
                     className="rounded-xl border border-yellow-400 px-4 py-3 text-center font-black text-yellow-400"
                   >
                     Welcome Letter
                   </a>
                   <a
-                    href={`/api/generate-hoa-certificate?certificateNumber=${certificateQuery}`}
+                    href={`/api/generate-hoa-certificate?certificateNumber=${certificateQuery}&access=${accessQuery}`}
                     className="rounded-xl border border-yellow-400 px-4 py-3 text-center font-black text-yellow-400"
                   >
                     HOA Certificate
                   </a>
                   {order.passportPurchased && (
                     <a
-                      href={`/api/generate-passport?certificateNumber=${certificateQuery}`}
+                      href={`/api/generate-passport?certificateNumber=${certificateQuery}&access=${accessQuery}`}
                       className="rounded-xl border border-yellow-400 px-4 py-3 text-center font-black text-yellow-400"
                     >
                       Lunar Passport
@@ -241,7 +260,7 @@ export default async function SuccessPage({
                   </Link>
                   {order.propertySnapshot && (
                     <a
-                      href={`/api/property-image/${order.propertySnapshot.id}?view=scenic&download=1`}
+                      href={`/api/property-image/${order.propertySnapshot.id}?view=scenic&download=1&access=${accessQuery}`}
                       className="rounded-xl border border-white/30 px-4 py-2 text-sm font-black text-white"
                     >
                       Download Scenic View

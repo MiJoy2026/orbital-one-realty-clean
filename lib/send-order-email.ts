@@ -2,8 +2,10 @@ import { Resend } from "resend";
 
 import { getAppUrl } from "./app-url";
 import { createCustomerClaimTokenForEmail } from "./customer-access-token";
+import { createOrderAccessToken } from "./order-access-token";
 
 type OrderEmailItem = {
+  orderId: string;
   propertyId: string;
   propertyType: string;
   propertySize: string;
@@ -33,17 +35,26 @@ function escapeHtml(value: string): string {
     .replaceAll("'", "&#039;");
 }
 
-function buildPropertySections(
+async function buildPropertySections(
   appUrl: string,
   items: OrderEmailItem[],
   passportPurchased: boolean
-): string {
-  return items
-    .map((item) => {
+): Promise<string> {
+  const sections = await Promise.all(
+    items.map(async (item) => {
       const certificateQuery = encodeURIComponent(item.certificateNumber);
       const location = [item.cityName, item.townName, item.lunarState]
         .filter(Boolean)
         .join(" • ");
+      const accessToken = await createOrderAccessToken(
+        {
+          orderId: item.orderId,
+          certificateNumber: item.certificateNumber,
+          snapshotId: item.propertySnapshotId || null,
+        },
+        "30d"
+      );
+      const accessQuery = encodeURIComponent(accessToken);
 
       return `
         <div style="border:1px solid #ddd; border-radius:12px; padding:18px; margin:18px 0;">
@@ -62,29 +73,34 @@ function buildPropertySections(
           <p><strong>Location:</strong> ${escapeHtml(location)}</p>
           <p><a href="${appUrl}/verify/${certificateQuery}">Verify Certificate</a></p>
           <ul>
-            <li><a href="${appUrl}/api/generate-deed?certificateNumber=${certificateQuery}">Download Lunar Property Deed</a></li>
-            <li><a href="${appUrl}/api/generate-welcome-letter?certificateNumber=${certificateQuery}">Download Welcome Letter</a></li>
-            <li><a href="${appUrl}/api/generate-hoa-certificate?certificateNumber=${certificateQuery}">Download HOA Membership Certificate</a></li>
+            <li><a href="${appUrl}/api/generate-deed?certificateNumber=${certificateQuery}&access=${accessQuery}">Download Lunar Property Deed</a></li>
+            <li><a href="${appUrl}/api/generate-welcome-letter?certificateNumber=${certificateQuery}&access=${accessQuery}">Download Welcome Letter</a></li>
+            <li><a href="${appUrl}/api/generate-hoa-certificate?certificateNumber=${certificateQuery}&access=${accessQuery}">Download HOA Membership Certificate</a></li>
             ${
               item.propertySnapshotId
                 ? `<li><a href="${appUrl}/api/property-image/${encodeURIComponent(
                     item.propertySnapshotId
-                  )}?view=scenic&download=1&v=exact-parcel-3">Download Your Place on the Moon</a></li>
+                  )}?view=scenic&download=1&v=exact-parcel-3&access=${accessQuery}">Download Your Place on the Moon</a></li>
                    <li><a href="${appUrl}/api/property-image/${encodeURIComponent(
                     item.propertySnapshotId
-                  )}?view=virtual&download=1&v=virtual-scene-1">Download Your LunaScape Property</a></li>`
+                  )}?view=virtual&download=1&v=virtual-scene-1&access=${accessQuery}">Download Your LunaScape Property</a></li>`
                 : ""
             }
             ${
               passportPurchased
-                ? `<li><a href="${appUrl}/api/generate-passport?certificateNumber=${certificateQuery}">Download Lunar Passport</a></li>`
+                ? `<li><a href="${appUrl}/api/generate-passport?certificateNumber=${certificateQuery}&access=${accessQuery}">Download Lunar Passport</a></li>`
                 : ""
             }
           </ul>
+          <p style="font-size:12px;color:#666;">
+            These private download links expire after 30 days. Your verified customer account keeps ongoing access to your documents and LunaScape images.
+          </p>
         </div>
       `;
     })
-    .join("");
+  );
+
+  return sections.join("");
 }
 
 export async function sendOrderEmail({
@@ -108,7 +124,7 @@ export async function sendOrderEmail({
 
   const appUrl = getAppUrl();
   const resend = new Resend(resendApiKey);
-  const propertySections = buildPropertySections(
+  const propertySections = await buildPropertySections(
     appUrl,
     items,
     passportPurchased

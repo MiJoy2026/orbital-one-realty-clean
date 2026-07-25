@@ -3,6 +3,7 @@ type LunaScapeImageGalleryProps = {
   propertyId: string;
   compact?: boolean;
   showDescription?: boolean;
+  accessToken?: string;
 };
 
 export default function LunaScapeImageGallery({
@@ -10,13 +11,17 @@ export default function LunaScapeImageGallery({
   propertyId,
   compact = false,
   showDescription = true,
+  accessToken,
 }: LunaScapeImageGalleryProps) {
-  const exactImage = `/api/property-image/${snapshotId}?view=scenic&size=thumb&v=exact-parcel-3`;
-  const exactFull = `/api/property-image/${snapshotId}?view=scenic&v=exact-parcel-3`;
-  const exactDownload = `/api/property-image/${snapshotId}?view=scenic&download=1&v=exact-parcel-3`;
-  const virtualImage = `/api/property-image/${snapshotId}?view=virtual&size=thumb&v=virtual-scene-1`;
-  const virtualFull = `/api/property-image/${snapshotId}?view=virtual&v=virtual-scene-1`;
-  const virtualDownload = `/api/property-image/${snapshotId}?view=virtual&download=1&v=virtual-scene-1`;
+  const accessSuffix = accessToken
+    ? `&access=${encodeURIComponent(accessToken)}`
+    : "";
+  const exactImage = `/api/property-image/${snapshotId}?view=scenic&size=thumb&v=exact-parcel-3${accessSuffix}`;
+  const exactFull = `/api/property-image/${snapshotId}?view=scenic&v=exact-parcel-3${accessSuffix}`;
+  const exactDownload = `/api/property-image/${snapshotId}?view=scenic&download=1&v=exact-parcel-3${accessSuffix}`;
+  const virtualImage = `/api/property-image/${snapshotId}?view=virtual&size=thumb&v=virtual-scene-1${accessSuffix}`;
+  const virtualFull = `/api/property-image/${snapshotId}?view=virtual&v=virtual-scene-1${accessSuffix}`;
+  const virtualDownload = `/api/property-image/${snapshotId}?view=virtual&download=1&v=virtual-scene-1${accessSuffix}`;
 
   return (
     <section className={compact ? "p-4" : "p-6"}>
