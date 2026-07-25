@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { renderLunaScapeVirtualImage } from "../../../../lib/lunascape-virtual-renderer";
 import { prisma } from "../../../../lib/prisma";
 import {
   renderOwnedPropertyImage,
@@ -33,16 +34,25 @@ export async function GET(
   const size =
     request.nextUrl.searchParams.get("size") === "thumb" ? "thumb" : "full";
   const requestedView = request.nextUrl.searchParams.get("view");
-  const view: PropertyImageView =
-    requestedView === "locator" ? "locator" : "scenic";
+  const view: "virtual" | PropertyImageView =
+    requestedView === "virtual" || requestedView === "postcard"
+      ? "virtual"
+      : requestedView === "locator"
+      ? "locator"
+      : "scenic";
   const shouldDownload = request.nextUrl.searchParams.get("download") === "1";
 
   try {
-    const image = await renderOwnedPropertyImage(snapshot, size, view);
+    const image =
+      view === "virtual"
+        ? await renderLunaScapeVirtualImage(snapshot, size)
+        : await renderOwnedPropertyImage(snapshot, size, view);
     const filename =
-      view === "locator"
+      view === "virtual"
+        ? `${safeFilename(snapshot.propertyId)}-your-lunascape-property.png`
+        : view === "locator"
         ? `${safeFilename(snapshot.propertyId)}-parcel-locator.png`
-        : `${safeFilename(snapshot.propertyId)}-lunascape-scenic-view.png`;
+        : `${safeFilename(snapshot.propertyId)}-your-place-on-the-moon.png`;
 
     return new NextResponse(new Uint8Array(image), {
       status: 200,

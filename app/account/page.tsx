@@ -81,6 +81,10 @@ export default async function AccountPage() {
     (sum, order) => sum + order.amountPaid,
     0
   );
+  const currentOrders = orders.filter((order) => order.propertySnapshot);
+  const historicalOrders = orders.filter((order) => !order.propertySnapshot);
+  const currentPropertyIds = currentOrders.map((order) => order.propertyId);
+  const primaryCurrentOrder = currentOrders[0];
 
   return (
     <main
@@ -151,14 +155,14 @@ export default async function AccountPage() {
           >
             View HOA Membership
           </a>
-          {orders.length > 0 && (
+          {primaryCurrentOrder && (
             <a
-              href={`/moon-map?property=${orders[0].propertyId}&owned=${orders
-                .map((order) => order.propertyId)
-                .join(",")}`}
+              href={`/moon-map?property=${encodeURIComponent(
+                primaryCurrentOrder.propertyId
+              )}&owned=${encodeURIComponent(currentPropertyIds.join(","))}`}
               className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
             >
-              Explore My Properties
+              Explore My Current Properties
             </a>
           )}
           <a
@@ -173,71 +177,184 @@ export default async function AccountPage() {
           <p className="mt-10 text-gray-400">No purchases found.</p>
         ) : (
           <>
-            <section className="mt-16">
-              <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                  <p className="text-sm font-bold uppercase tracking-[0.3em] text-yellow-400">
-                    LunaScape
+            {currentOrders.length > 0 && (
+              <section className="mt-16">
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-bold uppercase tracking-[0.3em] text-yellow-400">
+                      LunaScape
+                    </p>
+                    <h2 className="mt-2 text-3xl font-black uppercase text-white">
+                      Current LunaScape Properties
+                    </h2>
+                  </div>
+                  <p className="max-w-xl text-sm text-gray-400">
+                    Each current property includes two customer images: Your Place
+                    on the Moon and Your LunaScape Property.
                   </p>
-                  <h2 className="mt-2 text-3xl font-black uppercase text-white">
-                    My Owned Properties
-                  </h2>
                 </div>
-                <p className="max-w-xl text-sm text-gray-400">
-                  Each property now includes a shareable scenic portrait made from
-                  real LROC terrain plus an exact parcel locator.
-                </p>
-              </div>
 
-              <div className="mt-8 grid gap-7 lg:grid-cols-2">
-                {orders.map((order) => {
-                  const allocation = allocationByCertificate.get(
-                    order.certificateNumber
-                  );
-                  const snapshot = order.propertySnapshot;
-                  const location = snapshot?.locationLabel || order.lunarState;
+                <div className="mt-8 grid gap-8">
+                  {currentOrders.map((order) => {
+                    const allocation = allocationByCertificate.get(
+                      order.certificateNumber
+                    );
+                    const snapshot = order.propertySnapshot!;
+                    const location = snapshot.locationLabel || order.lunarState;
+                    const certificateQuery = encodeURIComponent(
+                      order.certificateNumber
+                    );
 
-                  return (
-                    <article
-                      key={`property-${order.id}`}
-                      className="overflow-hidden rounded-3xl border border-white/20 bg-white/5 transition hover:border-yellow-400 hover:bg-yellow-400/5"
-                    >
-                      {snapshot ? (
+                    return (
+                      <article
+                        key={`current-property-${order.id}`}
+                        className="overflow-hidden rounded-3xl border border-white/20 bg-white/5 transition hover:border-yellow-400"
+                      >
                         <LunaScapeImageGallery
                           snapshotId={snapshot.id}
                           propertyId={order.propertyId}
                           compact
                           showDescription={false}
                         />
-                      ) : (
-                        <div className="flex aspect-[8/5] items-center justify-center bg-slate-950 p-8 text-center">
-                          <div>
-                            <p className="text-lg font-black text-yellow-400">
-                              Property image preparation pending
+
+                        <div className="border-t border-white/10 p-6">
+                          <div className="flex flex-wrap items-center justify-between gap-3">
+                            <span className="rounded-full bg-yellow-400 px-4 py-1 text-sm font-black text-black">
+                              {order.propertyType}
+                            </span>
+                            <span className="rounded-full border border-green-500/70 px-3 py-1 text-xs font-black uppercase text-green-300">
+                              Current · Owned
+                            </span>
+                          </div>
+
+                          <p className="mt-5 break-words text-2xl font-black text-yellow-400">
+                            {order.propertyId}
+                          </p>
+                          <p className="mt-2 text-gray-300">{location}</p>
+
+                          <div className="mt-5 grid gap-3 rounded-2xl border border-white/10 bg-black/30 p-4 sm:grid-cols-2">
+                            <p>
+                              <span className="block text-xs font-bold uppercase text-gray-500">
+                                Certificate
+                              </span>
+                              <span className="mt-1 block break-all font-bold">
+                                {order.certificateNumber}
+                              </span>
                             </p>
-                            <p className="mt-2 text-sm text-gray-400">
-                              Your property and documents remain fully recorded.
+                            <p>
+                              <span className="block text-xs font-bold uppercase text-gray-500">
+                                Purchased
+                              </span>
+                              <span className="mt-1 block font-bold">
+                                {order.createdAt.toLocaleDateString()}
+                              </span>
                             </p>
                           </div>
-                        </div>
-                      )}
 
-                      <div className="p-6">
+                          {allocation && (
+                            <div className="mt-4 rounded-2xl border border-yellow-400/40 bg-yellow-400/10 p-4">
+                              <p className="text-sm font-bold uppercase text-yellow-400">
+                                Assigned Acre Range
+                              </p>
+                              <p className="mt-2 text-xl font-black text-yellow-400">
+                                Acre {allocation.startingAcre.toLocaleString()}
+                                {allocation.startingAcre !== allocation.endingAcre
+                                  ? ` - ${allocation.endingAcre.toLocaleString()}`
+                                  : ""}
+                              </p>
+                            </div>
+                          )}
+
+                          <div className="mt-6 flex flex-wrap gap-3">
+                            <a
+                              href={`/moon-map?property=${encodeURIComponent(
+                                order.propertyId
+                              )}&owned=${encodeURIComponent(order.propertyId)}`}
+                              className="rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
+                            >
+                              View on Moon Map
+                            </a>
+                            <a
+                              href={`/verify/${order.certificateNumber}`}
+                              className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
+                            >
+                              Verify Certificate
+                            </a>
+                            <a
+                              href={`/api/generate-deed?certificateNumber=${certificateQuery}`}
+                              className="rounded-xl border border-white/30 px-5 py-3 font-black text-white"
+                            >
+                              Download Deed
+                            </a>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+
+            {historicalOrders.length > 0 && (
+              <section className="mt-16">
+                <div className="flex flex-wrap items-end justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-bold uppercase tracking-[0.3em] text-cyan-300">
+                      Ownership Registry
+                    </p>
+                    <h2 className="mt-2 text-3xl font-black uppercase text-white">
+                      Historical Property Records
+                    </h2>
+                  </div>
+                  <p className="max-w-2xl text-sm text-gray-400">
+                    These properties were purchased under an earlier LunaSphere
+                    geography. Their ownership and documents remain fully recorded,
+                    but they are not represented as current-grid LunaScape parcels.
+                  </p>
+                </div>
+
+                <div className="mt-8 grid gap-6 lg:grid-cols-2">
+                  {historicalOrders.map((order) => {
+                    const allocation = allocationByCertificate.get(
+                      order.certificateNumber
+                    );
+                    const certificateQuery = encodeURIComponent(
+                      order.certificateNumber
+                    );
+
+                    return (
+                      <article
+                        key={`historical-property-${order.id}`}
+                        className="rounded-3xl border border-cyan-300/30 bg-cyan-950/10 p-6"
+                      >
                         <div className="flex flex-wrap items-center justify-between gap-3">
-                          <span className="rounded-full bg-yellow-400 px-4 py-1 text-sm font-black text-black">
+                          <span className="rounded-full border border-cyan-300/50 bg-cyan-400/10 px-4 py-1 text-sm font-black text-cyan-200">
                             {order.propertyType}
                           </span>
-                          <span className="rounded-full border border-green-500/70 px-3 py-1 text-xs font-black uppercase text-green-300">
-                            Owned
+                          <span className="rounded-full border border-white/20 px-3 py-1 text-xs font-black uppercase text-gray-300">
+                            Historical · Recorded
                           </span>
                         </div>
 
-                        <p className="mt-5 break-words text-2xl font-black text-yellow-400">
+                        <p className="mt-5 break-words text-2xl font-black text-cyan-200">
                           {order.propertyId}
                         </p>
-                        <p className="mt-2 text-gray-300">{location}</p>
+                        <p className="mt-2 text-gray-300">{order.lunarState}</p>
 
-                        <div className="mt-5 grid gap-3 rounded-2xl border border-white/10 bg-black/30 p-4 sm:grid-cols-2">
+                        <div className="mt-5 rounded-2xl border border-cyan-300/20 bg-black/30 p-5">
+                          <p className="font-black text-white">
+                            Historical LunaSphere property record
+                          </p>
+                          <p className="mt-2 text-sm leading-relaxed text-gray-400">
+                            This property predates the currently active parcel grid.
+                            Its original certificate, purchase record, deed, and HOA
+                            materials remain valid within your Orbital One registry.
+                            An exact current-grid LunaScape image is intentionally not
+                            generated for this record.
+                          </p>
+                        </div>
+
+                        <div className="mt-5 grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 sm:grid-cols-2">
                           <p>
                             <span className="block text-xs font-bold uppercase text-gray-500">
                               Certificate
@@ -257,47 +374,40 @@ export default async function AccountPage() {
                         </div>
 
                         {allocation && (
-                          <div className="mt-4 rounded-2xl border border-yellow-400/40 bg-yellow-400/10 p-4">
-                            <p className="text-sm font-bold uppercase text-yellow-400">
-                              Assigned Acre Range
-                            </p>
-                            <p className="mt-2 text-xl font-black text-yellow-400">
-                              Acre {allocation.startingAcre.toLocaleString()}
-                              {allocation.startingAcre !== allocation.endingAcre
-                                ? ` - ${allocation.endingAcre.toLocaleString()}`
-                                : ""}
-                            </p>
-                          </div>
+                          <p className="mt-4 font-bold text-yellow-400">
+                            Assigned Acre Range: Acre {allocation.startingAcre.toLocaleString()}
+                            {allocation.startingAcre !== allocation.endingAcre
+                              ? ` through ${allocation.endingAcre.toLocaleString()}`
+                              : ""}
+                          </p>
                         )}
 
                         <div className="mt-6 flex flex-wrap gap-3">
                           <a
-                            href={`/explore/${order.propertyId}`}
-                            className="rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
+                            href={`/verify/${order.certificateNumber}`}
+                            className="rounded-xl bg-cyan-300 px-5 py-3 font-black text-slate-950"
                           >
-                            View Property
+                            Verify Certificate
                           </a>
                           <a
-                            href={`/moon-map?property=${encodeURIComponent(order.propertyId)}&owned=${encodeURIComponent(order.propertyId)}`}
-                            className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
+                            href={`/api/generate-deed?certificateNumber=${certificateQuery}`}
+                            className="rounded-xl border border-cyan-300/60 px-5 py-3 font-black text-cyan-200"
                           >
-                            View on Moon Map
+                            Download Deed
                           </a>
-                          {snapshot && (
-                            <a
-                              href={`/api/property-image/${snapshot.id}?view=scenic&download=1`}
-                              className="rounded-xl border border-white/30 px-5 py-3 font-black text-white"
-                            >
-                              Download Scenic View
-                            </a>
-                          )}
+                          <a
+                            href={`#documents-${order.id}`}
+                            className="rounded-xl border border-white/25 px-5 py-3 font-black text-white"
+                          >
+                            View Ownership Documents
+                          </a>
                         </div>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            </section>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
 
             <section className="mt-16">
               <h2 className="text-3xl font-black uppercase text-yellow-400">
@@ -315,8 +425,9 @@ export default async function AccountPage() {
 
                   return (
                     <div
+                      id={`documents-${order.id}`}
                       key={order.id}
-                      className="rounded-3xl border border-white/20 bg-white/5 p-6"
+                      className="scroll-mt-24 rounded-3xl border border-white/20 bg-white/5 p-6"
                     >
                       <p className="text-2xl font-black text-yellow-400">
                         {order.certificateNumber}
@@ -370,14 +481,6 @@ export default async function AccountPage() {
                             className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
                           >
                             Lunar Passport
-                          </a>
-                        )}
-                        {order.propertySnapshot && (
-                          <a
-                            href={`/api/property-image/${order.propertySnapshot.id}?view=scenic&download=1`}
-                            className="rounded-xl border border-white/30 px-5 py-3 font-black text-white"
-                          >
-                            Scenic Property View
                           </a>
                         )}
                       </div>

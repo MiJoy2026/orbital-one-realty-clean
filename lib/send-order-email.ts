@@ -83,10 +83,10 @@ export async function sendOrderEmail({
               item.propertySnapshotId
                 ? `<li><a href="${appUrl}/api/property-image/${encodeURIComponent(
                     item.propertySnapshotId
-                  )}?view=scenic&download=1">Download Your LunaScape Scenic View</a></li>
+                  )}?view=scenic&download=1&v=exact-parcel-3">Download Your Place on the Moon</a></li>
                    <li><a href="${appUrl}/api/property-image/${encodeURIComponent(
                     item.propertySnapshotId
-                  )}?view=locator&download=1">Download Your Exact Parcel Locator</a></li>`
+                  )}?view=virtual&download=1&v=virtual-scene-1">Download Your LunaScape Property</a></li>`
                 : ""
             }
             ${
