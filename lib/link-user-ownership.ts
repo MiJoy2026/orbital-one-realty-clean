@@ -13,10 +13,20 @@ export async function linkUserOwnershipByEmail(
   await prisma.$transaction([
     prisma.order.updateMany({
       where: {
-        userId: null,
         OR: [
-          { email: { equals: email, mode: "insensitive" } },
-          { recipientEmail: { equals: email, mode: "insensitive" } },
+          {
+            recipientEmail: {
+              equals: email,
+              mode: "insensitive",
+            },
+          },
+          {
+            email: {
+              equals: email,
+              mode: "insensitive",
+            },
+            isGift: false,
+          },
         ],
       },
       data: {
@@ -25,7 +35,6 @@ export async function linkUserOwnershipByEmail(
     }),
     prisma.member.updateMany({
       where: {
-        userId: null,
         email: {
           equals: email,
           mode: "insensitive",

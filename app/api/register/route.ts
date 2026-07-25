@@ -1,66 +1,147 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 
+import {
+  customerClaimMatchesCurrentCredentials,
+  verifyCustomerClaimToken,
+} from "../../../lib/customer-access-token";
 import { linkUserOwnershipByEmail } from "../../../lib/link-user-ownership";
 import { prisma } from "../../../lib/prisma";
 import { createSession } from "../../../lib/session";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function registrationUrl(
+  request: Request,
+  token: string,
+  error: string
+): URL {
+  const url = new URL("/register", request.url);
+
+  if (token) {
+    url.searchParams.set("token", token);
+  }
+
+  url.searchParams.set("error", error);
+  return url;
+}
 
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
+    const token = String(formData.get("token") || "").trim();
     const name = String(formData.get("name") || "").trim();
-    const email = String(formData.get("email") || "")
-      .trim()
-      .toLowerCase();
     const password = String(formData.get("password") || "");
+    const confirmPassword = String(
+      formData.get("confirmPassword") || ""
+    );
 
-    if (!name || !email || !password) {
-      return new NextResponse("Missing required fields.", { status: 400 });
+    if (
+      !token ||
+      !name ||
+      password.length < 8 ||
+      password !== confirmPassword
+    ) {
+      return NextResponse.redirect(
+        registrationUrl(request, token, "password"),
+        303
+      );
     }
 
-    if (!EMAIL_PATTERN.test(email)) {
-      return new NextResponse("Please enter a valid email address.", {
-        status: 400,
-      });
+    let claim;
+
+    try {
+      claim = await verifyCustomerClaimToken(token);
+    } catch {
+      return NextResponse.redirect(
+        registrationUrl(request, "", "invalid"),
+        303
+      );
     }
 
-    if (password.length < 8) {
-      return new NextResponse(
-        "Password must contain at least 8 characters.",
-        { status: 400 }
+    const paidOrder = await prisma.order.findFirst({
+      where: {
+        paymentStatus: {
+          equals: "Paid",
+          mode: "insensitive",
+        },
+        OR: [
+          {
+            recipientEmail: {
+              equals: claim.email,
+              mode: "insensitive",
+            },
+          },
+          {
+            email: {
+              equals: claim.email,
+              mode: "insensitive",
+            },
+            isGift: false,
+          },
+        ],
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (!paidOrder) {
+      return NextResponse.redirect(
+        registrationUrl(request, "", "invalid"),
+        303
       );
     }
 
     const existingUser = await prisma.user.findUnique({
       where: {
-        email,
+        email: claim.email,
+      },
+      select: {
+        id: true,
+        passwordHash: true,
       },
     });
 
-    if (existingUser) {
-      return new NextResponse(
-        "An account already exists with this email.",
-        { status: 409 }
+    if (
+      !customerClaimMatchesCurrentCredentials(
+        existingUser?.passwordHash,
+        claim.credentialVersion
+      )
+    ) {
+      return NextResponse.redirect(
+        registrationUrl(request, token, "used"),
+        303
       );
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await prisma.user.create({
-      data: {
-        name,
-        email,
-        passwordHash,
-      },
-    });
+    const verifiedAt = new Date();
 
-    await linkUserOwnershipByEmail(user.id, email);
+    const user = existingUser
+      ? await prisma.user.update({
+          where: {
+            id: existingUser.id,
+          },
+          data: {
+            name,
+            passwordHash,
+            emailVerifiedAt: verifiedAt,
+          },
+        })
+      : await prisma.user.create({
+          data: {
+            name,
+            email: claim.email,
+            passwordHash,
+            emailVerifiedAt: verifiedAt,
+          },
+        });
+
+    await linkUserOwnershipByEmail(user.id, claim.email);
     await createSession(user.id);
 
     return NextResponse.redirect(new URL("/account", request.url), 303);
   } catch (error) {
-    console.error("[Orbital One] Registration failed.", error);
-    return new NextResponse("Registration failed.", { status: 500 });
+    console.error("[Orbital One] Secure account activation failed.", error);
+    return new NextResponse("Account activation failed.", { status: 500 });
   }
 }

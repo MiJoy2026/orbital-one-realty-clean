@@ -19,26 +19,21 @@ export default async function AccountPage() {
     redirect("/login");
   }
 
+  if (!user.emailVerifiedAt) {
+    redirect("/account-access");
+  }
+
   const [member, orders] = await Promise.all([
     prisma.member.findUnique({
       where: { email: user.email },
     }),
     prisma.order.findMany({
       where: {
+        userId: user.id,
         paymentStatus: {
           equals: "Paid",
           mode: "insensitive",
         },
-        OR: [
-          { userId: user.id },
-          { email: { equals: user.email, mode: "insensitive" } },
-          {
-            recipientEmail: {
-              equals: user.email,
-              mode: "insensitive",
-            },
-          },
-        ],
       },
       include: {
         propertySnapshot: true,

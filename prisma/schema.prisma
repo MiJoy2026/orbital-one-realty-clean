@@ -192,14 +192,15 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  email        String   @unique
-  passwordHash String
+  email           String    @unique
+  passwordHash    String
+  emailVerifiedAt DateTime?
 
-  name         String?
+  name            String?
 
   orders       Order[]
   members Member[]
-  
+
 }
 model Member {
   id            String   @id @default(cuid())

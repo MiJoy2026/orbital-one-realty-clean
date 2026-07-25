@@ -257,16 +257,16 @@ export async function fulfillStripeCheckoutSession(
             );
           }
 
-          const [purchaserUser, memberUser] = await Promise.all([
-            transaction.user.findUnique({
-              where: { email: purchaserEmail },
-              select: { id: true },
-            }),
-            transaction.user.findUnique({
-              where: { email: memberEmail },
-              select: { id: true },
-            }),
-          ]);
+          const memberUser = await transaction.user.findUnique({
+            where: { email: memberEmail },
+            select: {
+              id: true,
+              emailVerifiedAt: true,
+            },
+          });
+          const verifiedMemberUserId = memberUser?.emailVerifiedAt
+            ? memberUser.id
+            : null;
           const firstCertificate = createCertificateNumber(
             session.id,
             metadataPropertyIds[0]
@@ -277,7 +277,7 @@ export async function fulfillStripeCheckoutSession(
             update: {
               name: deedName,
               activatedAt: new Date(),
-              ...(memberUser?.id ? { userId: memberUser.id } : {}),
+              ...(verifiedMemberUserId ? { userId: verifiedMemberUserId } : {}),
             },
             create: {
               name: deedName,
@@ -285,7 +285,7 @@ export async function fulfillStripeCheckoutSession(
               hoaNumber: createHoaNumber(firstCertificate),
               charterMember: true,
               activatedAt: new Date(),
-              userId: memberUser?.id || null,
+              userId: verifiedMemberUserId,
             },
           });
 
@@ -397,7 +397,7 @@ export async function fulfillStripeCheckoutSession(
                 amountPaid: itemAmount,
                 paymentStatus: "Paid",
                 email: purchaserEmail,
-                userId: purchaserUser?.id || memberUser?.id || null,
+                userId: verifiedMemberUserId,
                 passportPurchased,
                 isGift,
                 recipientEmail: isGift ? recipientEmail || null : null,
@@ -522,6 +522,7 @@ export async function fulfillStripeCheckoutSession(
           )
         ),
         deedName,
+        accountEmail: memberEmail,
         amountPaid: session.amount_total ? session.amount_total / 100 : 0,
         passportPurchased,
         giftMessage,

@@ -5,6 +5,12 @@ import { linkUserOwnershipByEmail } from "../../../lib/link-user-ownership";
 import { prisma } from "../../../lib/prisma";
 import { createSession } from "../../../lib/session";
 
+function loginErrorUrl(request: Request, error: string): URL {
+  const url = new URL("/login", request.url);
+  url.searchParams.set("error", error);
+  return url;
+}
+
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -14,7 +20,10 @@ export async function POST(request: Request) {
     const password = String(formData.get("password") || "");
 
     if (!email || !password) {
-      return new NextResponse("Missing email or password.", { status: 400 });
+      return NextResponse.redirect(
+        loginErrorUrl(request, "invalid"),
+        303
+      );
     }
 
     const user = await prisma.user.findUnique({
@@ -24,13 +33,26 @@ export async function POST(request: Request) {
     });
 
     if (!user) {
-      return new NextResponse("Invalid email or password.", { status: 401 });
+      return NextResponse.redirect(
+        loginErrorUrl(request, "invalid"),
+        303
+      );
     }
 
     const passwordIsValid = await bcrypt.compare(password, user.passwordHash);
 
     if (!passwordIsValid) {
-      return new NextResponse("Invalid email or password.", { status: 401 });
+      return NextResponse.redirect(
+        loginErrorUrl(request, "invalid"),
+        303
+      );
+    }
+
+    if (!user.emailVerifiedAt) {
+      return NextResponse.redirect(
+        loginErrorUrl(request, "access"),
+        303
+      );
     }
 
     await linkUserOwnershipByEmail(user.id, user.email);
