@@ -1,6 +1,7 @@
 import { CartProvider } from "@/context/CartContext";
 import CartButton from "@/components/CartButton";
 import SiteFooter from "@/components/SiteFooter";
+import GoogleAnalytics from "@/components/GoogleAnalytics";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -81,6 +82,7 @@ export default async function RootLayout({
     <html lang="en">
       <body>
         <CartProvider>
+          <GoogleAnalytics />
           <nav className="sticky top-0 z-50 border-b border-yellow-400/20 bg-black/95 text-white backdrop-blur">
             <div className="mx-auto max-w-7xl px-6">
               <div className="flex items-center justify-between gap-4 py-1">

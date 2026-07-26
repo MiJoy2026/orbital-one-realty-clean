@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { LEGAL_POLICY_VERSION } from "@/lib/legal-config";
+import { sendAnalyticsEvent } from "@/lib/analytics";
 import {
   ADDITIONAL_DEED_NAME_PRICE_CENTS,
   formatUsdFromCents,
@@ -130,6 +131,52 @@ export default function StripeCheckoutButton({
         );
         return;
       }
+
+      const analyticsItems = [
+        {
+          item_id: "novelty-lunar-property",
+          item_name: "Novelty Lunar Property",
+          item_category: "Novelty lunar property",
+          price:
+            propertyCount > 0
+              ? Number(
+                  (
+                    propertySubtotalCents /
+                    100 /
+                    propertyCount
+                  ).toFixed(2)
+                )
+              : 0,
+          quantity: propertyCount,
+        },
+      ];
+
+      if (passportSelected) {
+        analyticsItems.push({
+          item_id: "novelty-lunar-passport",
+          item_name: "Novelty Lunar Passport",
+          item_category: "Optional purchase add-on",
+          price: PASSPORT_PRICE_CENTS / 100,
+          quantity: propertyCount,
+        });
+      }
+
+      if (additionalDeedNames.length > 0) {
+        analyticsItems.push({
+          item_id: "additional-deed-name",
+          item_name: "Additional Deed Name",
+          item_category: "Personalization add-on",
+          price: ADDITIONAL_DEED_NAME_PRICE_CENTS / 100,
+          quantity:
+            additionalDeedNames.length * propertyCount,
+        });
+      }
+
+      sendAnalyticsEvent("begin_checkout", {
+        currency: "USD",
+        value: Number((checkoutTotalCents / 100).toFixed(2)),
+        items: analyticsItems,
+      });
 
       window.location.assign(data.url);
     } catch (error) {

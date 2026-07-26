@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import PropertyConfigurator from "@/components/PropertyConfigurator/PropertyConfigurator";
 import { useCart, type CartItem } from "@/context/CartContext";
+import { sendAnalyticsEvent } from "@/lib/analytics";
 import {
   ADDITIONAL_DEED_NAME_PRICE,
   ADDITIONAL_RURAL_ACRE_PRICE,
@@ -191,6 +192,20 @@ export default function PricingPage() {
   }, [selectedProduct, form]);
 
   const openConfigurator = (product: Product) => {
+    sendAnalyticsEvent("view_item", {
+      currency: "USD",
+      value: Number(product.price.toFixed(2)),
+      items: [
+        {
+          item_id: product.sku,
+          item_name: product.name,
+          item_category: product.category,
+          price: Number(product.price.toFixed(2)),
+          quantity: 1,
+        },
+      ],
+    });
+
     setSelectedProduct(product);
     setForm(initialForm);
     setFormError("");
@@ -297,6 +312,21 @@ export default function PricingPage() {
       };
 
       addItem(cartItem);
+
+      sendAnalyticsEvent("add_to_cart", {
+        currency: "USD",
+        value: Number(configuredTotal.toFixed(2)),
+        items: [
+          {
+            item_id: selectedProduct.sku,
+            item_name: selectedProduct.name,
+            item_category: selectedProduct.category,
+            price: Number(configuredTotal.toFixed(2)),
+            quantity: 1,
+          },
+        ],
+      });
+
       setAssignedProperty(property);
 
       setAddedMessage(

@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { calculateCartItemTotal, type CartItem } from "@/context/CartContext";
 import { LEGAL_POLICY_VERSION } from "@/lib/legal-config";
+import { sendAnalyticsEvent } from "@/lib/analytics";
 
 export default function QuickPickCheckoutButton({
   item,
@@ -77,6 +78,23 @@ export default function QuickPickCheckoutButton({
         );
         return;
       }
+
+      sendAnalyticsEvent("begin_checkout", {
+        currency: "USD",
+        value: Number(checkoutTotal.toFixed(2)),
+        items: [
+          {
+            item_id: item.propertyType
+              .toLowerCase()
+              .replace(/[^a-z0-9]+/g, "-")
+              .replace(/^-|-$/g, ""),
+            item_name: item.category || item.propertyType,
+            item_category: item.propertyType,
+            price: Number(checkoutTotal.toFixed(2)),
+            quantity: 1,
+          },
+        ],
+      });
 
       window.location.assign(data.url);
     } catch (error) {

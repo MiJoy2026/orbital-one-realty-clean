@@ -1,5 +1,5 @@
-export const LEGAL_POLICY_VERSION = "2026-07-25";
-export const LEGAL_EFFECTIVE_DATE = "July 25, 2026";
+export const LEGAL_POLICY_VERSION = "2026-07-26-ga4";
+export const LEGAL_EFFECTIVE_DATE = "July 26, 2026";
 
 export const LEGAL_ENTITY = {
   legalName: "MiJoy Enterprises LLC",

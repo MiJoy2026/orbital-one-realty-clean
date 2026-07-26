@@ -3,6 +3,7 @@ import Stripe from "stripe";
 
 import ClearCartCookie from "../../components/ClearCartCookie";
 import LunaScapeImageGallery from "../../components/LunaScapeImageGallery";
+import PurchaseAnalytics from "../../components/PurchaseAnalytics";
 import { fulfillStripeCheckoutSession } from "../../lib/fulfillment-service";
 import { createOrderAccessToken } from "../../lib/order-access-token";
 import { prisma } from "../../lib/prisma";
@@ -133,6 +134,17 @@ export default async function SuccessPage({
     (sum, order) => sum + order.amountPaid,
     0
   );
+
+  const purchaseAnalyticsItems = orders.map((order) => ({
+    item_id: order.propertyType
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, ""),
+    item_name: order.propertyType,
+    item_category: "Novelty lunar property",
+    price: Number(order.amountPaid.toFixed(2)),
+    quantity: 1,
+  }));
   const totalRuralAcreage = orders.reduce(
     (sum, order) => sum + (order.acreagePurchased || 0),
     0
@@ -156,6 +168,12 @@ export default async function SuccessPage({
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
       <ClearCartCookie />
+
+      <PurchaseAnalytics
+        transactionId={session.id}
+        value={Number(totalPaid.toFixed(2))}
+        items={purchaseAnalyticsItems}
+      />
       <div className="mx-auto max-w-6xl text-center">
         <p className="text-sm font-bold uppercase tracking-[0.35em] text-yellow-400">
           Purchase Complete

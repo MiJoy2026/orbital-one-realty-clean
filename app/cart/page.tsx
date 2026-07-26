@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import QuickPickCheckoutButton from "@/components/QuickPickCheckoutButton";
 import { useCart } from "@/context/CartContext";
+import { sendAnalyticsEvent } from "@/lib/analytics";
 
 function formatLocation(input: {
   lunarState?: string;
@@ -129,7 +130,29 @@ export default function CartPage() {
                           </Link>
                           <button
                             type="button"
-                            onClick={() => removeItem(item.id)}
+                            onClick={() => {
+                              const itemValue = getItemTotal(item);
+
+                              sendAnalyticsEvent("remove_from_cart", {
+                                currency: "USD",
+                                value: Number(itemValue.toFixed(2)),
+                                items: [
+                                  {
+                                    item_id: item.propertyType
+                                      .toLowerCase()
+                                      .replace(/[^a-z0-9]+/g, "-")
+                                      .replace(/^-|-$/g, ""),
+                                    item_name:
+                                      item.category || item.propertyType,
+                                    item_category: item.propertyType,
+                                    price: Number(itemValue.toFixed(2)),
+                                    quantity: 1,
+                                  },
+                                ],
+                              });
+
+                              removeItem(item.id);
+                            }}
                             className="rounded-xl border border-red-400/25 px-4 py-2 text-sm font-black text-red-200"
                           >
                             Release & Remove
