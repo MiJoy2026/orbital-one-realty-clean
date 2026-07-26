@@ -1,7 +1,43 @@
 import AttractionGallery from "@/components/AttractionGallery";
+import JsonLd from "@/components/JsonLd";
+import type { Metadata } from "next";
 import Image from "next/image";
+import { notFound } from "next/navigation";
 import { lunarAttractions } from "../../../lib/lunar-attractions";
 import { getNearbyPropertiesForAttraction } from "../../../lib/attraction-service";
+import { ORGANIZATION_ID, SITE_URL, createPageMetadata, truncateDescription } from "../../../lib/seo";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ attractionId: string }>;
+}): Promise<Metadata> {
+  const { attractionId } = await params;
+  const attraction = lunarAttractions.find(
+    (item) => item.id.toLowerCase() === attractionId.toLowerCase()
+  );
+
+  if (!attraction) {
+    return createPageMetadata({
+      title: "Moon Landmark Not Found | Orbital One Realty",
+      description: "The requested LunaSphere Moon landmark could not be found.",
+      path: `/attractions/${encodeURIComponent(attractionId)}`,
+      noIndex: true,
+      follow: false,
+    });
+  }
+
+  return createPageMetadata({
+    title: `${attraction.name}: Moon Landmark Guide | Orbital One Realty`,
+    description: truncateDescription(
+      `${attraction.description} Explore its history, facts, LunaSphere location, imagery, and nearby novelty lunar property.`
+    ),
+    path: `/attractions/${encodeURIComponent(attraction.id)}`,
+    image: attraction.image,
+    imageAlt: `${attraction.name} on the Moon`,
+    type: "article",
+  });
+}
 
 export default async function AttractionDetailPage({
   params,
@@ -15,17 +51,55 @@ export default async function AttractionDetailPage({
   );
 
   if (!attraction) {
-    return (
-      <main className="min-h-screen bg-black px-6 py-20 text-white">
-        <h1 className="text-5xl font-black">Attraction Not Found</h1>
-      </main>
-    );
+    notFound();
   }
 
   const nearbyProperties = await getNearbyPropertiesForAttraction(attraction.id, 6);
 
+  const canonicalUrl = `${SITE_URL}/attractions/${encodeURIComponent(
+    attraction.id
+  )}`;
+  const structuredData = [
+    {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+        {
+          "@type": "ListItem",
+          position: 2,
+          name: "Explore the Moon",
+          item: `${SITE_URL}/explore`,
+        },
+        {
+          "@type": "ListItem",
+          position: 3,
+          name: attraction.name,
+          item: canonicalUrl,
+        },
+      ],
+    },
+    {
+      "@context": "https://schema.org",
+      "@type": "Article",
+      headline: attraction.name,
+      description: attraction.description,
+      image: `${SITE_URL}${attraction.image}`,
+      mainEntityOfPage: canonicalUrl,
+      about: {
+        "@type": "Place",
+        name: attraction.name,
+        description: attraction.description,
+      },
+      publisher: { "@id": ORGANIZATION_ID },
+      author: { "@id": ORGANIZATION_ID },
+      inLanguage: "en-US",
+    },
+  ];
+
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
+      <JsonLd data={structuredData} />
       <div className="mx-auto max-w-6xl">
         <Image
           src={attraction.image}

@@ -3,12 +3,16 @@ import Image from "next/image";
 import Link from "next/link";
 import { lunarAttractions } from "@/lib/lunar-attractions";
 import { lunarStateDetails } from "@/lib/lunar-state-details";
+import { createPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
-  title: "Explore the Moon | Orbital One Realty",
+export const metadata: Metadata = createPageMetadata({
+  title: "Explore the Moon: States, Towns & Landmarks | Orbital One",
   description:
-    "Explore the Orbital One LunaSphere: 57 lunar states, 171 cities, 1,140 towns, famous Moon attractions, rural parcels, and the future LunaScape experience.",
-};
+    "Explore the LunaSphere Moon atlas with 57 lunar states, 171 cities, 1,140 towns, famous Moon landmarks, rural parcels, and novelty lunar property paths.",
+  path: "/explore",
+  image: "/atlas/moon-atlas-v2.jpg",
+  imageAlt: "LunaSphere Moon atlas with lunar states, cities, towns, and landmarks",
+});
 
 const ownershipPaths = [
   {

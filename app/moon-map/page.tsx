@@ -4,6 +4,17 @@ import {
 } from "../../lib/property-service";
 import LunarLeafletMap from "@/components/LunarLeafletMapClient";
 import { getPublicGeographySnapshot } from "@/lib/lunasphere-geography-store";
+import type { Metadata } from "next";
+import { createPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Interactive Moon Map & Lunar Property Atlas | Orbital One Realty",
+  description:
+    "Use the interactive LunaSphere Moon map to search 57 lunar states, 171 cities, 1,140 towns, famous landmarks, and available novelty lunar property.",
+  path: "/moon-map",
+  image: "/atlas/moon-atlas-v2.jpg",
+  imageAlt: "Interactive LunaSphere Moon map and lunar property atlas",
+});
 
 export const dynamic = "force-dynamic";
 

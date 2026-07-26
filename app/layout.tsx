@@ -7,10 +7,66 @@ import Link from "next/link";
 import "./globals.css";
 
 import { getSessionUserId } from "@/lib/session";
+import {
+  DEFAULT_SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_URL,
+} from "@/lib/seo";
 
 export const metadata: Metadata = {
-  title: "Orbital One Realty",
-  description: "Novelty lunar property by Orbital One Realty",
+  metadataBase: new URL(SITE_URL),
+  title: "Novelty Moon Property Gifts & Lunar Land Deeds | Orbital One Realty",
+  description: DEFAULT_SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  authors: [{ name: "MiJoy Enterprises LLC" }],
+  creator: "MiJoy Enterprises LLC",
+  publisher: "MiJoy Enterprises LLC",
+  category: "Novelty gifts and entertainment",
+  referrer: "origin-when-cross-origin",
+  formatDetection: {
+    email: false,
+    address: false,
+    telephone: false,
+  },
+  verification: {
+    google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
+    other: process.env.BING_SITE_VERIFICATION
+      ? { "msvalidate.01": process.env.BING_SITE_VERIFICATION }
+      : undefined,
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1,
+    },
+  },
+  openGraph: {
+    type: "website",
+    locale: "en_US",
+    siteName: SITE_NAME,
+    title: "Novelty Moon Property Gifts & Lunar Land Deeds",
+    description: DEFAULT_SITE_DESCRIPTION,
+    url: SITE_URL,
+    images: [
+      {
+        url: "/opengraph-image",
+        width: 1200,
+        height: 630,
+        alt: "Orbital One Realty novelty lunar property and LunaSphere Moon atlas",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Novelty Moon Property Gifts & Lunar Land Deeds",
+    description: DEFAULT_SITE_DESCRIPTION,
+    images: ["/opengraph-image"],
+  },
 };
 
 export default async function RootLayout({

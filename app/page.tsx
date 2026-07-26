@@ -1,4 +1,67 @@
+import type { Metadata } from "next";
 import Image from "next/image";
+
+import JsonLd from "@/components/JsonLd";
+import {
+  ORGANIZATION_ID,
+  SITE_NAME,
+  SITE_URL,
+  WEBSITE_ID,
+  createPageMetadata,
+} from "@/lib/seo";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Novelty Moon Property Gifts & Lunar Land Deeds | Orbital One Realty",
+  description:
+    "Choose a novelty Moon property gift from Orbital One Realty. Explore lunar acres, town blocks, and city blocks with personalized digital deeds and LunaSphere map access.",
+  path: "/",
+  image: "/opengraph-image",
+  imageAlt: "Orbital One Realty novelty Moon property gifts",
+});
+
+const homeStructuredData = [
+  {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "@id": ORGANIZATION_ID,
+    name: SITE_NAME,
+    legalName: "MiJoy Enterprises LLC",
+    url: SITE_URL,
+    logo: `${SITE_URL}/orbital-one-logo.png`,
+    email: "mijoyenterprises@gmail.com",
+    address: {
+      "@type": "PostalAddress",
+      streetAddress: "8435 Hollow Brook Circle",
+      addressLocality: "Naples",
+      addressRegion: "FL",
+      postalCode: "34119",
+      addressCountry: "US",
+    },
+    brand: [
+      { "@type": "Brand", name: "Orbital One Realty" },
+      { "@type": "Brand", name: "LunaSphere" },
+      { "@type": "Brand", name: "LunaScape" },
+    ],
+    contactPoint: {
+      "@type": "ContactPoint",
+      contactType: "customer support",
+      email: "mijoyenterprises@gmail.com",
+      availableLanguage: "English",
+    },
+  },
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": WEBSITE_ID,
+    name: SITE_NAME,
+    alternateName: "Orbital One",
+    url: SITE_URL,
+    description:
+      "Novelty lunar property gifts, personalized digital deeds, and the LunaSphere Moon atlas.",
+    publisher: { "@id": ORGANIZATION_ID },
+    inLanguage: "en-US",
+  },
+];
 
 const propertyTypes = [
   {
@@ -37,7 +100,7 @@ const packageItems = [
   "Lunar Property Portfolio",
   "Welcome Letter PDF",
   "Public Registry Record",
-  "Novelty Lunar Passport",
+  "Two Personalized LunaScape Images",
 ];
 
 export default function Home() {
@@ -51,6 +114,7 @@ export default function Home() {
         backgroundAttachment: "fixed",
       }}
     >
+      <JsonLd data={homeStructuredData} />
       <div className="min-h-screen bg-black/65 px-6 py-10">
         <section className="mx-auto max-w-7xl">
           <div className="rounded-3xl border border-yellow-400/40 bg-black/75 p-10 text-center shadow-2xl backdrop-blur-sm">
@@ -70,7 +134,9 @@ export default function Home() {
             <p className="mx-auto mt-6 max-w-3xl text-gray-300">
               Choose novelty lunar acreage, town blocks, or city blocks and
               receive a personalized digital property package with certificate
-              verification, HOA membership, and your own customer portfolio. PLUS receive access to our future Virtual Lunar App where you will be able to manage, build and explore your purchased properties.
+              verification, Charter HOA membership, and your own customer
+              portfolio. Your purchase also connects you to the evolving
+              LunaSphere and planned future LunaScape experiences.
             </p>
 
             <div className="mt-10 flex flex-wrap justify-center gap-4">
@@ -177,6 +243,62 @@ export default function Home() {
               </a>
             </div>
           </div>
+
+          <section className="mt-8 rounded-3xl border border-white/20 bg-black/75 p-8 backdrop-blur-sm sm:p-10">
+            <p className="text-sm font-black uppercase tracking-[0.3em] text-yellow-400">
+              A Moon Gift With a Place and a Story
+            </p>
+            <h2 className="mt-4 text-3xl font-black uppercase md:text-4xl">
+              What Is a Novelty Moon Property?
+            </h2>
+            <p className="mt-5 max-w-4xl text-lg leading-8 text-gray-300">
+              A novelty Moon property is a personalized commemorative gift—not
+              legally recognized lunar real estate. Orbital One makes the
+              experience more meaningful by connecting each purchase to a named
+              LunaSphere state, city, town, or rural parcel and delivering a
+              coordinated digital ownership collection.
+            </p>
+            <div className="mt-8 grid gap-5 md:grid-cols-3">
+              {[
+                [
+                  "Choose a Real Atlas Location",
+                  "Explore 57 lunar states, 171 cities, 1,140 towns, landmarks, and selectable novelty property on the interactive Moon map.",
+                  "/moon-map",
+                  "Explore the interactive Moon map",
+                ],
+                [
+                  "Create a Personalized Gift",
+                  "Add the owner name, gift-recipient details, and optional extras to create a memorable space-themed keepsake.",
+                  "/pricing",
+                  "Compare novelty Moon property prices",
+                ],
+                [
+                  "Keep a Digital Lunar Portfolio",
+                  "Customers receive documents, property records, Charter HOA recognition, and access to their Orbital One account portfolio.",
+                  "/faq",
+                  "Read Moon property questions and answers",
+                ],
+              ].map(([title, description, href, label]) => (
+                <article
+                  key={title}
+                  className="rounded-2xl border border-white/15 bg-white/5 p-6"
+                >
+                  <h3 className="text-xl font-black text-yellow-300">
+                    {title}
+                  </h3>
+                  <p className="mt-3 text-sm leading-7 text-gray-300">
+                    {description}
+                  </p>
+                  <a
+                    href={href}
+                    className="mt-5 inline-flex font-black text-yellow-400 hover:text-yellow-300"
+                  >
+                    {label} →
+                  </a>
+                </article>
+              ))}
+            </div>
+          </section>
 
           <section className="mt-8 rounded-3xl border border-white/20 bg-black/75 p-8 text-center backdrop-blur-sm">
             <h2 className="text-3xl font-black uppercase md:text-4xl">

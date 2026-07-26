@@ -3,6 +3,8 @@ import Link from "next/link";
 
 import { lunarStateDetails } from "@/lib/lunar-state-details";
 import { prisma } from "@/lib/prisma";
+import type { Metadata } from "next";
+import { createPageMetadata } from "@/lib/seo";
 
 const featuredStateNames = [
   "Hammel",
@@ -10,6 +12,15 @@ const featuredStateNames = [
   "Copernicus",
   "Tranquillitatis",
 ];
+
+export const metadata: Metadata = createPageMetadata({
+  title: "57 Lunar States in the LunaSphere Moon Atlas | Orbital One Realty",
+  description:
+    "Browse all 57 Orbital One lunar states, each with three named cities, twenty towns, rural territory, landmark connections, and novelty Moon property options.",
+  path: "/states",
+  image: "/atlas/moon-atlas-v2.jpg",
+  imageAlt: "The 57 lunar states of the Orbital One LunaSphere Moon atlas",
+});
 
 export default async function StatesPage() {
   const stateNames = Object.keys(lunarStateDetails).sort((a, b) =>

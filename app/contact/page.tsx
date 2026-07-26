@@ -1,3 +1,14 @@
+import type { Metadata } from "next";
+
+import { createPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Contact Orbital One Realty | Novelty Moon Property Support",
+  description:
+    "Contact Orbital One Realty with questions about novelty Moon property, digital deeds, LunaSphere locations, Charter HOA membership, orders, and customer accounts.",
+  path: "/contact",
+});
+
 export default function ContactPage() {
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">

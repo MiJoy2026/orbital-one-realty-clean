@@ -1,3 +1,14 @@
+import type { Metadata } from "next";
+
+import { createPageMetadata } from "@/lib/seo";
+
+export const metadata: Metadata = createPageMetadata({
+  title: "Verify an Orbital One Lunar Property Certificate",
+  description:
+    "Verify an Orbital One Realty novelty lunar property certificate using its certificate number. Individual verification results are protected from search indexing.",
+  path: "/verify",
+});
+
 export default function VerifySearchPage() {
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">

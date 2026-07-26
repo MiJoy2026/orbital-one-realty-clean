@@ -1,5 +1,9 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import JsonLd from "@/components/JsonLd";
 
 import { getLunarAttractionsByState } from "@/lib/lunar-attractions";
 import {
@@ -8,6 +12,42 @@ import {
 } from "@/lib/lunar-location-links";
 import { lunarStateDetails } from "@/lib/lunar-state-details";
 import { prisma } from "@/lib/prisma";
+import { SITE_URL, createPageMetadata, truncateDescription } from "@/lib/seo";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ stateName: string }>;
+}): Promise<Metadata> {
+  const { stateName } = await params;
+  const decodedName = decodeURIComponent(stateName);
+  const officialStateName = Object.keys(lunarStateDetails).find(
+    (name) => name.toLowerCase() === decodedName.toLowerCase()
+  );
+
+  if (!officialStateName) {
+    return createPageMetadata({
+      title: "Lunar State Not Found | Orbital One Realty",
+      description: "The requested LunaSphere lunar state could not be found.",
+      path: `/states/${encodeURIComponent(decodedName)}`,
+      noIndex: true,
+      follow: false,
+    });
+  }
+
+  const state = lunarStateDetails[officialStateName];
+  const heroAttraction = getLunarAttractionsByState(officialStateName)[0];
+
+  return createPageMetadata({
+    title: `${officialStateName} Lunar State: Cities, Towns & Moon Property | Orbital One Realty`,
+    description: truncateDescription(
+      `${state.description} Explore its three cities, twenty towns, landmarks, and novelty lunar property options.`
+    ),
+    path: `/states/${encodeURIComponent(officialStateName)}`,
+    image: heroAttraction?.image ?? "/atlas/moon-atlas-v2.jpg",
+    imageAlt: `${officialStateName} lunar state in the LunaSphere Moon atlas`,
+  });
+}
 
 const propertyPaths = [
   {
@@ -48,28 +88,7 @@ export default async function StateDetailPage({
   );
 
   if (!officialStateName) {
-    return (
-      <main className="min-h-screen bg-[#02040a] px-6 py-24 text-white">
-        <div className="mx-auto max-w-4xl rounded-[2rem] border border-white/10 bg-white/[0.04] p-10 text-center">
-          <p className="text-sm font-black uppercase tracking-[0.35em] text-yellow-400">
-            LunaSphere Atlas
-          </p>
-          <h1 className="mt-5 text-5xl font-black uppercase sm:text-6xl">
-            State Not Found
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-400">
-            This location is not part of the official Orbital One lunar-state
-            directory.
-          </p>
-          <Link
-            href="/states"
-            className="mt-8 inline-flex rounded-xl bg-yellow-400 px-7 py-4 text-sm font-black uppercase tracking-wide text-black transition hover:bg-yellow-300"
-          >
-            Browse All Lunar States
-          </Link>
-        </div>
-      </main>
-    );
+    notFound();
   }
 
   const state = lunarStateDetails[officialStateName];
@@ -97,8 +116,34 @@ export default async function StateDetailPage({
     (property) => property.status === "Sold"
   ).length;
 
+  const breadcrumbStructuredData = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      {
+        "@type": "ListItem",
+        position: 1,
+        name: "Home",
+        item: SITE_URL,
+      },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Lunar States",
+        item: `${SITE_URL}/states`,
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: officialStateName,
+        item: `${SITE_URL}/states/${encodeURIComponent(officialStateName)}`,
+      },
+    ],
+  };
+
   return (
     <main className="min-h-screen bg-[#02040a] text-white">
+      <JsonLd data={breadcrumbStructuredData} />
       <section className="relative isolate min-h-[680px] overflow-hidden border-b border-yellow-400/20">
         <Image
           src={heroImage}

@@ -1,5 +1,9 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import JsonLd from "@/components/JsonLd";
 
 import {
   getLunarCityByName,
@@ -12,6 +16,58 @@ import {
   getLunarTownHref,
 } from "@/lib/lunar-location-links";
 import { lunarStateDetails } from "@/lib/lunar-state-details";
+import { SITE_URL, createPageMetadata, truncateDescription } from "@/lib/seo";
+
+export async function generateMetadata({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ cityName: string }>;
+  searchParams: Promise<{ state?: string }>;
+}): Promise<Metadata> {
+  const { cityName } = await params;
+  const { state: requestedState } = await searchParams;
+  const decodedCityName = decodeURIComponent(cityName);
+  const decodedStateName = requestedState
+    ? decodeURIComponent(requestedState)
+    : undefined;
+  const matches = getLunarCityMatches(decodedCityName);
+
+  if (!decodedStateName && matches.length > 1) {
+    return createPageMetadata({
+      title: `Choose ${decodedCityName} Lunar City | Orbital One Realty`,
+      description: `Choose the LunaSphere state containing the ${decodedCityName} lunar city you want to explore.`,
+      path: `/cities/${encodeURIComponent(decodedCityName)}`,
+      noIndex: true,
+      follow: true,
+    });
+  }
+
+  const city = await getLunarCityByName(decodedCityName, decodedStateName);
+
+  if (!city) {
+    return createPageMetadata({
+      title: "Lunar City Not Found | Orbital One Realty",
+      description: "The requested LunaSphere lunar city could not be found.",
+      path: `/cities/${encodeURIComponent(decodedCityName)}`,
+      noIndex: true,
+      follow: false,
+    });
+  }
+
+  const canonicalPath = getLunarCityHref(city.state.name, city.name);
+  const stateAttraction = getLunarAttractionsByState(city.state.name)[0];
+
+  return createPageMetadata({
+    title: `${city.name}, ${city.state.name}: Lunar City Blocks & Moon Atlas | Orbital One Realty`,
+    description: truncateDescription(
+      `${city.description} Explore this LunaSphere lunar city, nearby landmarks, and available novelty city-block property.`
+    ),
+    path: canonicalPath,
+    image: stateAttraction?.image ?? "/property-images/city-block.jpg",
+    imageAlt: `${city.name} lunar city in ${city.state.name} State`,
+  });
+}
 
 const statusOrder: Record<string, number> = {
   Available: 0,
@@ -92,36 +148,7 @@ export default async function CityDetailPage({
   const city = await getLunarCityByName(decodedCityName, decodedStateName);
 
   if (!city) {
-    return (
-      <main className="min-h-screen bg-[#02040a] px-6 py-24 text-white">
-        <div className="mx-auto max-w-4xl rounded-[2rem] border border-white/10 bg-white/[0.04] p-10 text-center">
-          <p className="text-sm font-black uppercase tracking-[0.35em] text-yellow-400">
-            LunaSphere Atlas
-          </p>
-          <h1 className="mt-5 text-5xl font-black uppercase sm:text-6xl">
-            City Not Found
-          </h1>
-          <p className="mx-auto mt-5 max-w-2xl text-lg leading-8 text-slate-400">
-            This city-and-state combination is not part of the active Orbital One
-            lunar directory.
-          </p>
-          <div className="mt-8 flex flex-wrap justify-center gap-4">
-            <Link
-              href="/states"
-              className="rounded-xl bg-yellow-400 px-7 py-4 text-sm font-black uppercase tracking-wide text-black transition hover:bg-yellow-300"
-            >
-              Browse Lunar States
-            </Link>
-            <Link
-              href="/moon-map"
-              className="rounded-xl border border-white/20 px-7 py-4 text-sm font-black uppercase tracking-wide transition hover:border-yellow-400 hover:text-yellow-300"
-            >
-              Open Moon Atlas
-            </Link>
-          </div>
-        </div>
-      </main>
-    );
+    notFound();
   }
 
   const stateDetail = lunarStateDetails[city.state.name];
@@ -171,8 +198,36 @@ export default async function CityDetailPage({
     .sort((first, second) => Number(Boolean(second.featured)) - Number(Boolean(first.featured)))
     .slice(0, 4);
 
+  const canonicalPath = getLunarCityHref(city.state.name, city.name);
+  const breadcrumbStructuredData = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      {
+        "@type": "ListItem",
+        position: 2,
+        name: "Lunar States",
+        item: `${SITE_URL}/states`,
+      },
+      {
+        "@type": "ListItem",
+        position: 3,
+        name: city.state.name,
+        item: `${SITE_URL}/states/${encodeURIComponent(city.state.name)}`,
+      },
+      {
+        "@type": "ListItem",
+        position: 4,
+        name: city.name,
+        item: `${SITE_URL}${canonicalPath}`,
+      },
+    ],
+  };
+
   return (
     <main className="min-h-screen bg-[#02040a] text-white">
+      <JsonLd data={breadcrumbStructuredData} />
       <section className="relative isolate min-h-[700px] overflow-hidden border-b border-cyan-300/20">
         <Image
           src={heroImage}
