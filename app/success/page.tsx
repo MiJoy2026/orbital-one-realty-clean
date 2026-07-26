@@ -1,9 +1,14 @@
 import Link from "next/link";
+import { cookies } from "next/headers";
 import Stripe from "stripe";
 
 import ClearCartCookie from "../../components/ClearCartCookie";
 import LunaScapeImageGallery from "../../components/LunaScapeImageGallery";
 import PurchaseAnalytics from "../../components/PurchaseAnalytics";
+import {
+  CHECKOUT_ACCESS_COOKIE,
+  verifyCheckoutAccessToken,
+} from "../../lib/checkout-access-token";
 import { fulfillStripeCheckoutSession } from "../../lib/fulfillment-service";
 import { createOrderAccessToken } from "../../lib/order-access-token";
 import { prisma } from "../../lib/prisma";
@@ -62,6 +67,30 @@ export default async function SuccessPage({
   if (!stripeSecretKey) {
     return (
       <ProcessingMessage message="Secure payment verification is temporarily unavailable." />
+    );
+  }
+
+  const cookieStore = await cookies();
+  const checkoutAccessToken = cookieStore.get(
+    CHECKOUT_ACCESS_COOKIE
+  )?.value;
+
+  if (!checkoutAccessToken) {
+    return (
+      <ProcessingMessage message="This checkout confirmation is not authorized in this browser. Use the secure links in your order email or sign in to your customer account." />
+    );
+  }
+
+  try {
+    await verifyCheckoutAccessToken(checkoutAccessToken, sessionId);
+  } catch (error) {
+    console.error(
+      "[Orbital One] Invalid checkout confirmation access token.",
+      error
+    );
+
+    return (
+      <ProcessingMessage message="This checkout confirmation link is invalid or has expired. Use the secure links in your order email or sign in to your customer account." />
     );
   }
 

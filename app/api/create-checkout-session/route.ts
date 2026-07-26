@@ -5,6 +5,11 @@ import Stripe from "stripe";
 import { NextResponse } from "next/server";
 
 import {
+  CHECKOUT_ACCESS_COOKIE,
+  createCheckoutAccessToken,
+} from "../../../lib/checkout-access-token";
+
+import {
   MAX_CART_PROPERTIES,
   normalizeReservationIds,
 } from "../../../lib/cart-reservations";
@@ -84,6 +89,33 @@ async function detachExpiredCheckoutSession(
       stripeCheckoutSessionId: null,
     },
   });
+}
+
+async function createCheckoutAccessResponse(
+  session: Stripe.Checkout.Session
+): Promise<NextResponse> {
+  if (!session.url) {
+    return NextResponse.json(
+      { error: "Stripe did not return a checkout URL." },
+      { status: 503 }
+    );
+  }
+
+  const accessToken = await createCheckoutAccessToken(
+    session.id,
+    String(CHECKOUT_RESERVATION_MINUTES) + "m"
+  );
+  const response = NextResponse.json({ url: session.url });
+
+  response.cookies.set(CHECKOUT_ACCESS_COOKIE, accessToken, {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/success",
+    maxAge: CHECKOUT_RESERVATION_MINUTES * 60,
+  });
+
+  return response;
 }
 
 export async function POST(request: Request) {
@@ -363,7 +395,7 @@ export async function POST(request: Request) {
         existingSession.url &&
         existingSession.metadata?.cartFingerprint === checkoutFingerprint
       ) {
-        return NextResponse.json({ url: existingSession.url });
+        return createCheckoutAccessResponse(existingSession);
       }
 
       if (existingSession.status === "open") {
@@ -580,7 +612,7 @@ export async function POST(request: Request) {
       throw error;
     }
 
-    return NextResponse.json({ url: session.url });
+    return createCheckoutAccessResponse(session);
   } catch (error) {
     console.error("[Orbital One] Unable to create Stripe checkout.", error);
 
