@@ -145,6 +145,11 @@ export default async function SuccessPage({
     price: Number(order.amountPaid.toFixed(2)),
     quantity: 1,
   }));
+  const analyticsTransactionId = orders
+    .map((order) => order.certificateNumber)
+    .sort()
+    .join("|");
+
   const totalRuralAcreage = orders.reduce(
     (sum, order) => sum + (order.acreagePurchased || 0),
     0
@@ -170,7 +175,7 @@ export default async function SuccessPage({
       <ClearCartCookie />
 
       <PurchaseAnalytics
-        transactionId={session.id}
+        transactionId={analyticsTransactionId}
         value={Number(totalPaid.toFixed(2))}
         items={purchaseAnalyticsItems}
       />

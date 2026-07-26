@@ -20,7 +20,7 @@ const analyticsSection = {
   bullets: [
     "Public page views may be measured without URL query strings.",
     "Shopping measurement may include product views, cart activity, checkout starts, transaction totals, product categories, and completed purchases.",
-    "A Stripe checkout-session identifier may be used as a transaction identifier to prevent duplicate purchase reporting.",
+    "Public certificate numbers may be combined into a transaction identifier to prevent duplicate purchase reporting without sending Stripe identifiers.",
     "Advertising personalization and Google Signals are disabled in the Orbital One configuration.",
     "Consent may be withdrawn through Cookie Settings.",
   ],
