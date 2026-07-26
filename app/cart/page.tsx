@@ -16,7 +16,7 @@ function formatLocation(input: {
 }
 
 export default function CartPage() {
-  const { items, subtotal, removeItem } = useCart();
+  const { items, subtotal, removeItem, getItemTotal } = useCart();
 
   return (
     <main className="min-h-screen bg-[#02040a] px-6 py-16 text-white sm:py-20">
@@ -89,9 +89,14 @@ export default function CartPage() {
                               {location || "LunaSphere property"}
                             </p>
                           </div>
-                          <p className="text-2xl font-black text-yellow-300">
-                            ${item.unitPrice.toFixed(2)}
-                          </p>
+                          <div className="text-right">
+                            <p className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                              Item total
+                            </p>
+                            <p className="mt-1 text-2xl font-black text-yellow-300">
+                              ${getItemTotal(item).toFixed(2)}
+                            </p>
+                          </div>
                         </div>
 
                         <div className="mt-5 grid gap-3 text-sm sm:grid-cols-2">

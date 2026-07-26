@@ -6,6 +6,12 @@ import LunaScapeImageGallery from "../../components/LunaScapeImageGallery";
 import { fulfillStripeCheckoutSession } from "../../lib/fulfillment-service";
 import { createOrderAccessToken } from "../../lib/order-access-token";
 import { prisma } from "../../lib/prisma";
+import {
+  formatAcreage,
+  formatAcreageAllocation,
+  getCanonicalPropertySize,
+  isPurchasablePropertyType,
+} from "../../lib/purchase-constants";
 
 function ProcessingMessage({ message }: { message: string }) {
   return (
@@ -123,9 +129,14 @@ export default async function SuccessPage({
   const allocationByCertificate = new Map(
     allocations.map((allocation) => [allocation.certificateNumber, allocation])
   );
-  const totalPaid = session.amount_total
-    ? session.amount_total / 100
-    : orders.reduce((sum, order) => sum + order.amountPaid, 0);
+  const totalPaid = orders.reduce(
+    (sum, order) => sum + order.amountPaid,
+    0
+  );
+  const totalRuralAcreage = orders.reduce(
+    (sum, order) => sum + (order.acreagePurchased || 0),
+    0
+  );
   const orderAccessTokenById = new Map(
     await Promise.all(
       orders.map(async (order) => [
@@ -156,7 +167,11 @@ export default async function SuccessPage({
           Congratulations, <span className="font-black text-yellow-400">{orders[0].deedName}</span>
         </p>
         <p className="mt-3 text-gray-300">
-          {orders.length} {orders.length === 1 ? "property has" : "properties have"} been recorded. Total paid: ${totalPaid.toFixed(2)}.
+          {orders.length} {orders.length === 1 ? "property has" : "properties have"} been recorded.
+          {totalRuralAcreage > 0
+            ? ` Rural acreage: ${formatAcreage(totalRuralAcreage)}.`
+            : ""}{" "}
+          Total paid: ${totalPaid.toFixed(2)}.
         </p>
 
         <div className="mt-10 space-y-8 text-left">
@@ -166,10 +181,11 @@ export default async function SuccessPage({
               order.certificateNumber
             );
             const assignedAcreRange = allocation
-              ? allocation.startingAcre === allocation.endingAcre
-                ? `Acre ${allocation.startingAcre.toLocaleString()}`
-                : `Acres ${allocation.startingAcre.toLocaleString()} through ${allocation.endingAcre.toLocaleString()}`
+              ? formatAcreageAllocation(allocation)
               : "";
+            const propertySize = isPurchasablePropertyType(order.propertyType)
+              ? getCanonicalPropertySize(order.propertyType)
+              : property?.size || "Recorded property";
             const certificateQuery = encodeURIComponent(
               order.certificateNumber
             );
@@ -202,7 +218,7 @@ export default async function SuccessPage({
                       {order.propertyId}
                     </h2>
                     <p className="mt-3 text-gray-300">
-                      {location || order.lunarState} · {property?.size || "Recorded property"}
+                      {location || order.lunarState} · {propertySize}
                     </p>
                   </div>
                   <div className="rounded-2xl border border-white/15 bg-black/30 p-4">
@@ -215,6 +231,12 @@ export default async function SuccessPage({
                     </p>
                   </div>
                 </div>
+
+                {order.acreagePurchased !== null && (
+                  <p className="mt-4 text-sm font-bold text-slate-300">
+                    Acreage purchased: {formatAcreage(order.acreagePurchased)}
+                  </p>
+                )}
 
                 {assignedAcreRange && (
                   <div className="mt-5 rounded-2xl border border-yellow-400/30 bg-yellow-400/10 p-4">

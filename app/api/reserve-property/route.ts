@@ -17,7 +17,9 @@ import {
   MAX_CART_PROPERTIES,
 } from "../../../lib/cart-reservations";
 import {
+  getCanonicalPropertyAcreage,
   getCanonicalPropertyPrice,
+  getCanonicalPropertySize,
   isPurchasablePropertyType,
   type PurchasablePropertyType,
 } from "../../../lib/purchase-constants";
@@ -105,7 +107,7 @@ export async function POST(request: NextRequest) {
 
     let inventoryProperty: ValidatedInventoryProperty | null = null;
 
-    if (propertyType === "Rural Acre") {
+    if (propertyType === "Rural Acre" || propertyType === "Half Acre") {
       const excludedTerritories = [
         ...publicGeography.settlements
           .filter(
@@ -140,13 +142,13 @@ export async function POST(request: NextRequest) {
       if (parcel) {
         inventoryProperty = {
           propertyKey: parcel.parcelKey,
-          propertyType: "Rural Acre",
+          propertyType,
           stateName: stateRegion.name,
           cityName: null,
           townName: null,
-          acreage: 1,
-          size: "1 Acre",
-          price: getCanonicalPropertyPrice("Rural Acre"),
+          acreage: getCanonicalPropertyAcreage(propertyType),
+          size: getCanonicalPropertySize(propertyType),
+          price: getCanonicalPropertyPrice(propertyType),
           centerX: parcel.centerX,
           centerY: parcel.centerY,
         };
@@ -187,7 +189,7 @@ export async function POST(request: NextRequest) {
           cityName: city.name,
           townName: null,
           acreage: null,
-          size: "1 City Block",
+          size: getCanonicalPropertySize("City Block"),
           price: getCanonicalPropertyPrice("City Block"),
           centerX: block.centerX,
           centerY: block.centerY,
@@ -229,7 +231,7 @@ export async function POST(request: NextRequest) {
           cityName: null,
           townName: town.name,
           acreage: null,
-          size: "1 Town Block",
+          size: getCanonicalPropertySize("Town Block"),
           price: getCanonicalPropertyPrice("Town Block"),
           centerX: block.centerX,
           centerY: block.centerY,

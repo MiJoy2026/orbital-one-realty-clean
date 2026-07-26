@@ -1,5 +1,11 @@
 import { requestCanAccessOrder } from "./order-access-authorization";
 import { prisma } from "./prisma";
+import {
+  formatAcreage,
+  formatAcreageAllocation,
+  getCanonicalPropertySize,
+  isPurchasablePropertyType,
+} from "./purchase-constants";
 
 export class OrderDocumentError extends Error {
   constructor(
@@ -74,10 +80,13 @@ export async function getOrderDocumentData(
   }
 
   const assignedAcreRange = allocation
-    ? allocation.startingAcre === allocation.endingAcre
-      ? `Acre ${allocation.startingAcre.toLocaleString()}`
-      : `Acres ${allocation.startingAcre.toLocaleString()} through ${allocation.endingAcre.toLocaleString()}`
+    ? formatAcreageAllocation(allocation)
     : "";
+  const propertySize = isPurchasablePropertyType(order.propertyType)
+    ? getCanonicalPropertySize(order.propertyType)
+    : property.size;
+  const acreageLabel = formatAcreage(order.acreagePurchased);
+  const purchaseAmountLabel = `$${order.amountPaid.toFixed(2)}`;
 
   const locationLabel = [property.city, property.town, property.state]
     .filter(Boolean)
@@ -89,6 +98,9 @@ export async function getOrderDocumentData(
     allocation,
     member,
     assignedAcreRange,
+    acreageLabel,
+    propertySize,
+    purchaseAmountLabel,
     locationLabel,
     certificateNumber: order.certificateNumber,
     deedName: order.deedName,

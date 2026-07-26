@@ -9,13 +9,15 @@ import {
   normalizeReservationIds,
 } from "../../../lib/cart-reservations";
 import {
-  ADDITIONAL_DEED_NAME_PRICE,
+  ADDITIONAL_DEED_NAME_PRICE_CENTS,
+  calculateCanonicalPropertyPricing,
   CHECKOUT_RESERVATION_MINUTES,
+  getCanonicalPropertyAcreage,
   getCanonicalPropertyPrice,
   isPurchasablePropertyType,
-  type PurchasablePropertyType,
   MAX_ADDITIONAL_DEED_NAMES,
-  PASSPORT_PRICE,
+  PASSPORT_PRICE_CENTS,
+  PRICING_VERSION,
 } from "../../../lib/purchase-constants";
 import { prisma } from "../../../lib/prisma";
 
@@ -249,7 +251,51 @@ export async function POST(request: Request) {
           { status: 409 }
         );
       }
+
+      if (reservation.propertyType !== property.type) {
+        return NextResponse.json(
+          { error: `Reservation product mismatch for ${property.id}.` },
+          { status: 409 }
+        );
+      }
+
+      const canonicalAcreage = getCanonicalPropertyAcreage(property.type);
+      const reservationAcreage = reservation.acreage;
+      const acreageMatches =
+        canonicalAcreage === null
+          ? reservationAcreage === null
+          : reservationAcreage !== null &&
+            Math.abs(reservationAcreage - canonicalAcreage) < 0.000001;
+
+      if (!acreageMatches) {
+        return NextResponse.json(
+          { error: `Reservation acreage mismatch for ${property.id}.` },
+          { status: 409 }
+        );
+      }
     }
+
+    const propertyPricing = calculateCanonicalPropertyPricing(
+      verifiedProperties.map((property) => ({
+        propertyId: property.id,
+        propertyType: property.type,
+      }))
+    );
+    const propertySubtotalCents = propertyPricing.reduce(
+      (total, item) => total + item.unitAmountCents,
+      0
+    );
+    const additionalDeedNameTotalCents =
+      additionalDeedNames.length *
+      verifiedProperties.length *
+      ADDITIONAL_DEED_NAME_PRICE_CENTS;
+    const passportTotalCents = passportSelected
+      ? verifiedProperties.length * PASSPORT_PRICE_CENTS
+      : 0;
+    const expectedTotalCents =
+      propertySubtotalCents +
+      additionalDeedNameTotalCents +
+      passportTotalCents;
 
     const fullDeedName = [primaryDeedName, ...additionalDeedNames].join(", ");
     const idempotencyPayload = {
@@ -259,6 +305,12 @@ export async function POST(request: Request) {
       isGift,
       recipientEmail,
       giftMessage,
+      pricingVersion: PRICING_VERSION,
+      expectedTotalCents,
+      propertyPricing: propertyPricing.map((item) => [
+        item.propertyId,
+        item.unitAmountCents,
+      ]),
     };
     const checkoutFingerprint = createCheckoutIdempotencyKey(
       idempotencyPayload
@@ -325,23 +377,27 @@ export async function POST(request: Request) {
     );
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const lineItems: Stripe.Checkout.SessionCreateParams.LineItem[] =
-      verifiedProperties.map((property) => {
-        const canonicalPrice = getCanonicalPropertyPrice(
-          property.type as PurchasablePropertyType
-        );
+      verifiedProperties.map((property, index) => {
+        const pricing = propertyPricing[index];
+        const priceLabel =
+          pricing.pricingRole === "adjoining-rural-acre"
+            ? "Adjoining Additional Rural Acre"
+            : pricing.pricingRole === "first-rural-acre"
+              ? "First Rural Acre"
+              : property.type;
 
         return {
           quantity: 1,
           price_data: {
             currency: "usd",
-            unit_amount: Math.round(canonicalPrice * 100),
+            unit_amount: pricing.unitAmountCents,
             product_data: {
-              name: `${property.id} - ${property.type}`,
+              name: `${property.id} - ${priceLabel}`,
               description: [
                 property.state,
                 property.city,
                 property.town,
-                property.size,
+                pricing.size,
               ]
                 .filter(Boolean)
                 .join(" • "),
@@ -355,7 +411,7 @@ export async function POST(request: Request) {
         quantity: additionalDeedNames.length * verifiedProperties.length,
         price_data: {
           currency: "usd",
-          unit_amount: Math.round(ADDITIONAL_DEED_NAME_PRICE * 100),
+          unit_amount: ADDITIONAL_DEED_NAME_PRICE_CENTS,
           product_data: {
             name: "Additional Name on Property Deed",
           },
@@ -368,7 +424,7 @@ export async function POST(request: Request) {
         quantity: verifiedProperties.length,
         price_data: {
           currency: "usd",
-          unit_amount: Math.round(PASSPORT_PRICE * 100),
+          unit_amount: PASSPORT_PRICE_CENTS,
           product_data: {
             name: "Novelty Lunar Passport",
           },
@@ -403,6 +459,8 @@ export async function POST(request: Request) {
           recipientEmail: isGift ? recipientEmail : "",
           giftMessage: isGift ? giftMessage : "",
           noveltyAcknowledged: "true",
+          pricingVersion: PRICING_VERSION,
+          expectedTotalCents: String(expectedTotalCents),
           cartFingerprint: checkoutFingerprint,
         },
       },
@@ -454,9 +512,9 @@ export async function POST(request: Request) {
           await transaction.property.update({
             where: { id: property.id },
             data: {
-              price: getCanonicalPropertyPrice(
-                property.type as PurchasablePropertyType
-              ),
+              price: isPurchasablePropertyType(property.type)
+                ? getCanonicalPropertyPrice(property.type)
+                : property.price,
               status: "Reserved",
             },
           });

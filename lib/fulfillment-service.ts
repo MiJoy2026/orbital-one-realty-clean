@@ -4,10 +4,15 @@ import { Prisma } from "@prisma/client";
 import Stripe from "stripe";
 
 import {
-  ADDITIONAL_DEED_NAME_PRICE,
-  getCanonicalPropertyPrice,
+  ADDITIONAL_DEED_NAME_PRICE_CENTS,
+  calculateCanonicalPropertyPricing,
+  chooseAcreageAllocationNumber,
+  getCanonicalPropertyAcreage,
+  getCanonicalPropertySize,
   isPurchasablePropertyType,
-  PASSPORT_PRICE,
+  MAX_ADDITIONAL_DEED_NAMES,
+  PASSPORT_PRICE_CENTS,
+  PRICING_VERSION,
 } from "./purchase-constants";
 import { ensureOwnedPropertySnapshotsForOrderIds } from "./owned-property-snapshot";
 import { prisma } from "./prisma";
@@ -146,6 +151,23 @@ export async function fulfillStripeCheckoutSession(
     0,
     Number.parseInt(session.metadata?.additionalDeedNameCount || "0", 10) || 0
   );
+  const metadataExpectedTotalCents = Number.parseInt(
+    session.metadata?.expectedTotalCents || "",
+    10
+  );
+
+  const sessionPricingVersion = session.metadata?.pricingVersion?.trim();
+  const usesCurrentPricingVersion = sessionPricingVersion === PRICING_VERSION;
+
+  if (sessionPricingVersion && !usesCurrentPricingVersion) {
+    throw new Error(
+      `Stripe session ${session.id} uses an unsupported pricing version.`
+    );
+  }
+
+  if (additionalDeedNameCount > MAX_ADDITIONAL_DEED_NAMES) {
+    throw new Error("Stripe metadata contains too many additional deed names.");
+  }
 
   if (!purchaserEmail || !memberEmail) {
     throw new Error("Missing purchaser or member email for fulfillment.");
@@ -186,6 +208,7 @@ export async function fulfillStripeCheckoutSession(
       id: string;
       propertyId: string;
       propertyType: string;
+      acreagePurchased: number | null;
       lunarState: string;
       deedName: string;
       certificateNumber: string;
@@ -198,6 +221,7 @@ export async function fulfillStripeCheckoutSession(
       id: string;
       propertyId: string;
       propertyType: string;
+      acreagePurchased: number | null;
       lunarState: string;
       deedName: string;
       certificateNumber: string;
@@ -257,6 +281,87 @@ export async function fulfillStripeCheckoutSession(
             );
           }
 
+          const orderedProperties = metadataPropertyIds.map((propertyId) =>
+            propertyById.get(propertyId)
+          );
+          const orderedReservations = metadataReservationIds.map(
+            (reservationId) => reservationById.get(reservationId)
+          );
+
+          if (
+            orderedProperties.some((property) => !property) ||
+            orderedReservations.some((reservation) => !reservation)
+          ) {
+            throw new Error("Unable to reconstruct the paid cart in order.");
+          }
+
+          for (let index = 0; index < metadataPropertyIds.length; index += 1) {
+            const property = orderedProperties[index]!;
+            const reservation = orderedReservations[index]!;
+
+            if (!isPurchasablePropertyType(property.type)) {
+              throw new Error(`Unsupported property type: ${property.type}`);
+            }
+
+            if (
+              reservation.parcelKey !== property.id ||
+              reservation.propertyType !== property.type
+            ) {
+              throw new Error(
+                `Reservation ${reservation.id} does not match ${property.id}.`
+              );
+            }
+
+            const canonicalAcreage = getCanonicalPropertyAcreage(property.type);
+            const acreageMatches =
+              canonicalAcreage === null
+                ? reservation.acreage === null
+                : reservation.acreage !== null &&
+                  Math.abs(reservation.acreage - canonicalAcreage) < 0.000001;
+
+            if (!acreageMatches) {
+              throw new Error(
+                `Reservation acreage does not match ${property.id}.`
+              );
+            }
+          }
+
+          const propertyPricing = calculateCanonicalPropertyPricing(
+            orderedProperties.map((property) => ({
+              propertyId: property!.id,
+              propertyType: property!.type,
+            }))
+          );
+          const propertyPricingById = new Map(
+            propertyPricing.map((item) => [item.propertyId, item])
+          );
+          const propertySubtotalCents = propertyPricing.reduce(
+            (total, item) => total + item.unitAmountCents,
+            0
+          );
+          const expectedTotalCents =
+            propertySubtotalCents +
+            additionalDeedNameCount *
+              metadataPropertyIds.length *
+              ADDITIONAL_DEED_NAME_PRICE_CENTS +
+            (passportPurchased
+              ? metadataPropertyIds.length * PASSPORT_PRICE_CENTS
+              : 0);
+
+          const metadataTotalMatches = usesCurrentPricingVersion
+            ? metadataExpectedTotalCents === expectedTotalCents
+            : true;
+
+          if (
+            session.currency !== "usd" ||
+            session.amount_total !== expectedTotalCents ||
+            !metadataTotalMatches
+          ) {
+            throw new Error(
+              `Stripe total integrity check failed for ${session.id}.`
+            );
+          }
+
           const memberUser = await transaction.user.findUnique({
             where: { email: memberEmail },
             select: {
@@ -299,12 +404,16 @@ export async function fulfillStripeCheckoutSession(
             const property = propertyById.get(propertyId);
             const reservation = reservationById.get(reservationId);
             const existingOrder = existingByProperty.get(propertyId);
+            const pricing = propertyPricingById.get(propertyId);
 
-            if (!property || !reservation) {
+            if (!property || !reservation || !pricing) {
               throw new Error(`Missing checkout item ${propertyId}.`);
             }
 
-            if (reservation.parcelKey !== property.id) {
+            if (
+              reservation.parcelKey !== property.id ||
+              reservation.propertyType !== property.type
+            ) {
               throw new Error(
                 `Reservation ${reservation.id} does not match ${property.id}.`
               );
@@ -373,24 +482,29 @@ export async function fulfillStripeCheckoutSession(
 
             await transaction.property.update({
               where: { id: property.id },
-              data: { status: "Sold" },
+              data: {
+                status: "Sold",
+                price: pricing.price,
+                size: pricing.size,
+              },
             });
 
             const certificateNumber = createCertificateNumber(
               session.id,
               property.id
             );
-            const itemAmount =
-              getCanonicalPropertyPrice(property.type) +
-              additionalDeedNameCount * ADDITIONAL_DEED_NAME_PRICE +
-              (passportPurchased ? PASSPORT_PRICE : 0);
+            const itemAmountCents =
+              pricing.unitAmountCents +
+              additionalDeedNameCount * ADDITIONAL_DEED_NAME_PRICE_CENTS +
+              (passportPurchased ? PASSPORT_PRICE_CENTS : 0);
+            const itemAmount = itemAmountCents / 100;
+            const acreagePurchased = getCanonicalPropertyAcreage(property.type);
             const order = await transaction.order.create({
               data: {
                 stripeSessionId: session.id,
                 propertyId: property.id,
                 propertyType: property.type,
-                acreagePurchased:
-                  property.type === "Rural Acre" ? 1 : null,
+                acreagePurchased,
                 lunarState: property.state,
                 deedName,
                 certificateNumber,
@@ -414,8 +528,8 @@ export async function fulfillStripeCheckoutSession(
               },
             });
 
-            if (property.type === "Rural Acre") {
-              const inventory = await transaction.stateInventory.upsert({
+            if (acreagePurchased !== null) {
+              await transaction.stateInventory.upsert({
                 where: { stateName: property.state },
                 update: {},
                 create: {
@@ -424,11 +538,36 @@ export async function fulfillStripeCheckoutSession(
                   soldAcres: 0,
                 },
               });
-              const startingAcre = Math.floor(inventory.soldAcres) + 1;
+              const latestAllocation =
+                await transaction.acreageAllocation.findFirst({
+                  where: { stateName: property.state },
+                  orderBy: { endingAcre: "desc" },
+                  select: { endingAcre: true },
+                });
+              const fractionalAllocations =
+                Math.abs(acreagePurchased - 0.5) < 0.000001
+                  ? await transaction.acreageAllocation.findMany({
+                      where: {
+                        stateName: property.state,
+                        acresAssigned: { lt: 1 },
+                      },
+                      select: {
+                        startingAcre: true,
+                        endingAcre: true,
+                        acresAssigned: true,
+                      },
+                      orderBy: { startingAcre: "asc" },
+                    })
+                  : [];
+              const startingAcre = chooseAcreageAllocationNumber({
+                latestEndingAcre: latestAllocation?.endingAcre,
+                fractionalAllocations,
+                acreagePurchased,
+              });
 
               await transaction.stateInventory.update({
                 where: { stateName: property.state },
-                data: { soldAcres: { increment: 1 } },
+                data: { soldAcres: { increment: acreagePurchased } },
               });
 
               await transaction.acreageAllocation.create({
@@ -439,7 +578,7 @@ export async function fulfillStripeCheckoutSession(
                   propertyId: property.id,
                   startingAcre,
                   endingAcre: startingAcre,
-                  acresAssigned: 1,
+                  acresAssigned: acreagePurchased,
                 },
               });
             }
@@ -523,7 +662,10 @@ export async function fulfillStripeCheckoutSession(
         ),
         deedName,
         accountEmail: memberEmail,
-        amountPaid: session.amount_total ? session.amount_total / 100 : 0,
+        amountPaid: fulfillmentResult.allOrders.reduce(
+          (total, order) => total + order.amountPaid,
+          0
+        ),
         passportPurchased,
         giftMessage,
         items: fulfillmentResult.allOrders.map((order) => {
@@ -537,7 +679,11 @@ export async function fulfillStripeCheckoutSession(
             orderId: order.id,
             propertyId: order.propertyId,
             propertyType: order.propertyType,
-            propertySize: property.size,
+            propertySize: isPurchasablePropertyType(order.propertyType)
+              ? getCanonicalPropertySize(order.propertyType)
+              : property.size,
+            acreagePurchased: order.acreagePurchased,
+            amountPaid: order.amountPaid,
             lunarState: order.lunarState,
             cityName: property.city,
             townName: property.town,

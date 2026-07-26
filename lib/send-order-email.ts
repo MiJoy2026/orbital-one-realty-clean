@@ -3,12 +3,15 @@ import { Resend } from "resend";
 import { getAppUrl } from "./app-url";
 import { createCustomerClaimTokenForEmail } from "./customer-access-token";
 import { createOrderAccessToken } from "./order-access-token";
+import { formatAcreage } from "./purchase-constants";
 
 type OrderEmailItem = {
   orderId: string;
   propertyId: string;
   propertyType: string;
   propertySize: string;
+  acreagePurchased: number | null;
+  amountPaid: number;
   lunarState: string;
   cityName: string | null;
   townName: string | null;
@@ -70,6 +73,14 @@ async function buildPropertySections(
           <p><strong>Property Size:</strong> ${escapeHtml(
             item.propertySize
           )}</p>
+          ${
+            item.acreagePurchased !== null
+              ? `<p><strong>Acreage Purchased:</strong> ${escapeHtml(
+                  formatAcreage(item.acreagePurchased)
+                )}</p>`
+              : ""
+          }
+          <p><strong>Recorded Purchase Amount:</strong> $${item.amountPaid.toFixed(2)}</p>
           <p><strong>Location:</strong> ${escapeHtml(location)}</p>
           <p><a href="${appUrl}/verify/${certificateQuery}">Verify Certificate</a></p>
           <ul>

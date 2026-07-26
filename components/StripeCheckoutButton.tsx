@@ -3,8 +3,10 @@
 import { useMemo, useState } from "react";
 
 import {
-  ADDITIONAL_DEED_NAME_PRICE,
+  ADDITIONAL_DEED_NAME_PRICE_CENTS,
+  formatUsdFromCents,
   MAX_ADDITIONAL_DEED_NAMES,
+  PASSPORT_PRICE_CENTS,
 } from "../lib/purchase-constants";
 
 export default function StripeCheckoutButton({
@@ -12,11 +14,13 @@ export default function StripeCheckoutButton({
   passportSelected,
   reservationIds,
   propertyCount,
+  propertySubtotalCents,
 }: {
   propertyIds: string[];
   passportSelected?: boolean;
   reservationIds: string[];
   propertyCount: number;
+  propertySubtotalCents: number;
 }) {
   const [isGift, setIsGift] = useState(false);
   const [deedName, setDeedName] = useState("");
@@ -39,10 +43,15 @@ export default function StripeCheckoutButton({
       ).slice(0, MAX_ADDITIONAL_DEED_NAMES),
     [additionalNamesText]
   );
-  const additionalNameTotal =
+  const additionalNameTotalCents =
     additionalDeedNames.length *
-    ADDITIONAL_DEED_NAME_PRICE *
+    ADDITIONAL_DEED_NAME_PRICE_CENTS *
     propertyCount;
+  const passportTotalCents = passportSelected
+    ? PASSPORT_PRICE_CENTS * propertyCount
+    : 0;
+  const checkoutTotalCents =
+    propertySubtotalCents + passportTotalCents + additionalNameTotalCents;
 
   async function handleCheckout() {
     if (isStartingCheckout) {
@@ -157,15 +166,14 @@ export default function StripeCheckoutButton({
         placeholder="Enter one additional name per line"
       />
       <p className="mt-2 text-xs text-gray-400">
-        ${ADDITIONAL_DEED_NAME_PRICE.toFixed(2)} per name, per property · maximum{" "}
+        {formatUsdFromCents(ADDITIONAL_DEED_NAME_PRICE_CENTS)} per name, per property · maximum{" "}
         {MAX_ADDITIONAL_DEED_NAMES} names
       </p>
 
       {additionalDeedNames.length > 0 && (
         <p className="mt-2 text-sm font-bold text-yellow-400">
-          Additional-name total for {propertyCount} properties: ${
-            additionalNameTotal.toFixed(2)
-          }
+          Additional-name total for {propertyCount} properties:{" "}
+          {formatUsdFromCents(additionalNameTotalCents)}
         </p>
       )}
 
@@ -197,6 +205,31 @@ export default function StripeCheckoutButton({
           />
         </>
       )}
+
+      <div className="mt-6 space-y-2 rounded-xl border border-white/15 bg-black/30 p-4 text-sm">
+        <div className="flex justify-between gap-4 text-gray-300">
+          <span>Properties</span>
+          <span>{formatUsdFromCents(propertySubtotalCents)}</span>
+        </div>
+        {passportSelected && (
+          <div className="flex justify-between gap-4 text-gray-300">
+            <span>Lunar passports</span>
+            <span>{formatUsdFromCents(passportTotalCents)}</span>
+          </div>
+        )}
+        {additionalNameTotalCents > 0 && (
+          <div className="flex justify-between gap-4 text-gray-300">
+            <span>Additional deed names</span>
+            <span>{formatUsdFromCents(additionalNameTotalCents)}</span>
+          </div>
+        )}
+        <div className="flex justify-between gap-4 border-t border-white/15 pt-3 text-lg font-black text-white">
+          <span>Secure checkout total</span>
+          <span className="text-yellow-400">
+            {formatUsdFromCents(checkoutTotalCents)}
+          </span>
+        </div>
+      </div>
 
       <label className="mt-6 flex items-start gap-3 rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm text-gray-200">
         <input

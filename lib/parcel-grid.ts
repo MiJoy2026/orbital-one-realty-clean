@@ -7,6 +7,7 @@ import {
   LUNASPHERE_SALEABLE_INVENTORY_ZOOM,
   type InventoryViewportBounds,
 } from "./inventory-grid";
+import { getCanonicalPropertyPrice } from "./purchase-constants";
 import {
   calculateBoundingBox,
   isPointInsidePolygon,
@@ -234,7 +235,7 @@ export function generateParcelGrid(
         }),
         stateName,
         propertyType: "Rural Acre",
-        price: 24.95,
+        price: getCanonicalPropertyPrice("Rural Acre"),
         sizeLabel: "1 Acre",
         positions: createRectanglePolygon(
           mapX,
@@ -671,7 +672,7 @@ function generateRuralParcelGrid(
         }),
         stateName,
         propertyType: "Rural Acre",
-        price: 24.95,
+        price: getCanonicalPropertyPrice("Rural Acre"),
         sizeLabel: "1 Acre",
         positions,
         mapX,
@@ -817,7 +818,7 @@ export function getSelectableRuralParcelByKey(
     parcelKey: parcelKey.trim().toUpperCase(),
     stateName,
     propertyType: "Rural Acre",
-    price: 24.95,
+    price: getCanonicalPropertyPrice("Rural Acre"),
     sizeLabel: "1 Acre",
     positions,
     mapX,

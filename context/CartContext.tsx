@@ -9,6 +9,14 @@ import {
   type ReactNode,
 } from "react";
 
+import {
+  ADDITIONAL_DEED_NAME_PRICE,
+  ADDITIONAL_RURAL_ACRE_PRICE,
+  getCanonicalPropertyPrice,
+  isPurchasablePropertyType,
+  PASSPORT_PRICE,
+} from "@/lib/purchase-constants";
+
 export type CartItem = {
   id: string;
   propertyId: string;
@@ -81,25 +89,33 @@ const CartContext = createContext<CartContextValue | undefined>(undefined);
 
 const STORAGE_KEY = "orbital-one-cart";
 
-const ADDITIONAL_ACRE_PRICE = 7.95;
-const PASSPORT_PRICE = 4.99;
-
 export function calculateCartItemTotal(item: CartItem) {
   const quantity = Math.max(1, item.quantity ?? 1);
-  const additionalAcres = Math.max(0, item.additionalAcres ?? 0);
-
   const passportQuantity = item.passportSelected
     ? Math.max(1, item.passportQuantity ?? 1)
     : 0;
+  const canonicalUnitPrice = isPurchasablePropertyType(item.propertyType)
+    ? getCanonicalPropertyPrice(item.propertyType)
+    : 0;
+  const additionalAcres =
+    item.propertyType === "Rural Acre"
+      ? Math.max(0, item.additionalAcres ?? 0)
+      : 0;
+  const additionalNameCount = item.additionalOwner?.trim() ? 1 : 0;
 
-  const basePropertyTotal = item.unitPrice * quantity;
-
+  const basePropertyTotal = canonicalUnitPrice * quantity;
   const additionalAcreTotal =
-    additionalAcres * ADDITIONAL_ACRE_PRICE * quantity;
-
+    additionalAcres * ADDITIONAL_RURAL_ACRE_PRICE * quantity;
+  const additionalNameTotal =
+    additionalNameCount * ADDITIONAL_DEED_NAME_PRICE * quantity;
   const passportTotal = passportQuantity * PASSPORT_PRICE;
 
-  return basePropertyTotal + additionalAcreTotal + passportTotal;
+  return (
+    basePropertyTotal +
+    additionalAcreTotal +
+    additionalNameTotal +
+    passportTotal
+  );
 }
 
 function isCartItem(value: unknown): value is CartItem {
@@ -150,6 +166,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
           quantity: item.quantity ?? 1,
           additionalAcres: item.additionalAcres ?? 0,
           passportQuantity: item.passportQuantity ?? 1,
+          unitPrice: isPurchasablePropertyType(item.propertyType)
+            ? getCanonicalPropertyPrice(item.propertyType)
+            : 0,
         }));
 
       setItems(validItems);
@@ -178,6 +197,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       quantity: Math.max(1, item.quantity ?? 1),
       additionalAcres: Math.max(0, item.additionalAcres ?? 0),
       passportQuantity: Math.max(1, item.passportQuantity ?? 1),
+      unitPrice: isPurchasablePropertyType(item.propertyType)
+        ? getCanonicalPropertyPrice(item.propertyType)
+        : 0,
     };
 
     setItems((currentItems) => [...currentItems, normalizedItem]);
@@ -230,6 +252,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
             1,
             updatedItem.passportQuantity ?? 1
           ),
+          unitPrice: isPurchasablePropertyType(updatedItem.propertyType)
+            ? getCanonicalPropertyPrice(updatedItem.propertyType)
+            : 0,
         };
       })
     );

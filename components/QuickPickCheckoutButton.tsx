@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import type { CartItem } from "@/context/CartContext";
+import { calculateCartItemTotal, type CartItem } from "@/context/CartContext";
 
 export default function QuickPickCheckoutButton({
   item,
@@ -12,6 +12,7 @@ export default function QuickPickCheckoutButton({
   const [noveltyAcknowledged, setNoveltyAcknowledged] = useState(false);
   const [isOpeningCheckout, setIsOpeningCheckout] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  const checkoutTotal = calculateCartItemTotal(item);
 
   async function openCheckout() {
     if (!item.reservationId) {
@@ -46,7 +47,6 @@ export default function QuickPickCheckoutButton({
           reservationIds: [item.reservationId],
           deedName: primaryName,
           additionalDeedNames,
-          acres: item.acres || 1,
           passportSelected: item.passportSelected,
           isGift: item.isGift,
           recipientEmail: item.recipientEmail || "",
@@ -79,6 +79,12 @@ export default function QuickPickCheckoutButton({
 
   return (
     <div className="mt-5 rounded-2xl border border-yellow-300/25 bg-yellow-300/[0.06] p-4">
+      <div className="mb-4 flex items-center justify-between gap-4 border-b border-yellow-300/15 pb-4">
+        <span className="text-sm font-bold text-slate-300">Secure checkout total</span>
+        <span className="text-xl font-black text-yellow-300">
+          ${checkoutTotal.toFixed(2)}
+        </span>
+      </div>
       <label className="flex items-start gap-3 text-sm leading-6 text-slate-200">
         <input
           type="checkbox"

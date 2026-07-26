@@ -2,6 +2,10 @@ import { redirect } from "next/navigation";
 
 import LunaScapeImageGallery from "../../components/LunaScapeImageGallery";
 import { prisma } from "../../lib/prisma";
+import {
+  formatAcreage,
+  formatAcreageAllocation,
+} from "../../lib/purchase-constants";
 import { getSessionUserId } from "../../lib/session";
 
 export default async function AccountPage() {
@@ -116,7 +120,9 @@ export default async function AccountPage() {
           </div>
           <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
             <p className="text-sm uppercase text-gray-400">Rural Acres</p>
-            <p className="mt-2 text-4xl font-black">{totalAcres}</p>
+            <p className="mt-2 text-4xl font-black">
+              {formatAcreage(totalAcres) || "0 acres"}
+            </p>
           </div>
           <div className="rounded-2xl border border-green-500 bg-green-950/30 p-6">
             <p className="text-sm uppercase text-gray-400">HOA Status</p>
@@ -246,16 +252,22 @@ export default async function AccountPage() {
                             </p>
                           </div>
 
+                          <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm font-bold text-gray-300">
+                            {(order.acreagePurchased || 0) > 0 && (
+                              <span>
+                                Acreage: {formatAcreage(order.acreagePurchased)}
+                              </span>
+                            )}
+                            <span>Recorded amount: ${order.amountPaid.toFixed(2)}</span>
+                          </div>
+
                           {allocation && (
                             <div className="mt-4 rounded-2xl border border-yellow-400/40 bg-yellow-400/10 p-4">
                               <p className="text-sm font-bold uppercase text-yellow-400">
                                 Assigned Acre Range
                               </p>
                               <p className="mt-2 text-xl font-black text-yellow-400">
-                                Acre {allocation.startingAcre.toLocaleString()}
-                                {allocation.startingAcre !== allocation.endingAcre
-                                  ? ` - ${allocation.endingAcre.toLocaleString()}`
-                                  : ""}
+                                {formatAcreageAllocation(allocation)}
                               </p>
                             </div>
                           )}
@@ -368,12 +380,18 @@ export default async function AccountPage() {
                           </p>
                         </div>
 
+                        <div className="mt-4 flex flex-wrap gap-x-6 gap-y-2 text-sm font-bold text-gray-300">
+                          {(order.acreagePurchased || 0) > 0 && (
+                            <span>
+                              Acreage: {formatAcreage(order.acreagePurchased)}
+                            </span>
+                          )}
+                          <span>Recorded amount: ${order.amountPaid.toFixed(2)}</span>
+                        </div>
+
                         {allocation && (
                           <p className="mt-4 font-bold text-yellow-400">
-                            Assigned Acre Range: Acre {allocation.startingAcre.toLocaleString()}
-                            {allocation.startingAcre !== allocation.endingAcre
-                              ? ` through ${allocation.endingAcre.toLocaleString()}`
-                              : ""}
+                            Assigned Acre Range: {formatAcreageAllocation(allocation)}
                           </p>
                         )}
 
@@ -434,14 +452,18 @@ export default async function AccountPage() {
                       <p className="mt-2">
                         Purchase Date: {order.createdAt.toLocaleDateString()}
                       </p>
+                      {(order.acreagePurchased || 0) > 0 && (
+                        <p className="mt-2">
+                          Acreage Purchased: {formatAcreage(order.acreagePurchased)}
+                        </p>
+                      )}
+                      <p className="mt-2">
+                        Recorded Purchase Amount: ${order.amountPaid.toFixed(2)}
+                      </p>
 
                       {allocation && (
                         <p className="mt-2 font-bold text-yellow-400">
-                          Assigned Acre Range: Acre{" "}
-                          {allocation.startingAcre.toLocaleString()}
-                          {allocation.startingAcre !== allocation.endingAcre
-                            ? ` through ${allocation.endingAcre.toLocaleString()}`
-                            : ""}
+                          Assigned Acre Range: {formatAcreageAllocation(allocation)}
                         </p>
                       )}
 

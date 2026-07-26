@@ -5,10 +5,18 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import PropertyConfigurator from "@/components/PropertyConfigurator/PropertyConfigurator";
 import { useCart, type CartItem } from "@/context/CartContext";
+import {
+  ADDITIONAL_DEED_NAME_PRICE,
+  ADDITIONAL_RURAL_ACRE_PRICE,
+  getCanonicalPropertyAcreage,
+  PASSPORT_PRICE,
+  PROPERTY_PRICES,
+  type PurchasablePropertyType,
+} from "@/lib/purchase-constants";
 
 type Product = {
   sku: string;
-  propertyType: "Rural Acre" | "Town Block" | "City Block";
+  propertyType: PurchasablePropertyType;
   name: string;
   category: string;
   promise: string;
@@ -26,7 +34,7 @@ type Product = {
 
 type AssignedProperty = {
   propertyId: string;
-  propertyType: "Rural Acre" | "Town Block" | "City Block";
+  propertyType: PurchasablePropertyType;
   stateName: string;
   cityName: string | null;
   townName: string | null;
@@ -49,9 +57,6 @@ type ConfiguratorForm = {
   giftMessage: string;
 };
 
-const ADDITIONAL_ACRE_PRICE = 7.95;
-const PASSPORT_PRICE = 4.99;
-
 const products: Product[] = [
   {
     sku: "rural-one-acre",
@@ -61,18 +66,38 @@ const products: Product[] = [
     promise: "Our classic lunar ownership experience.",
     description:
       "Claim a full acre within Orbital One's mapped lunar geography and create a property package designed to be displayed, shared, and remembered. Add adjoining acreage to build a larger commemorative holding.",
-    price: 24.95,
+    price: PROPERTY_PRICES["Rural Acre"],
     acres: 1,
     image: "/property-images/rural-acre.jpg",
     mark: "1",
     highlights: [
       "One full novelty lunar acre",
-      "Additional acres only $7.95 each",
+      `Adjoining additional acres only $${ADDITIONAL_RURAL_ACRE_PRICE.toFixed(2)} each`,
       "Complete digital ownership collection",
     ],
     idealFor: "Families, collectors, milestones, and larger gifts",
     badge: "Most Popular",
     allowsAdditionalAcres: true,
+  },
+  {
+    sku: "rural-half-acre",
+    propertyType: "Half Acre",
+    name: "Half-Acre Lunar Property",
+    category: "Rural Acreage",
+    promise: "A compact lunar keepsake at an accessible price.",
+    description:
+      "Reserve a half-acre commemorative lunar property with the same personalized ownership package, certificate record, and Charter HOA membership as every Orbital One property.",
+    price: PROPERTY_PRICES["Half Acre"],
+    acres: 0.5,
+    image: "/property-images/rural-acre.jpg",
+    mark: "1/2",
+    highlights: [
+      "One-half novelty lunar acre",
+      "Personalized deed and purchase documents",
+      "2026 Charter HOA membership included",
+    ],
+    idealFor: "Affordable gifts, first-time buyers, and keepsakes",
+    badge: "Best Value",
   },
   {
     sku: "town-block",
@@ -82,7 +107,7 @@ const products: Product[] = [
     promise: "A place within a named lunar community.",
     description:
       "Own a commemorative block inside one of LunaSphere's mapped towns. Town properties create a stronger sense of neighborhood, community identity, and future participation in the expanding LunaScape experience.",
-    price: 39.95,
+    price: PROPERTY_PRICES["Town Block"],
     acres: 0,
     image: "/property-images/town-block.jpg",
     mark: "T",
@@ -101,7 +126,7 @@ const products: Product[] = [
     promise: "A premium address in a lunar city.",
     description:
       "Choose Orbital One's most prestigious property tier: a commemorative block within one of three named cities in a lunar state. It is designed for customers who want a bold, premium place in the LunaSphere story.",
-    price: 54.95,
+    price: PROPERTY_PRICES["City Block"],
     acres: 0,
     image: "/property-images/city-block.jpg",
     mark: "C",
@@ -152,8 +177,11 @@ export default function PricingPage() {
     if (!selectedProduct) return 0;
 
     const passportTotal = form.passportSelected ? PASSPORT_PRICE : 0;
+    const additionalNameTotal = form.additionalOwner.trim()
+      ? ADDITIONAL_DEED_NAME_PRICE
+      : 0;
 
-    return selectedProduct.price + passportTotal;
+    return selectedProduct.price + passportTotal + additionalNameTotal;
   }, [selectedProduct, form]);
 
   const openConfigurator = (product: Product) => {
@@ -243,10 +271,10 @@ export default function PricingPage() {
         lunarState: property.stateName,
         lunarCity: property.cityName || undefined,
         lunarTown: property.townName || undefined,
-        acres: property.propertyType === "Rural Acre" ? 1 : 0,
+        acres: getCanonicalPropertyAcreage(property.propertyType) ?? 0,
         additionalAcres: 0,
         quantity: 1,
-        unitPrice: property.price,
+        unitPrice: selectedProduct.price,
         passportSelected: form.passportSelected,
         passportQuantity: 1,
         isGift: form.isGift,
@@ -304,7 +332,7 @@ export default function PricingPage() {
             </h1>
 
             <p className="mt-7 max-w-2xl text-lg leading-8 text-slate-200 sm:text-xl">
-              Choose a rural acre, town block, or premium city block—then
+              Choose a half acre, rural acre, town block, or premium city block—then
               personalize an Orbital One ownership experience built to be gifted,
               displayed, shared, and remembered.
             </p>
@@ -405,7 +433,7 @@ export default function PricingPage() {
             </p>
           </div>
 
-          <div className="mt-14 grid gap-7 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-14 grid gap-7 md:grid-cols-2 xl:grid-cols-4">
             {products.map((product) => (
               <article
                 key={product.sku}
@@ -465,7 +493,9 @@ export default function PricingPage() {
                       <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Starting at</p>
                       <p className="mt-1 text-4xl font-black text-white">${product.price.toFixed(2)}</p>
                       {product.allowsAdditionalAcres && (
-                        <p className="mt-1 text-xs text-slate-500">Additional acres: $7.95 each</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {`Adjoining additional acres: $${ADDITIONAL_RURAL_ACRE_PRICE.toFixed(2)} each`}
+                        </p>
                       )}
                     </div>
                     <button
@@ -729,6 +759,12 @@ export default function PricingPage() {
               <h3 className="text-lg font-bold">Order Summary</h3>
               <div className="mt-4 space-y-3 text-sm">
                 <SummaryRow label={selectedProduct.name} value={selectedProduct.price} />
+                {form.additionalOwner.trim() && (
+                  <SummaryRow
+                    label="Additional deed name"
+                    value={ADDITIONAL_DEED_NAME_PRICE}
+                  />
+                )}
                 {form.passportSelected && (
                   <SummaryRow label="Lunar Passport" value={PASSPORT_PRICE} />
                 )}

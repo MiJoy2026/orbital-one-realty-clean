@@ -4,7 +4,12 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { CART_RESERVATION_COOKIE } from "../lib/cart-reservations";
-import { PASSPORT_PRICE } from "../lib/purchase-constants";
+import {
+  calculateCanonicalPropertyPricing,
+  formatUsdFromCents,
+  PASSPORT_PRICE,
+  PASSPORT_PRICE_CENTS,
+} from "../lib/purchase-constants";
 import ReservationCountdown from "./moon-map/ReservationCountdown";
 import StripeCheckoutButton from "./StripeCheckoutButton";
 
@@ -29,9 +34,27 @@ export default function CartCheckoutPanel({
   const [passportSelected, setPassportSelected] = useState(false);
   const [cancellingId, setCancellingId] = useState<string | null>(null);
   const [cancelError, setCancelError] = useState("");
-  const propertySubtotal = items.reduce((sum, item) => sum + item.price, 0);
-  const passportTotal = passportSelected
-    ? PASSPORT_PRICE * items.length
+  const propertyPricing = useMemo(
+    () =>
+      calculateCanonicalPropertyPricing(
+        items.map((item) => ({
+          propertyId: item.propertyId,
+          propertyType: item.propertyType,
+        }))
+      ),
+    [items]
+  );
+  const propertyPricingById = useMemo(
+    () =>
+      new Map(propertyPricing.map((item) => [item.propertyId, item])),
+    [propertyPricing]
+  );
+  const propertySubtotalCents = propertyPricing.reduce(
+    (sum, item) => sum + item.unitAmountCents,
+    0
+  );
+  const passportTotalCents = passportSelected
+    ? PASSPORT_PRICE_CENTS * items.length
     : 0;
   const earliestExpiration = useMemo(
     () =>
@@ -117,7 +140,19 @@ export default function CartCheckoutPanel({
                 </p>
                 <p className="text-xs text-gray-400">{item.propertyType}</p>
               </div>
-              <p className="font-black">${item.price.toFixed(2)}</p>
+              <div className="text-right">
+                <p className="font-black">
+                  {formatUsdFromCents(
+                    propertyPricingById.get(item.propertyId)?.unitAmountCents ?? 0
+                  )}
+                </p>
+                {propertyPricingById.get(item.propertyId)?.pricingRole ===
+                  "adjoining-rural-acre" && (
+                  <p className="mt-1 text-[11px] font-bold uppercase tracking-wide text-emerald-300">
+                    Adjoining-acre price
+                  </p>
+                )}
+              </div>
             </div>
             <button
               type="button"
@@ -136,7 +171,7 @@ export default function CartCheckoutPanel({
       <div className="mt-6 space-y-3 text-gray-300">
         <div className="flex justify-between">
           <span>Properties ({items.length})</span>
-          <span>${propertySubtotal.toFixed(2)}</span>
+          <span>{formatUsdFromCents(propertySubtotalCents)}</span>
         </div>
 
         <label className="flex items-center justify-between gap-4 rounded-xl border border-white/20 bg-white/5 p-4">
@@ -150,7 +185,7 @@ export default function CartCheckoutPanel({
           </span>
 
           <span className="flex items-center gap-3">
-            <span>${passportTotal.toFixed(2)}</span>
+            <span>{formatUsdFromCents(passportTotalCents)}</span>
             <input
               type="checkbox"
               checked={passportSelected}
@@ -163,7 +198,9 @@ export default function CartCheckoutPanel({
           <div className="flex justify-between">
             <span>Current Total</span>
             <span>
-              ${(propertySubtotal + passportTotal).toFixed(2)}
+              {formatUsdFromCents(
+                propertySubtotalCents + passportTotalCents
+              )}
             </span>
           </div>
           <p className="mt-2 text-xs font-normal text-gray-500">
@@ -176,6 +213,7 @@ export default function CartCheckoutPanel({
         propertyIds={items.map((item) => item.propertyId)}
         reservationIds={items.map((item) => item.reservationId)}
         propertyCount={items.length}
+        propertySubtotalCents={propertySubtotalCents}
         passportSelected={passportSelected}
       />
 

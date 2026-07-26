@@ -10,7 +10,9 @@ import {
 } from "@/lib/parcel-grid";
 import { prisma } from "@/lib/prisma";
 import {
+  getCanonicalPropertyAcreage,
   getCanonicalPropertyPrice,
+  getCanonicalPropertySize,
   isPurchasablePropertyType,
   type PurchasablePropertyType,
 } from "@/lib/purchase-constants";
@@ -74,13 +76,8 @@ function fromCell(
     stateName: input.stateName,
     cityName: input.cityName ?? null,
     townName: input.townName ?? null,
-    size:
-      propertyType === "Rural Acre"
-        ? "1 Acre"
-        : propertyType === "City Block"
-          ? "1 City Block"
-          : "1 Town Block",
-    acreage: propertyType === "Rural Acre" ? 1 : null,
+    size: getCanonicalPropertySize(propertyType),
+    acreage: getCanonicalPropertyAcreage(propertyType),
     price: getCanonicalPropertyPrice(propertyType),
     centerX: cell.centerX,
     centerY: cell.centerY,
@@ -185,7 +182,7 @@ export async function POST(request: Request) {
 
     if (!isPurchasablePropertyType(propertyType)) {
       return NextResponse.json(
-        { error: "Choose Rural Acre, Town Block, or City Block." },
+        { error: "Choose Half Acre, Rural Acre, Town Block, or City Block." },
         { status: 400 }
       );
     }
@@ -207,7 +204,7 @@ export async function POST(request: Request) {
     for (let attempt = 0; attempt < MAXIMUM_PICK_ATTEMPTS; attempt += 1) {
       let candidate: QuickPickCandidate | null = null;
 
-      if (propertyType === "Rural Acre") {
+      if (propertyType === "Rural Acre" || propertyType === "Half Acre") {
         const region = chooseRandom(regions);
 
         if (!region) break;

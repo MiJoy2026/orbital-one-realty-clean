@@ -30,9 +30,12 @@ export async function GET(request: Request) {
   }
 
   const {
+    order,
     property,
     allocation,
     assignedAcreRange,
+    propertySize,
+    purchaseAmountLabel,
     certificateNumber,
     deedName,
     issueDate,
@@ -120,7 +123,7 @@ page.drawText(deedName, {
   page.drawText(property.id, { x: valueX, y: 430, size: 14, font: bodyFont });
 
   page.drawText("Property Type:", { x: detailX, y: 400, size: 14, font: titleFont });
-  page.drawText(property.type, { x: valueX, y: 400, size: 14, font: bodyFont });
+  page.drawText(order.propertyType, { x: valueX, y: 400, size: 14, font: bodyFont });
 
   page.drawText("Lunar Location:", { x: detailX, y: 370, size: 14, font: titleFont });
   page.drawText(locationLabel, { x: valueX, y: 370, size: 12, font: bodyFont });
@@ -132,9 +135,23 @@ page.drawText(deedName, {
   font: titleFont,
 });
 
-page.drawText(property.size, {
+page.drawText(propertySize, {
   x: valueX,
   y: 340,
+  size: 14,
+  font: bodyFont,
+});
+
+page.drawText("Purchase Amount:", {
+  x: detailX,
+  y: 310,
+  size: 14,
+  font: titleFont,
+});
+
+page.drawText(purchaseAmountLabel, {
+  x: valueX,
+  y: 310,
   size: 14,
   font: bodyFont,
 });
@@ -142,14 +159,14 @@ page.drawText(property.size, {
 if (allocation) {
   page.drawText("Assigned Acreage:", {
     x: detailX,
-    y: 310,
+    y: 280,
     size: 14,
     font: titleFont,
   });
 
   page.drawText(assignedAcreRange, {
     x: valueX,
-    y: 310,
+    y: 280,
     size: 14,
     font: bodyFont,
   });
@@ -157,14 +174,14 @@ if (allocation) {
 
   page.drawText("Issue Date:", {
   x: detailX,
-  y: allocation ? 280 : 310,
+  y: allocation ? 250 : 280,
   size: 14,
   font: titleFont,
 });
 
 page.drawText(issueDate, {
   x: valueX,
-  y: allocation ? 280 : 310,
+  y: allocation ? 250 : 280,
   size: 14,
   font: bodyFont,
 });

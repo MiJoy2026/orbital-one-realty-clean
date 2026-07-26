@@ -37,8 +37,11 @@ export async function GET(request: Request) {
   }
 
   const {
+    order,
     property,
     assignedAcreRange,
+    propertySize,
+    purchaseAmountLabel,
     certificateNumber,
     deedName,
     locationLabel,
@@ -93,7 +96,7 @@ export async function GET(request: Request) {
 });
   const paragraphs = [
     "Congratulations and welcome to Orbital One Realty. Your novelty lunar property package has been prepared as a fun, memorable, and out-of-this-world keepsake.",
-    `Your selected property is ${property.id}, a ${property.size} ${property.type} located at ${locationLabel}.${assignedAcreRange ? ` Assigned acreage: ${assignedAcreRange}.` : ""}`,
+    `Your selected property is ${property.id}, a ${propertySize} ${order.propertyType} located at ${locationLabel}.${assignedAcreRange ? ` Assigned acreage: ${assignedAcreRange}.` : ""} Recorded purchase amount: ${purchaseAmountLabel}.`,
     "Your package includes a personalized novelty deed, property information, HOA membership materials, and access to your recorded certificate in the Orbital One registry.",
     "Please remember that Orbital One Realty products are novelty and commemorative items only. They do not convey legal ownership, mineral rights, territorial rights, or any enforceable property interest in lunar real estate.",
     "Thank you for joining the Orbital One community. It's fun. It's unique. It's out of this world!",
