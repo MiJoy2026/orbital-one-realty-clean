@@ -31,7 +31,6 @@ type Product = {
   allowsAdditionalAcres?: boolean;
 };
 
-
 type AssignedProperty = {
   propertyId: string;
   propertyType: PurchasablePropertyType;
@@ -72,7 +71,9 @@ const products: Product[] = [
     mark: "1",
     highlights: [
       "One full novelty lunar acre",
-      `Adjoining additional acres only $${ADDITIONAL_RURAL_ACRE_PRICE.toFixed(2)} each`,
+      `Adjoining additional acres only $${ADDITIONAL_RURAL_ACRE_PRICE.toFixed(
+        2
+      )} each`,
       "Complete digital ownership collection",
     ],
     idealFor: "Families, collectors, milestones, and larger gifts",
@@ -166,17 +167,22 @@ const createCartId = () => {
 
 export default function PricingPage() {
   const { addItem, itemCount, subtotal } = useCart();
+
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [form, setForm] = useState<ConfiguratorForm>(initialForm);
   const [formError, setFormError] = useState("");
   const [addedMessage, setAddedMessage] = useState("");
   const [isAssigningProperty, setIsAssigningProperty] = useState(false);
-  const [assignedProperty, setAssignedProperty] = useState<AssignedProperty | null>(null);
+  const [assignedProperty, setAssignedProperty] =
+    useState<AssignedProperty | null>(null);
 
   const configuredTotal = useMemo(() => {
-    if (!selectedProduct) return 0;
+    if (!selectedProduct) {
+      return 0;
+    }
 
     const passportTotal = form.passportSelected ? PASSPORT_PRICE : 0;
+
     const additionalNameTotal = form.additionalOwner.trim()
       ? ADDITIONAL_DEED_NAME_PRICE
       : 0;
@@ -200,19 +206,10 @@ export default function PricingPage() {
     setIsAssigningProperty(false);
   };
 
-  const updateNumber = (
-    field: "quantity" | "additionalAcres" | "passportQuantity",
-    change: number,
-    minimum: number
-  ) => {
-    setForm((current) => ({
-      ...current,
-      [field]: Math.max(minimum, current[field] + change),
-    }));
-  };
-
   const handleAddConfiguredItem = async () => {
-    if (!selectedProduct || isAssigningProperty || assignedProperty) return;
+    if (!selectedProduct || isAssigningProperty || assignedProperty) {
+      return;
+    }
 
     if (!form.ownerName.trim()) {
       setFormError("Please enter the primary owner name.");
@@ -234,11 +231,14 @@ export default function PricingPage() {
 
       const response = await fetch("/api/quick-pick", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           propertyType: selectedProduct.propertyType,
         }),
       });
+
       const data = (await response.json()) as {
         error?: string;
         reservationId?: string;
@@ -260,6 +260,7 @@ export default function PricingPage() {
       }
 
       const property = data.property;
+
       const cartItem: CartItem = {
         id: createCartId(),
         propertyId: property.propertyId,
@@ -278,8 +279,12 @@ export default function PricingPage() {
         passportSelected: form.passportSelected,
         passportQuantity: 1,
         isGift: form.isGift,
-        recipientName: form.isGift ? form.recipientName.trim() : undefined,
-        recipientEmail: form.isGift ? form.recipientEmail.trim() : undefined,
+        recipientName: form.isGift
+          ? form.recipientName.trim()
+          : undefined,
+        recipientEmail: form.isGift
+          ? form.recipientEmail.trim()
+          : undefined,
         giftMessage:
           form.isGift && form.giftMessage.trim()
             ? form.giftMessage.trim()
@@ -293,11 +298,13 @@ export default function PricingPage() {
 
       addItem(cartItem);
       setAssignedProperty(property);
+
       setAddedMessage(
         `${property.propertyId} has been selected, reserved, and added to your cart.`
       );
     } catch (error) {
       console.error("Unable to assign Quick Pick property:", error);
+
       setFormError(
         "Quick Pick could not connect to LunaSphere. Please try again."
       );
@@ -307,7 +314,10 @@ export default function PricingPage() {
   };
 
   return (
-    <main id="top" className="min-h-screen overflow-hidden bg-[#02040a] text-white">
+    <main
+      id="top"
+      className="min-h-screen overflow-hidden bg-[#02040a] text-white"
+    >
       <section className="relative isolate min-h-[700px] overflow-hidden border-b border-white/10 px-6 py-20 sm:py-24 lg:flex lg:min-h-[760px] lg:items-center">
         <Image
           src="/pricing/pricing-hero.png"
@@ -317,6 +327,7 @@ export default function PricingPage() {
           sizes="100vw"
           className="-z-30 object-cover object-center"
         />
+
         <div className="absolute inset-0 -z-20 bg-gradient-to-r from-[#02040a] via-[#02040a]/90 to-[#02040a]/35" />
         <div className="absolute inset-0 -z-10 bg-gradient-to-t from-[#02040a] via-transparent to-black/20" />
 
@@ -332,22 +343,24 @@ export default function PricingPage() {
             </h1>
 
             <p className="mt-7 max-w-2xl text-lg leading-8 text-slate-200 sm:text-xl">
-              Choose a half acre, rural acre, town block, or premium city block—then
-              personalize an Orbital One ownership experience built to be gifted,
-              displayed, shared, and remembered.
+              Choose a half acre, rural acre, town block, or premium city
+              block—then personalize an Orbital One ownership experience built
+              to be gifted, displayed, shared, and remembered.
             </p>
 
             <div className="mt-8 flex flex-wrap gap-3 text-sm font-semibold text-slate-200">
-              {["Personalized deed", "Two LunaScape images", "Free Charter HOA membership"].map(
-                (item) => (
-                  <span
-                    key={item}
-                    className="rounded-full border border-white/15 bg-black/40 px-4 py-2 backdrop-blur"
-                  >
-                    {item}
-                  </span>
-                )
-              )}
+              {[
+                "Personalized deed",
+                "Two LunaScape images",
+                "Free Charter HOA membership",
+              ].map((item) => (
+                <span
+                  key={item}
+                  className="rounded-full border border-white/15 bg-black/40 px-4 py-2 backdrop-blur"
+                >
+                  {item}
+                </span>
+              ))}
             </div>
 
             <div className="mt-10 flex flex-wrap gap-4">
@@ -357,6 +370,7 @@ export default function PricingPage() {
               >
                 Choose Your Property
               </a>
+
               <Link
                 href="/moon-map"
                 className="rounded-xl border border-white/25 bg-black/30 px-7 py-4 font-black text-white backdrop-blur transition hover:border-yellow-300/50 hover:bg-black/50"
@@ -372,8 +386,12 @@ export default function PricingPage() {
                 <p className="text-xs font-black uppercase tracking-[0.24em] text-yellow-400">
                   Every paid property includes
                 </p>
-                <h2 className="mt-2 text-2xl font-black">The Orbital One Collection</h2>
+
+                <h2 className="mt-2 text-2xl font-black">
+                  The Orbital One Collection
+                </h2>
               </div>
+
               <Image
                 src="/orbital-one-logo.png"
                 alt="Orbital One Realty"
@@ -396,8 +414,13 @@ export default function PricingPage() {
                   key={number}
                   className="flex gap-3 rounded-2xl border border-white/10 bg-white/[0.05] p-4"
                 >
-                  <span className="text-xs font-black text-yellow-400">{number}</span>
-                  <span className="text-sm font-semibold leading-5 text-slate-200">{label}</span>
+                  <span className="text-xs font-black text-yellow-400">
+                    {number}
+                  </span>
+
+                  <span className="text-sm font-semibold leading-5 text-slate-200">
+                    {label}
+                  </span>
                 </div>
               ))}
             </div>
@@ -422,89 +445,120 @@ export default function PricingPage() {
               <p className="text-sm font-black uppercase tracking-[0.28em] text-yellow-400">
                 Property Collection
               </p>
+
               <h2 className="mt-4 text-4xl font-black tracking-tight sm:text-5xl">
                 Choose the story you want to tell.
               </h2>
             </div>
+
             <p className="max-w-3xl text-lg leading-8 text-slate-400 lg:justify-self-end">
-              Every tier offers the same polished Orbital One ownership experience.
-              The difference is where your commemorative property lives within
-              LunaSphere—from peaceful rural terrain to a named town or premium city.
+              Every tier offers the same polished Orbital One ownership
+              experience. The difference is where your commemorative property
+              lives within LunaSphere—from peaceful rural terrain to a named
+              town or premium city.
             </p>
           </div>
 
-          <div className="mt-14 grid gap-7 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-14 grid gap-8 lg:grid-cols-2">
             {products.map((product) => (
               <article
                 key={product.sku}
-                className="group overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] shadow-2xl shadow-black/30 transition duration-300 hover:-translate-y-1 hover:border-yellow-300/35"
+                className="group flex h-full flex-col overflow-hidden rounded-[2rem] border border-white/10 bg-white/[0.035] shadow-2xl shadow-black/30 transition duration-300 hover:-translate-y-1 hover:border-yellow-300/35"
               >
-                <div className="relative h-72 overflow-hidden sm:h-80">
+                <div className="relative h-64 overflow-hidden sm:h-72">
                   <Image
                     src={product.image}
                     alt={product.name}
                     fill
-                    sizes="(min-width: 1280px) 33vw, (min-width: 768px) 50vw, 100vw"
+                    sizes="(min-width: 1024px) 50vw, 100vw"
                     className="object-cover transition duration-700 group-hover:scale-[1.035]"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#05070d] via-transparent to-black/15" />
 
-                  <div className="absolute left-5 top-5 flex items-center gap-3">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full border border-yellow-200/60 bg-black/55 text-xl font-black text-yellow-200 shadow-xl backdrop-blur">
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#05070d] via-black/5 to-black/20" />
+
+                  <div className="absolute left-5 top-5 flex max-w-[calc(100%-2.5rem)] items-center gap-3">
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-yellow-200/60 bg-black/65 text-xl font-black text-yellow-200 shadow-xl backdrop-blur">
                       {product.mark}
                     </div>
-                    <div className="rounded-full border border-white/20 bg-black/55 px-4 py-2 text-xs font-black uppercase tracking-[0.2em] text-white backdrop-blur">
+
+                    <div className="rounded-full border border-white/20 bg-black/65 px-4 py-2 text-xs font-black uppercase tracking-[0.16em] text-white shadow-xl backdrop-blur">
                       {product.category}
                     </div>
                   </div>
-
-                  {product.badge && (
-                    <div className="absolute right-5 top-5 rounded-full bg-yellow-400 px-4 py-2 text-xs font-black uppercase tracking-wide text-black shadow-xl">
-                      {product.badge}
-                    </div>
-                  )}
                 </div>
 
-                <div className="p-7 sm:p-8">
-                  <p className="text-sm font-black uppercase tracking-[0.18em] text-yellow-400">
-                    {product.promise}
-                  </p>
-                  <h3 className="mt-3 text-3xl font-black tracking-tight">{product.name}</h3>
-                  <p className="mt-5 text-base leading-7 text-slate-400">{product.description}</p>
+                <div className="flex flex-1 flex-col p-7 sm:p-8 lg:p-9">
+                  <div className="flex flex-wrap items-center gap-3">
+                    {product.badge && (
+                      <span className="rounded-full bg-yellow-400 px-4 py-2 text-xs font-black uppercase tracking-[0.12em] text-black shadow-lg shadow-yellow-400/10">
+                        {product.badge}
+                      </span>
+                    )}
 
-                  <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                    {product.highlights.map((highlight) => (
-                      <div
-                        key={highlight}
-                        className="rounded-xl border border-white/10 bg-black/25 p-3 text-sm font-semibold leading-5 text-slate-200"
-                      >
-                        <span className="mr-2 text-yellow-400">✓</span>
-                        {highlight}
-                      </div>
-                    ))}
+                    <span className="text-sm font-bold leading-6 text-yellow-300">
+                      {product.promise}
+                    </span>
                   </div>
 
-                  <p className="mt-5 text-sm leading-6 text-slate-500">
-                    <strong className="text-slate-300">Best for:</strong> {product.idealFor}
+                  <h3 className="mt-5 text-3xl font-black leading-tight tracking-tight sm:text-4xl">
+                    {product.name}
+                  </h3>
+
+                  <p className="mt-5 text-base leading-7 text-slate-400">
+                    {product.description}
                   </p>
 
-                  <div className="mt-7 flex flex-col gap-5 border-t border-white/10 pt-6 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">Starting at</p>
-                      <p className="mt-1 text-4xl font-black text-white">${product.price.toFixed(2)}</p>
-                      {product.allowsAdditionalAcres && (
-                        <p className="mt-1 text-xs text-slate-500">
-                          {`Adjoining additional acres: $${ADDITIONAL_RURAL_ACRE_PRICE.toFixed(2)} each`}
-                        </p>
-                      )}
+                  <ul className="mt-7 space-y-3">
+                    {product.highlights.map((highlight) => (
+                      <li
+                        key={highlight}
+                        className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/25 px-4 py-4"
+                      >
+                        <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-yellow-400/10 text-sm font-black text-yellow-300">
+                          ✓
+                        </span>
+
+                        <span className="text-sm font-semibold leading-6 text-slate-200">
+                          {highlight}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <p className="mt-6 text-sm leading-6 text-slate-500">
+                    <strong className="text-slate-300">Best for:</strong>{" "}
+                    {product.idealFor}
+                  </p>
+
+                  <div className="mt-auto pt-8">
+                    <div className="border-t border-white/10 pt-7">
+                      <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-[0.2em] text-slate-500">
+                            Starting at
+                          </p>
+
+                          <p className="mt-2 text-4xl font-black text-white sm:text-5xl">
+                            ${product.price.toFixed(2)}
+                          </p>
+
+                          {product.allowsAdditionalAcres && (
+                            <p className="mt-2 max-w-sm text-xs leading-5 text-slate-500">
+                              Adjoining additional acres: $
+                              {ADDITIONAL_RURAL_ACRE_PRICE.toFixed(2)} each
+                            </p>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => openConfigurator(product)}
+                          className="w-full rounded-xl bg-gradient-to-r from-yellow-300 to-amber-500 px-6 py-4 text-center font-black text-black transition hover:-translate-y-0.5 hover:from-yellow-200 hover:to-yellow-400 sm:w-auto sm:min-w-56"
+                        >
+                          Quick Pick &amp; Personalize
+                        </button>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => openConfigurator(product)}
-                      className="rounded-xl bg-gradient-to-r from-yellow-300 to-amber-500 px-6 py-4 font-black text-black transition hover:from-yellow-200 hover:to-yellow-400"
-                    >
-                      Quick Pick & Personalize
-                    </button>
                   </div>
                 </div>
               </article>
@@ -516,11 +570,18 @@ export default function PricingPage() {
       <section className="border-y border-white/10 bg-white/[0.025] px-6 py-20 sm:py-24">
         <div className="mx-auto max-w-7xl">
           <div className="mx-auto max-w-3xl text-center">
-            <p className="text-sm font-black uppercase tracking-[0.28em] text-yellow-400">More than a deed</p>
-            <h2 className="mt-4 text-4xl font-black tracking-tight sm:text-5xl">A complete ownership experience.</h2>
+            <p className="text-sm font-black uppercase tracking-[0.28em] text-yellow-400">
+              More than a deed
+            </p>
+
+            <h2 className="mt-4 text-4xl font-black tracking-tight sm:text-5xl">
+              A complete ownership experience.
+            </h2>
+
             <p className="mt-5 text-lg leading-8 text-slate-400">
-              Orbital One turns a novelty lunar property into a polished collection of
-              personal documents, imagery, recognition, and future member experiences.
+              Orbital One turns a novelty lunar property into a polished
+              collection of personal documents, imagery, recognition, and
+              future member experiences.
             </p>
           </div>
 
@@ -551,10 +612,19 @@ export default function PricingPage() {
                   "Your account is built for future property enhancements, virtual homes, communities, member recognition, and LunaScape experiences.",
               },
             ].map((feature) => (
-              <article key={feature.number} className="rounded-3xl border border-white/10 bg-black/25 p-7">
-                <p className="text-sm font-black tracking-[0.2em] text-yellow-400">{feature.number}</p>
+              <article
+                key={feature.number}
+                className="rounded-3xl border border-white/10 bg-black/25 p-7"
+              >
+                <p className="text-sm font-black tracking-[0.2em] text-yellow-400">
+                  {feature.number}
+                </p>
+
                 <h3 className="mt-5 text-xl font-black">{feature.title}</h3>
-                <p className="mt-4 text-sm leading-7 text-slate-400">{feature.description}</p>
+
+                <p className="mt-4 text-sm leading-7 text-slate-400">
+                  {feature.description}
+                </p>
               </article>
             ))}
           </div>
@@ -564,12 +634,20 @@ export default function PricingPage() {
       <section className="px-6 py-20 sm:py-24">
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
           <div className="rounded-[2rem] border border-yellow-300/25 bg-gradient-to-br from-yellow-300/12 via-white/[0.04] to-transparent p-8 sm:p-10">
-            <p className="text-sm font-black uppercase tracking-[0.28em] text-yellow-400">Free with purchase</p>
-            <h2 className="mt-4 text-4xl font-black tracking-tight">Your 2026 Charter HOA membership.</h2>
-            <p className="mt-5 text-lg leading-8 text-slate-300">
-              Your membership is not a throwaway certificate. It is your ongoing connection
-              to Orbital One and the growing LunaScape community.
+            <p className="text-sm font-black uppercase tracking-[0.28em] text-yellow-400">
+              Free with purchase
             </p>
+
+            <h2 className="mt-4 text-4xl font-black tracking-tight">
+              Your 2026 Charter HOA membership.
+            </h2>
+
+            <p className="mt-5 text-lg leading-8 text-slate-300">
+              Your membership is not a throwaway certificate. It is your
+              ongoing connection to Orbital One and the growing LunaScape
+              community.
+            </p>
+
             <div className="mt-7 grid gap-3 sm:grid-cols-2">
               {[
                 "Emailed lunar newsletters and product updates",
@@ -579,31 +657,65 @@ export default function PricingPage() {
                 "Virtual-property enhancement opportunities",
                 "Priority access to future communities",
               ].map((benefit) => (
-                <div key={benefit} className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-sm font-semibold text-slate-200">
+                <div
+                  key={benefit}
+                  className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-sm font-semibold text-slate-200"
+                >
                   <span className="mr-2 text-yellow-400">✓</span>
                   {benefit}
                 </div>
               ))}
             </div>
-            <Link href="/hoa" className="mt-8 inline-flex rounded-xl border border-yellow-300/40 px-6 py-3 font-black text-yellow-200 transition hover:bg-yellow-300/10">
+
+            <Link
+              href="/hoa"
+              className="mt-8 inline-flex rounded-xl border border-yellow-300/40 px-6 py-3 font-black text-yellow-200 transition hover:bg-yellow-300/10"
+            >
               Explore HOA Membership
             </Link>
           </div>
 
           <div className="rounded-[2rem] border border-white/10 bg-white/[0.035] p-8 sm:p-10">
-            <p className="text-sm font-black uppercase tracking-[0.28em] text-yellow-400">Simple Mission Plan</p>
-            <h2 className="mt-4 text-4xl font-black tracking-tight">From selection to celebration.</h2>
+            <p className="text-sm font-black uppercase tracking-[0.28em] text-yellow-400">
+              Simple Mission Plan
+            </p>
+
+            <h2 className="mt-4 text-4xl font-black tracking-tight">
+              From selection to celebration.
+            </h2>
+
             <div className="mt-8 space-y-6">
               {[
-                ["1", "Choose your property tier", "Select rural acreage, a town block, or a premium city block based on the experience you want."],
-                ["2", "Personalize the ownership package", "Add the owner's name, gift details, optional additional acreage, and novelty lunar passports."],
-                ["3", "Receive your Orbital One collection", "After checkout, your ownership materials, account records, and LunaScape property images are prepared automatically."],
+                [
+                  "1",
+                  "Choose your property tier",
+                  "Select rural acreage, a town block, or a premium city block based on the experience you want.",
+                ],
+                [
+                  "2",
+                  "Personalize the ownership package",
+                  "Add the owner's name, gift details, optional additional acreage, and novelty lunar passports.",
+                ],
+                [
+                  "3",
+                  "Receive your Orbital One collection",
+                  "After checkout, your ownership materials, account records, and LunaScape property images are prepared automatically.",
+                ],
               ].map(([number, title, description]) => (
-                <div key={number} className="grid grid-cols-[3rem_1fr] gap-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-yellow-300/40 bg-yellow-300/10 font-black text-yellow-300">{number}</div>
+                <div
+                  key={number}
+                  className="grid grid-cols-[3rem_1fr] gap-4"
+                >
+                  <div className="flex h-12 w-12 items-center justify-center rounded-full border border-yellow-300/40 bg-yellow-300/10 font-black text-yellow-300">
+                    {number}
+                  </div>
+
                   <div>
                     <h3 className="text-lg font-black">{title}</h3>
-                    <p className="mt-2 text-sm leading-7 text-slate-400">{description}</p>
+
+                    <p className="mt-2 text-sm leading-7 text-slate-400">
+                      {description}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -614,19 +726,37 @@ export default function PricingPage() {
 
       <section className="border-t border-white/10 px-6 py-20 text-center sm:py-24">
         <div className="mx-auto max-w-4xl">
-          <Image src="/orbital-one-logo.png" alt="Orbital One Realty" width={360} height={101} className="mx-auto h-auto w-64 sm:w-80" />
+          <Image
+            src="/orbital-one-logo.png"
+            alt="Orbital One Realty"
+            width={360}
+            height={101}
+            className="mx-auto h-auto w-64 sm:w-80"
+          />
+
           <h2 className="mt-9 text-4xl font-black sm:text-5xl">
             It’s fun. It’s unique.
-            <span className="block text-yellow-400">It’s out of this world!</span>
+            <span className="block text-yellow-400">
+              It’s out of this world!
+            </span>
           </h2>
+
           <p className="mx-auto mt-6 max-w-2xl text-lg leading-8 text-slate-400">
-            Choose a property that fits the moment, then personalize an Orbital One experience they will never forget.
+            Choose a property that fits the moment, then personalize an
+            Orbital One experience they will never forget.
           </p>
-          <a href="#property-collection" className="mt-9 inline-flex rounded-xl bg-gradient-to-r from-yellow-300 to-amber-500 px-8 py-4 font-black text-black">
+
+          <a
+            href="#property-collection"
+            className="mt-9 inline-flex rounded-xl bg-gradient-to-r from-yellow-300 to-amber-500 px-8 py-4 font-black text-black"
+          >
             Choose Your Lunar Property
           </a>
+
           <p className="mx-auto mt-12 max-w-3xl text-xs leading-6 text-slate-600">
-            Orbital One Realty products are novelty and entertainment products. They do not represent legal ownership of land or real estate on the Moon and are not government-recognized property titles.
+            Orbital One Realty products are novelty and entertainment products.
+            They do not represent legal ownership of land or real estate on the
+            Moon and are not government-recognized property titles.
           </p>
         </div>
       </section>
@@ -647,15 +777,26 @@ export default function PricingPage() {
                   sizes="720px"
                   className="object-cover"
                 />
+
                 <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/30 to-transparent" />
+
                 <div className="absolute inset-x-0 bottom-0 flex items-end gap-4 p-6">
                   <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full border border-yellow-200/60 bg-black/60 text-xl font-black text-yellow-200 backdrop-blur">
                     {selectedProduct.mark}
                   </div>
+
                   <div>
-                    <p className="text-sm font-black uppercase tracking-[0.16em] text-yellow-400">{selectedProduct.category}</p>
-                    <h3 className="mt-1 text-2xl font-black">{selectedProduct.name}</h3>
-                    <p className="mt-1 text-sm text-slate-300">Base price ${selectedProduct.price.toFixed(2)}</p>
+                    <p className="text-sm font-black uppercase tracking-[0.16em] text-yellow-400">
+                      {selectedProduct.category}
+                    </p>
+
+                    <h3 className="mt-1 text-2xl font-black">
+                      {selectedProduct.name}
+                    </h3>
+
+                    <p className="mt-1 text-sm text-slate-300">
+                      Base price ${selectedProduct.price.toFixed(2)}
+                    </p>
                   </div>
                 </div>
               </div>
@@ -663,21 +804,39 @@ export default function PricingPage() {
 
             <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
               <h3 className="text-lg font-bold">Owner Information</h3>
+
               <div className="mt-5 space-y-4">
                 <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-300">Primary owner name *</span>
+                  <span className="mb-2 block text-sm font-medium text-slate-300">
+                    Primary owner name *
+                  </span>
+
                   <input
                     value={form.ownerName}
-                    onChange={(event) => setForm((current) => ({ ...current, ownerName: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        ownerName: event.target.value,
+                      }))
+                    }
                     className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 outline-none transition focus:border-yellow-400"
                     placeholder="Name shown on the deed"
                   />
                 </label>
+
                 <label className="block">
-                  <span className="mb-2 block text-sm font-medium text-slate-300">Additional owner</span>
+                  <span className="mb-2 block text-sm font-medium text-slate-300">
+                    Additional owner
+                  </span>
+
                   <input
                     value={form.additionalOwner}
-                    onChange={(event) => setForm((current) => ({ ...current, additionalOwner: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        additionalOwner: event.target.value,
+                      }))
+                    }
                     className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 outline-none transition focus:border-yellow-400"
                     placeholder="Optional second name"
                   />
@@ -687,32 +846,58 @@ export default function PricingPage() {
 
             <section className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
               <h3 className="text-lg font-bold">Property Options</h3>
+
               <div className="mt-5 space-y-5">
                 <div className="rounded-xl border border-emerald-300/20 bg-emerald-300/[0.06] p-4">
-                  <p className="font-black text-emerald-200">One real property will be assigned</p>
+                  <p className="font-black text-emerald-200">
+                    One real property will be assigned
+                  </p>
+
                   <p className="mt-2 text-sm leading-6 text-slate-400">
-                    Quick Pick securely chooses one currently available Grid V2 property from this category and reserves it before it enters your cart.
+                    Quick Pick securely chooses one currently available Grid V2
+                    property from this category and reserves it before it enters
+                    your cart.
                   </p>
                 </div>
+
                 {selectedProduct.allowsAdditionalAcres && (
                   <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-slate-400">
-                    Looking for adjoining acreage? Use the Moon Map to choose connected parcels and build a larger holding.
-                    <Link href="/moon-map" className="ml-2 font-black text-yellow-300">Choose adjoining parcels →</Link>
+                    Looking for adjoining acreage? Use the Moon Map to choose
+                    connected parcels and build a larger holding.
+
+                    <Link
+                      href="/moon-map"
+                      className="ml-2 font-black text-yellow-300"
+                    >
+                      Choose adjoining parcels →
+                    </Link>
                   </div>
                 )}
+
                 <label className="flex cursor-pointer items-start gap-4 rounded-xl border border-white/10 bg-black/20 p-4">
                   <input
                     type="checkbox"
                     checked={form.passportSelected}
-                    onChange={(event) => setForm((current) => ({ ...current, passportSelected: event.target.checked }))}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        passportSelected: event.target.checked,
+                      }))
+                    }
                     className="mt-1 h-5 w-5 accent-yellow-400"
                   />
+
                   <span>
-                    <span className="block font-semibold">Add Lunar Passport</span>
-                    <span className="mt-1 block text-sm text-slate-400">Personalized novelty passport · ${PASSPORT_PRICE.toFixed(2)} each</span>
+                    <span className="block font-semibold">
+                      Add Lunar Passport
+                    </span>
+
+                    <span className="mt-1 block text-sm text-slate-400">
+                      Personalized novelty passport · $
+                      {PASSPORT_PRICE.toFixed(2)} each
+                    </span>
                   </span>
                 </label>
-
               </div>
             </section>
 
@@ -721,32 +906,61 @@ export default function PricingPage() {
                 <input
                   type="checkbox"
                   checked={form.isGift}
-                  onChange={(event) => setForm((current) => ({ ...current, isGift: event.target.checked }))}
+                  onChange={(event) =>
+                    setForm((current) => ({
+                      ...current,
+                      isGift: event.target.checked,
+                    }))
+                  }
                   className="mt-1 h-5 w-5 accent-yellow-400"
                 />
+
                 <span>
-                  <span className="block text-lg font-bold">This is a gift</span>
-                  <span className="mt-1 block text-sm text-slate-400">Add recipient details and an optional personal message.</span>
+                  <span className="block text-lg font-bold">
+                    This is a gift
+                  </span>
+
+                  <span className="mt-1 block text-sm text-slate-400">
+                    Add recipient details and an optional personal message.
+                  </span>
                 </span>
               </label>
+
               {form.isGift && (
                 <div className="mt-5 space-y-4">
                   <input
                     value={form.recipientName}
-                    onChange={(event) => setForm((current) => ({ ...current, recipientName: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        recipientName: event.target.value,
+                      }))
+                    }
                     className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 outline-none transition focus:border-yellow-400"
                     placeholder="Recipient name"
                   />
+
                   <input
                     type="email"
                     value={form.recipientEmail}
-                    onChange={(event) => setForm((current) => ({ ...current, recipientEmail: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        recipientEmail: event.target.value,
+                      }))
+                    }
                     className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 outline-none transition focus:border-yellow-400"
                     placeholder="Recipient email"
                   />
+
                   <textarea
                     value={form.giftMessage}
-                    onChange={(event) => setForm((current) => ({ ...current, giftMessage: event.target.value }))}
+                    onChange={(event) =>
+                      setForm((current) => ({
+                        ...current,
+                        giftMessage: event.target.value,
+                      }))
+                    }
                     rows={4}
                     className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-4 py-3 outline-none transition focus:border-yellow-400"
                     placeholder="Optional gift message"
@@ -757,37 +971,70 @@ export default function PricingPage() {
 
             <section className="relative rounded-2xl border border-yellow-300/25 bg-slate-950/95 p-6 shadow-2xl">
               <h3 className="text-lg font-bold">Order Summary</h3>
+
               <div className="mt-4 space-y-3 text-sm">
-                <SummaryRow label={selectedProduct.name} value={selectedProduct.price} />
+                <SummaryRow
+                  label={selectedProduct.name}
+                  value={selectedProduct.price}
+                />
+
                 {form.additionalOwner.trim() && (
                   <SummaryRow
                     label="Additional deed name"
                     value={ADDITIONAL_DEED_NAME_PRICE}
                   />
                 )}
+
                 {form.passportSelected && (
-                  <SummaryRow label="Lunar Passport" value={PASSPORT_PRICE} />
+                  <SummaryRow
+                    label="Lunar Passport"
+                    value={PASSPORT_PRICE}
+                  />
                 )}
               </div>
+
               <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-5">
                 <span className="text-lg font-bold">Total</span>
-                <span className="text-3xl font-black text-yellow-400">${configuredTotal.toFixed(2)}</span>
+
+                <span className="text-3xl font-black text-yellow-400">
+                  ${configuredTotal.toFixed(2)}
+                </span>
               </div>
+
               {formError && (
-                <p className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">{formError}</p>
+                <p className="mt-4 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+                  {formError}
+                </p>
               )}
+
               {addedMessage && (
                 <div className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-500/10 px-4 py-4 text-sm text-emerald-100">
                   <p className="font-black">Property secured!</p>
+
                   <p className="mt-1 break-all">{addedMessage}</p>
+
                   {assignedProperty && (
                     <div className="mt-3 flex flex-wrap gap-3">
-                      <Link href="/cart" className="rounded-lg bg-emerald-300 px-4 py-2 font-black text-emerald-950">View Cart</Link>
-                      <Link href={`/moon-map?property=${encodeURIComponent(assignedProperty.propertyId)}`} className="rounded-lg border border-emerald-200/30 px-4 py-2 font-black">View on Moon Map</Link>
+                      <Link
+                        href="/cart"
+                        className="rounded-lg bg-emerald-300 px-4 py-2 font-black text-emerald-950"
+                      >
+                        View Cart
+                      </Link>
+
+                      <Link
+                        href={`/moon-map?property=${encodeURIComponent(
+                          assignedProperty.propertyId
+                        )}`}
+                        className="rounded-lg border border-emerald-200/30 px-4 py-2 font-black"
+                      >
+                        View on Moon Map
+                      </Link>
                     </div>
                   )}
                 </div>
               )}
+
               <button
                 type="button"
                 onClick={handleAddConfiguredItem}
@@ -800,6 +1047,7 @@ export default function PricingPage() {
                     ? "Property Reserved & Added"
                     : "Assign My Property & Add to Cart"}
               </button>
+
               <button
                 type="button"
                 onClick={closeConfigurator}
@@ -815,26 +1063,6 @@ export default function PricingPage() {
   );
 }
 
-type CounterProps = {
-  label: string;
-  value: number;
-  onDecrease: () => void;
-  onIncrease: () => void;
-};
-
-function Counter({ label, value, onDecrease, onIncrease }: CounterProps) {
-  return (
-    <div className="flex items-center justify-between gap-4 rounded-xl border border-white/10 bg-black/20 p-4">
-      <span className="text-sm font-medium text-slate-300">{label}</span>
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={onDecrease} className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-lg transition hover:bg-white/10">−</button>
-        <span className="min-w-8 text-center text-lg font-bold">{value}</span>
-        <button type="button" onClick={onIncrease} className="flex h-9 w-9 items-center justify-center rounded-lg border border-white/10 bg-white/5 text-lg transition hover:bg-white/10">+</button>
-      </div>
-    </div>
-  );
-}
-
 type SummaryRowProps = {
   label: string;
   value: number;
@@ -844,7 +1072,10 @@ function SummaryRow({ label, value }: SummaryRowProps) {
   return (
     <div className="flex items-start justify-between gap-4 text-slate-400">
       <span>{label}</span>
-      <span className="shrink-0 font-semibold text-white">${value.toFixed(2)}</span>
+
+      <span className="shrink-0 font-semibold text-white">
+        ${value.toFixed(2)}
+      </span>
     </div>
   );
 }
