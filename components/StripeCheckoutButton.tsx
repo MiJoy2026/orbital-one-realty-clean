@@ -29,12 +29,8 @@ export default function StripeCheckoutButton({
   const [additionalNamesText, setAdditionalNamesText] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [giftMessage, setGiftMessage] = useState("");
-  const [termsAccepted, setTermsAccepted] = useState(false);
-  const [immediateFulfillmentAccepted, setImmediateFulfillmentAccepted] =
-    useState(false);
-  const [electronicDeliveryAccepted, setElectronicDeliveryAccepted] =
-    useState(false);
-  const [withdrawalAcknowledged, setWithdrawalAcknowledged] = useState(false);
+  const [noveltyAcknowledged, setNoveltyAcknowledged] = useState(false);
+  const [legalAcknowledged, setLegalAcknowledged] = useState(false);
   const [isStartingCheckout, setIsStartingCheckout] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -79,28 +75,16 @@ export default function StripeCheckoutButton({
       return;
     }
 
-    if (!termsAccepted) {
+    if (!noveltyAcknowledged) {
       setErrorMessage(
-        "Please accept the Terms, Refund Policy, and novelty-property disclosure."
+        "Please confirm that this is a novelty commemorative product."
       );
       return;
     }
 
-    if (!immediateFulfillmentAccepted) {
+    if (!legalAcknowledged) {
       setErrorMessage(
-        "Please request immediate processing of your personalized digital order."
-      );
-      return;
-    }
-
-    if (!electronicDeliveryAccepted) {
-      setErrorMessage("Please consent to electronic delivery of your order records.");
-      return;
-    }
-
-    if (!withdrawalAcknowledged) {
-      setErrorMessage(
-        "Please acknowledge the digital-content withdrawal notice where applicable."
+        "Please review and accept the legal policies and digital-delivery acknowledgment."
       );
       return;
     }
@@ -123,11 +107,8 @@ export default function StripeCheckoutButton({
           recipientEmail,
           giftMessage,
           passportSelected,
-          noveltyAcknowledged: termsAccepted,
-          termsAccepted,
-          immediateFulfillmentAccepted,
-          electronicDeliveryAccepted,
-          withdrawalAcknowledged,
+          noveltyAcknowledged,
+          legalAcknowledged,
           legalPolicyVersion: LEGAL_POLICY_VERSION,
         }),
       });
@@ -261,59 +242,46 @@ export default function StripeCheckoutButton({
       </div>
 
       <div className="mt-6 space-y-3">
-        <label className="flex items-start gap-3 rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm text-gray-200">
+        <label className="flex items-start gap-3 rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm leading-6 text-gray-200">
           <input
             type="checkbox"
-            checked={termsAccepted}
-            onChange={(event) => setTermsAccepted(event.target.checked)}
-            className="mt-1"
+            checked={noveltyAcknowledged}
+            onChange={(event) =>
+              setNoveltyAcknowledged(event.target.checked)
+            }
+            className="mt-1 h-4 w-4 shrink-0 accent-yellow-400"
+          />
+          <span>
+            I understand this is a novelty commemorative product and does not
+            convey legal ownership of lunar real estate.
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 rounded-xl border border-white/15 bg-black/30 p-4 text-sm leading-6 text-gray-200">
+          <input
+            type="checkbox"
+            checked={legalAcknowledged}
+            onChange={(event) => setLegalAcknowledged(event.target.checked)}
+            className="mt-1 h-4 w-4 shrink-0 accent-yellow-400"
           />
           <span>
             I agree to the{" "}
-            <Link href="/terms" target="_blank" className="font-black text-yellow-300 underline">
+            <Link
+              href="/terms"
+              target="_blank"
+              className="font-black text-yellow-300 underline"
+            >
               Terms and Conditions
-            </Link>{" "}
-            and{" "}
-            <Link href="/refunds" target="_blank" className="font-black text-yellow-300 underline">
+            </Link>
+            ,{" "}
+            <Link
+              href="/refunds"
+              target="_blank"
+              className="font-black text-yellow-300 underline"
+            >
               Refund and Cancellation Policy
             </Link>
-            . I understand that Orbital One Realty products are personalized
-            novelty and entertainment products and do not convey legally
-            recognized ownership of lunar real estate.
-          </span>
-        </label>
-
-        <label className="flex items-start gap-3 rounded-xl border border-white/15 bg-black/30 p-4 text-sm text-gray-200">
-          <input
-            type="checkbox"
-            checked={immediateFulfillmentAccepted}
-            onChange={(event) =>
-              setImmediateFulfillmentAccepted(event.target.checked)
-            }
-            className="mt-1"
-          />
-          <span>
-            I request immediate processing and digital fulfillment of my
-            personalized order. I understand that production may begin
-            immediately after payment and the order may no longer be cancellable
-            once personalization or fulfillment begins.
-          </span>
-        </label>
-
-        <label className="flex items-start gap-3 rounded-xl border border-white/15 bg-black/30 p-4 text-sm text-gray-200">
-          <input
-            type="checkbox"
-            checked={electronicDeliveryAccepted}
-            onChange={(event) =>
-              setElectronicDeliveryAccepted(event.target.checked)
-            }
-            className="mt-1"
-          />
-          <span>
-            I consent to receive my confirmation, policies, disclosures,
-            personalized documents, images, membership materials, and purchase
-            records electronically. I can access, download, save, and print
-            electronic records. Read the{" "}
+            , and{" "}
             <Link
               href="/shipping-delivery"
               target="_blank"
@@ -321,24 +289,43 @@ export default function StripeCheckoutButton({
             >
               Digital Delivery Policy
             </Link>
-            .
-          </span>
-        </label>
-
-        <label className="flex items-start gap-3 rounded-xl border border-white/15 bg-black/30 p-4 text-sm text-gray-200">
-          <input
-            type="checkbox"
-            checked={withdrawalAcknowledged}
-            onChange={(event) =>
-              setWithdrawalAcknowledged(event.target.checked)
-            }
-            className="mt-1"
-          />
-          <span>
-            Where an applicable right of withdrawal exists, I expressly consent
-            to digital performance beginning immediately and acknowledge that I
-            may lose that right once performance or delivery begins. Mandatory
-            consumer rights that cannot be waived remain unaffected.
+            . I acknowledge the{" "}
+            <Link
+              href="/privacy"
+              target="_blank"
+              className="font-black text-yellow-300 underline"
+            >
+              Privacy Policy
+            </Link>
+            ,{" "}
+            <Link
+              href="/cookies"
+              target="_blank"
+              className="font-black text-yellow-300 underline"
+            >
+              Cookie Policy
+            </Link>
+            ,{" "}
+            <Link
+              href="/accessibility"
+              target="_blank"
+              className="font-black text-yellow-300 underline"
+            >
+              Accessibility Statement
+            </Link>
+            , and{" "}
+            <Link
+              href="/legal-notice"
+              target="_blank"
+              className="font-black text-yellow-300 underline"
+            >
+              Legal Notice
+            </Link>
+            . I request immediate processing and electronic delivery of my
+            personalized digital order. Where applicable, I consent to
+            performance beginning immediately and acknowledge that I may lose a
+            right of withdrawal once performance or delivery begins. Mandatory
+            consumer rights remain unaffected.
           </span>
         </label>
       </div>

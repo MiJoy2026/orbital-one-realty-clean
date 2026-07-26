@@ -120,11 +120,16 @@ export async function POST(request: Request) {
       .slice(0, 254);
     const giftMessage = String(body.giftMessage || "").trim().slice(0, 350);
     const noveltyAcknowledged = body.noveltyAcknowledged === true;
-    const termsAccepted = body.termsAccepted === true;
-    const immediateFulfillmentAccepted =
-      body.immediateFulfillmentAccepted === true;
-    const electronicDeliveryAccepted = body.electronicDeliveryAccepted === true;
-    const withdrawalAcknowledged = body.withdrawalAcknowledged === true;
+    const legalAcknowledged =
+      body.legalAcknowledged === true ||
+      (body.termsAccepted === true &&
+        body.immediateFulfillmentAccepted === true &&
+        body.electronicDeliveryAccepted === true &&
+        body.withdrawalAcknowledged === true);
+    const termsAccepted = legalAcknowledged;
+    const immediateFulfillmentAccepted = legalAcknowledged;
+    const electronicDeliveryAccepted = legalAcknowledged;
+    const withdrawalAcknowledged = legalAcknowledged;
     const legalPolicyVersion = String(body.legalPolicyVersion || "").trim();
     const legalAcceptedAt = new Date().toISOString();
 
@@ -147,16 +152,13 @@ export async function POST(request: Request) {
 
     if (
       !noveltyAcknowledged ||
-      !termsAccepted ||
-      !immediateFulfillmentAccepted ||
-      !electronicDeliveryAccepted ||
-      !withdrawalAcknowledged ||
+      !legalAcknowledged ||
       legalPolicyVersion !== LEGAL_POLICY_VERSION
     ) {
       return NextResponse.json(
         {
           error:
-            "Please review and accept every required legal and digital-delivery acknowledgment.",
+            "Please accept both required checkout acknowledgments.",
         },
         { status: 400 }
       );
@@ -322,6 +324,7 @@ export async function POST(request: Request) {
       giftMessage,
       pricingVersion: PRICING_VERSION,
       legalPolicyVersion,
+      legalAcknowledged,
       termsAccepted,
       immediateFulfillmentAccepted,
       electronicDeliveryAccepted,
@@ -479,6 +482,7 @@ export async function POST(request: Request) {
           recipientEmail: isGift ? recipientEmail : "",
           giftMessage: isGift ? giftMessage : "",
           noveltyAcknowledged: "true",
+          legalAcknowledged: "true",
           termsAccepted: "true",
           immediateFulfillmentAccepted: "true",
           electronicDeliveryAccepted: "true",
