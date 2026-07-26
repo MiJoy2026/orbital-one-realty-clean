@@ -36,6 +36,14 @@ model Order {
   giftMessage    String?
   hoaClaimed     Boolean @default(false)
 
+  legalPolicyVersion            String?
+  legalAcceptedAt                DateTime?
+  termsAccepted                 Boolean  @default(false)
+  noveltyAcknowledged           Boolean  @default(false)
+  immediateFulfillmentAccepted  Boolean  @default(false)
+  electronicDeliveryAccepted    Boolean  @default(false)
+  withdrawalAcknowledged        Boolean  @default(false)
+
   propertySnapshot OwnedPropertySnapshot?
 
   @@unique([stripeSessionId, propertyId], map: "Order_stripe_session_property_key")

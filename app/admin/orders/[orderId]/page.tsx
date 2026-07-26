@@ -254,6 +254,44 @@ export default async function AdminOrderDetailPage({
           </div>
         </section>
 
+        <section className="mt-10 rounded-3xl border border-sky-400/30 bg-sky-400/[0.06] p-8">
+          <h2 className="text-3xl font-black text-sky-300">
+            Legal Acceptance Record
+          </h2>
+          <div className="mt-6 grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <p className="text-sm uppercase text-gray-400">Policy Version</p>
+              <p className="mt-2 font-black">
+                {order.legalPolicyVersion || "Legacy order"}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm uppercase text-gray-400">Accepted At</p>
+              <p className="mt-2 font-black">
+                {order.legalAcceptedAt
+                  ? order.legalAcceptedAt.toLocaleString()
+                  : "Not recorded"}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm uppercase text-gray-400">Terms / Novelty</p>
+              <p className="mt-2 font-black">
+                {order.termsAccepted && order.noveltyAcknowledged ? "Accepted" : "Legacy / Not recorded"}
+              </p>
+            </div>
+            <div>
+              <p className="text-sm uppercase text-gray-400">Digital Consents</p>
+              <p className="mt-2 font-black">
+                {order.immediateFulfillmentAccepted &&
+                order.electronicDeliveryAccepted &&
+                order.withdrawalAcknowledged
+                  ? "Accepted"
+                  : "Legacy / Not recorded"}
+              </p>
+            </div>
+          </div>
+        </section>
+
         <div className="mt-10 flex flex-wrap gap-4">
           <a
             href={`/verify/${order.certificateNumber}`}

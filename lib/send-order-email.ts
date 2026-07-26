@@ -26,6 +26,8 @@ type SendOrderEmailParams = {
   amountPaid: number;
   passportPurchased: boolean;
   giftMessage: string | null;
+  legalPolicyVersion: string | null;
+  legalAcceptedAt: Date | null;
   items: OrderEmailItem[];
 };
 
@@ -121,6 +123,8 @@ export async function sendOrderEmail({
   amountPaid,
   passportPurchased,
   giftMessage,
+  legalPolicyVersion,
+  legalAcceptedAt,
   items,
 }: SendOrderEmailParams) {
   const recipients = Array.from(
@@ -191,6 +195,22 @@ export async function sendOrderEmail({
                 : ""
             }
             <p><strong>Total Amount Paid:</strong> $${amountPaid.toFixed(2)}</p>
+            ${
+              legalPolicyVersion && legalAcceptedAt
+                ? `<div style="border:1px solid #ddd;border-radius:12px;padding:18px;margin:22px 0;background:#f8fafc;">
+                    <h2 style="margin-top:0;">Legal and Digital Delivery Confirmation</h2>
+                    <p>Your required checkout acknowledgments were recorded on ${escapeHtml(
+                      legalAcceptedAt.toISOString()
+                    )} under policy version ${escapeHtml(legalPolicyVersion)}.</p>
+                    <ul>
+                      <li><a href="${appUrl}/terms">Terms and Conditions</a></li>
+                      <li><a href="${appUrl}/refunds">Refund and Cancellation Policy</a></li>
+                      <li><a href="${appUrl}/shipping-delivery">Digital Delivery Policy</a></li>
+                      <li><a href="${appUrl}/privacy">Privacy Policy</a></li>
+                    </ul>
+                  </div>`
+                : ""
+            }
             ${accountAccessSection}
             ${propertySections}
             <h2>Included HOA Member Benefits</h2>
@@ -203,7 +223,17 @@ export async function sendOrderEmail({
             </ul>
             <p style="font-size:12px;color:#555;">
               Orbital One Realty products are novelty and commemorative items only.
-              They do not convey legal ownership of lunar real estate.
+              They do not convey legal ownership of lunar real estate. Orbital One
+              Realty is not affiliated with or endorsed by NASA or any government
+              or space agency.
+            </p>
+            <p style="font-size:12px;color:#555;">
+              <a href="${appUrl}/privacy">Privacy</a> ·
+              <a href="${appUrl}/terms">Terms</a> ·
+              <a href="${appUrl}/refunds">Refunds</a> ·
+              <a href="${appUrl}/cookies">Cookies</a> ·
+              <a href="${appUrl}/accessibility">Accessibility</a> ·
+              <a href="${appUrl}/legal-notice">Legal Notice</a>
             </p>
           </div>
         `,

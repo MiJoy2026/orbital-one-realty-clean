@@ -295,6 +295,25 @@ export default async function SuccessPage({
           })}
         </div>
 
+        {orders[0].legalAcceptedAt && orders[0].legalPolicyVersion && (
+          <section className="mt-10 rounded-3xl border border-white/15 bg-white/[0.04] p-6 text-left">
+            <p className="text-sm font-black uppercase tracking-[0.2em] text-yellow-400">
+              Legal acceptance recorded
+            </p>
+            <p className="mt-3 text-sm leading-7 text-slate-300">
+              Policy version {orders[0].legalPolicyVersion} was accepted on{" "}
+              {orders[0].legalAcceptedAt.toLocaleString()}. Your order confirmation
+              email includes a durable record and links to the applicable policies.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-sm font-black text-yellow-300">
+              <Link href="/terms">Terms</Link>
+              <Link href="/refunds">Refunds</Link>
+              <Link href="/shipping-delivery">Digital Delivery</Link>
+              <Link href="/privacy">Privacy</Link>
+            </div>
+          </section>
+        )}
+
         <div className="mt-10 flex flex-wrap justify-center gap-4">
           <Link
             href="/moon-map"

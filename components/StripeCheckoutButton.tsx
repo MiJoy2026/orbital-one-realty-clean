@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
+import { LEGAL_POLICY_VERSION } from "@/lib/legal-config";
 import {
   ADDITIONAL_DEED_NAME_PRICE_CENTS,
   formatUsdFromCents,
@@ -27,7 +29,12 @@ export default function StripeCheckoutButton({
   const [additionalNamesText, setAdditionalNamesText] = useState("");
   const [recipientEmail, setRecipientEmail] = useState("");
   const [giftMessage, setGiftMessage] = useState("");
-  const [noveltyAcknowledged, setNoveltyAcknowledged] = useState(false);
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [immediateFulfillmentAccepted, setImmediateFulfillmentAccepted] =
+    useState(false);
+  const [electronicDeliveryAccepted, setElectronicDeliveryAccepted] =
+    useState(false);
+  const [withdrawalAcknowledged, setWithdrawalAcknowledged] = useState(false);
   const [isStartingCheckout, setIsStartingCheckout] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
@@ -72,9 +79,28 @@ export default function StripeCheckoutButton({
       return;
     }
 
-    if (!noveltyAcknowledged) {
+    if (!termsAccepted) {
       setErrorMessage(
-        "Please confirm that these are novelty commemorative products."
+        "Please accept the Terms, Refund Policy, and novelty-property disclosure."
+      );
+      return;
+    }
+
+    if (!immediateFulfillmentAccepted) {
+      setErrorMessage(
+        "Please request immediate processing of your personalized digital order."
+      );
+      return;
+    }
+
+    if (!electronicDeliveryAccepted) {
+      setErrorMessage("Please consent to electronic delivery of your order records.");
+      return;
+    }
+
+    if (!withdrawalAcknowledged) {
+      setErrorMessage(
+        "Please acknowledge the digital-content withdrawal notice where applicable."
       );
       return;
     }
@@ -97,7 +123,12 @@ export default function StripeCheckoutButton({
           recipientEmail,
           giftMessage,
           passportSelected,
-          noveltyAcknowledged,
+          noveltyAcknowledged: termsAccepted,
+          termsAccepted,
+          immediateFulfillmentAccepted,
+          electronicDeliveryAccepted,
+          withdrawalAcknowledged,
+          legalPolicyVersion: LEGAL_POLICY_VERSION,
         }),
       });
 
@@ -166,8 +197,8 @@ export default function StripeCheckoutButton({
         placeholder="Enter one additional name per line"
       />
       <p className="mt-2 text-xs text-gray-400">
-        {formatUsdFromCents(ADDITIONAL_DEED_NAME_PRICE_CENTS)} per name, per property · maximum{" "}
-        {MAX_ADDITIONAL_DEED_NAMES} names
+        {formatUsdFromCents(ADDITIONAL_DEED_NAME_PRICE_CENTS)} per name, per
+        property · maximum {MAX_ADDITIONAL_DEED_NAMES} names
       </p>
 
       {additionalDeedNames.length > 0 && (
@@ -182,7 +213,6 @@ export default function StripeCheckoutButton({
           <label className="mt-5 block text-left text-sm font-bold text-gray-300">
             Gift Recipient Email
           </label>
-
           <input
             type="email"
             value={recipientEmail}
@@ -195,7 +225,6 @@ export default function StripeCheckoutButton({
           <label className="mt-5 block text-left text-sm font-bold text-gray-300">
             Gift Message Optional
           </label>
-
           <textarea
             value={giftMessage}
             onChange={(event) => setGiftMessage(event.target.value)}
@@ -231,20 +260,93 @@ export default function StripeCheckoutButton({
         </div>
       </div>
 
-      <label className="mt-6 flex items-start gap-3 rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm text-gray-200">
-        <input
-          type="checkbox"
-          checked={noveltyAcknowledged}
-          onChange={(event) =>
-            setNoveltyAcknowledged(event.target.checked)
-          }
-          className="mt-1"
-        />
-        <span>
-          I understand these are novelty commemorative products and do not
-          convey legal ownership of lunar real estate.
-        </span>
-      </label>
+      <div className="mt-6 space-y-3">
+        <label className="flex items-start gap-3 rounded-xl border border-yellow-400/30 bg-yellow-400/10 p-4 text-sm text-gray-200">
+          <input
+            type="checkbox"
+            checked={termsAccepted}
+            onChange={(event) => setTermsAccepted(event.target.checked)}
+            className="mt-1"
+          />
+          <span>
+            I agree to the{" "}
+            <Link href="/terms" target="_blank" className="font-black text-yellow-300 underline">
+              Terms and Conditions
+            </Link>{" "}
+            and{" "}
+            <Link href="/refunds" target="_blank" className="font-black text-yellow-300 underline">
+              Refund and Cancellation Policy
+            </Link>
+            . I understand that Orbital One Realty products are personalized
+            novelty and entertainment products and do not convey legally
+            recognized ownership of lunar real estate.
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 rounded-xl border border-white/15 bg-black/30 p-4 text-sm text-gray-200">
+          <input
+            type="checkbox"
+            checked={immediateFulfillmentAccepted}
+            onChange={(event) =>
+              setImmediateFulfillmentAccepted(event.target.checked)
+            }
+            className="mt-1"
+          />
+          <span>
+            I request immediate processing and digital fulfillment of my
+            personalized order. I understand that production may begin
+            immediately after payment and the order may no longer be cancellable
+            once personalization or fulfillment begins.
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 rounded-xl border border-white/15 bg-black/30 p-4 text-sm text-gray-200">
+          <input
+            type="checkbox"
+            checked={electronicDeliveryAccepted}
+            onChange={(event) =>
+              setElectronicDeliveryAccepted(event.target.checked)
+            }
+            className="mt-1"
+          />
+          <span>
+            I consent to receive my confirmation, policies, disclosures,
+            personalized documents, images, membership materials, and purchase
+            records electronically. I can access, download, save, and print
+            electronic records. Read the{" "}
+            <Link
+              href="/shipping-delivery"
+              target="_blank"
+              className="font-black text-yellow-300 underline"
+            >
+              Digital Delivery Policy
+            </Link>
+            .
+          </span>
+        </label>
+
+        <label className="flex items-start gap-3 rounded-xl border border-white/15 bg-black/30 p-4 text-sm text-gray-200">
+          <input
+            type="checkbox"
+            checked={withdrawalAcknowledged}
+            onChange={(event) =>
+              setWithdrawalAcknowledged(event.target.checked)
+            }
+            className="mt-1"
+          />
+          <span>
+            Where an applicable right of withdrawal exists, I expressly consent
+            to digital performance beginning immediately and acknowledge that I
+            may lose that right once performance or delivery begins. Mandatory
+            consumer rights that cannot be waived remain unaffected.
+          </span>
+        </label>
+      </div>
+
+      <p className="mt-4 text-xs leading-5 text-gray-500">
+        Policy version {LEGAL_POLICY_VERSION}. The acceptance time and policy
+        version are recorded with the order.
+      </p>
 
       {errorMessage && (
         <p className="mt-4 rounded-xl border border-red-500/40 bg-red-500/10 p-3 text-sm font-bold text-red-300">

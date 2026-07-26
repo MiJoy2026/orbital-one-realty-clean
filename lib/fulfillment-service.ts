@@ -14,6 +14,7 @@ import {
   PASSPORT_PRICE_CENTS,
   PRICING_VERSION,
 } from "./purchase-constants";
+import { LEGAL_POLICY_VERSION } from "./legal-config";
 import { ensureOwnedPropertySnapshotsForOrderIds } from "./owned-property-snapshot";
 import { prisma } from "./prisma";
 import { sendOrderEmail } from "./send-order-email";
@@ -155,6 +156,24 @@ export async function fulfillStripeCheckoutSession(
     session.metadata?.expectedTotalCents || "",
     10
   );
+  const legalPolicyVersion = session.metadata?.legalPolicyVersion?.trim() || null;
+  const legalAcceptedAtValue = session.metadata?.legalAcceptedAt?.trim() || "";
+  const parsedLegalAcceptedAt = legalAcceptedAtValue
+    ? new Date(legalAcceptedAtValue)
+    : null;
+  const legalAcceptedAt =
+    parsedLegalAcceptedAt && !Number.isNaN(parsedLegalAcceptedAt.getTime())
+      ? parsedLegalAcceptedAt
+      : null;
+  const termsAccepted = session.metadata?.termsAccepted === "true";
+  const noveltyAcknowledged =
+    session.metadata?.noveltyAcknowledged === "true";
+  const immediateFulfillmentAccepted =
+    session.metadata?.immediateFulfillmentAccepted === "true";
+  const electronicDeliveryAccepted =
+    session.metadata?.electronicDeliveryAccepted === "true";
+  const withdrawalAcknowledged =
+    session.metadata?.withdrawalAcknowledged === "true";
 
   const sessionPricingVersion = session.metadata?.pricingVersion?.trim();
   const usesCurrentPricingVersion = sessionPricingVersion === PRICING_VERSION;
@@ -201,6 +220,22 @@ export async function fulfillStripeCheckoutSession(
       fulfilled: true,
       newlyCreated: false,
     };
+  }
+
+  const hasLegacyLegalMetadata = !legalPolicyVersion;
+  const hasCurrentLegalAcceptance =
+    legalPolicyVersion === LEGAL_POLICY_VERSION &&
+    Boolean(legalAcceptedAt) &&
+    termsAccepted &&
+    noveltyAcknowledged &&
+    immediateFulfillmentAccepted &&
+    electronicDeliveryAccepted &&
+    withdrawalAcknowledged;
+
+  if (!hasLegacyLegalMetadata && !hasCurrentLegalAcceptance) {
+    throw new Error(
+      `Stripe session ${session.id} is missing a valid legal acceptance record.`
+    );
   }
 
   type FulfillmentResult = {
@@ -517,6 +552,27 @@ export async function fulfillStripeCheckoutSession(
                 recipientEmail: isGift ? recipientEmail || null : null,
                 giftMessage: isGift ? giftMessage : null,
                 hoaClaimed: true,
+                legalPolicyVersion: hasCurrentLegalAcceptance
+                  ? legalPolicyVersion
+                  : null,
+                legalAcceptedAt: hasCurrentLegalAcceptance
+                  ? legalAcceptedAt
+                  : null,
+                termsAccepted: hasCurrentLegalAcceptance
+                  ? termsAccepted
+                  : false,
+                noveltyAcknowledged: hasCurrentLegalAcceptance
+                  ? noveltyAcknowledged
+                  : false,
+                immediateFulfillmentAccepted: hasCurrentLegalAcceptance
+                  ? immediateFulfillmentAccepted
+                  : false,
+                electronicDeliveryAccepted: hasCurrentLegalAcceptance
+                  ? electronicDeliveryAccepted
+                  : false,
+                withdrawalAcknowledged: hasCurrentLegalAcceptance
+                  ? withdrawalAcknowledged
+                  : false,
               },
             });
 
@@ -668,6 +724,10 @@ export async function fulfillStripeCheckoutSession(
         ),
         passportPurchased,
         giftMessage,
+        legalPolicyVersion: hasCurrentLegalAcceptance
+          ? legalPolicyVersion
+          : null,
+        legalAcceptedAt: hasCurrentLegalAcceptance ? legalAcceptedAt : null,
         items: fulfillmentResult.allOrders.map((order) => {
           const property = propertyById.get(order.propertyId);
 

@@ -19,6 +19,7 @@ import {
   PASSPORT_PRICE_CENTS,
   PRICING_VERSION,
 } from "../../../lib/purchase-constants";
+import { LEGAL_POLICY_VERSION } from "../../../lib/legal-config";
 import { prisma } from "../../../lib/prisma";
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -118,7 +119,14 @@ export async function POST(request: Request) {
       .toLowerCase()
       .slice(0, 254);
     const giftMessage = String(body.giftMessage || "").trim().slice(0, 350);
-    const noveltyAcknowledged = Boolean(body.noveltyAcknowledged);
+    const noveltyAcknowledged = body.noveltyAcknowledged === true;
+    const termsAccepted = body.termsAccepted === true;
+    const immediateFulfillmentAccepted =
+      body.immediateFulfillmentAccepted === true;
+    const electronicDeliveryAccepted = body.electronicDeliveryAccepted === true;
+    const withdrawalAcknowledged = body.withdrawalAcknowledged === true;
+    const legalPolicyVersion = String(body.legalPolicyVersion || "").trim();
+    const legalAcceptedAt = new Date().toISOString();
 
     if (
       reservationIds.length === 0 ||
@@ -137,11 +145,18 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!noveltyAcknowledged) {
+    if (
+      !noveltyAcknowledged ||
+      !termsAccepted ||
+      !immediateFulfillmentAccepted ||
+      !electronicDeliveryAccepted ||
+      !withdrawalAcknowledged ||
+      legalPolicyVersion !== LEGAL_POLICY_VERSION
+    ) {
       return NextResponse.json(
         {
           error:
-            "Please confirm that these are novelty commemorative products.",
+            "Please review and accept every required legal and digital-delivery acknowledgment.",
         },
         { status: 400 }
       );
@@ -306,6 +321,11 @@ export async function POST(request: Request) {
       recipientEmail,
       giftMessage,
       pricingVersion: PRICING_VERSION,
+      legalPolicyVersion,
+      termsAccepted,
+      immediateFulfillmentAccepted,
+      electronicDeliveryAccepted,
+      withdrawalAcknowledged,
       expectedTotalCents,
       propertyPricing: propertyPricing.map((item) => [
         item.propertyId,
@@ -459,6 +479,12 @@ export async function POST(request: Request) {
           recipientEmail: isGift ? recipientEmail : "",
           giftMessage: isGift ? giftMessage : "",
           noveltyAcknowledged: "true",
+          termsAccepted: "true",
+          immediateFulfillmentAccepted: "true",
+          electronicDeliveryAccepted: "true",
+          withdrawalAcknowledged: "true",
+          legalPolicyVersion,
+          legalAcceptedAt,
           pricingVersion: PRICING_VERSION,
           expectedTotalCents: String(expectedTotalCents),
           cartFingerprint: checkoutFingerprint,
