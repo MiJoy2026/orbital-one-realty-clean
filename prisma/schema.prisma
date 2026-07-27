@@ -210,6 +210,18 @@ model User {
   members Member[]
 
 }
+model LoginThrottle {
+  key             String    @id
+  scope           String
+  failures        Int       @default(0)
+  windowStartedAt DateTime  @default(now())
+  blockedUntil    DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([blockedUntil])
+}
+
 model Member {
   id            String   @id @default(cuid())
   createdAt     DateTime @default(now())

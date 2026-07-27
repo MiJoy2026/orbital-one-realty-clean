@@ -33,6 +33,13 @@ export default async function LoginPage({
           </p>
         )}
 
+        {params.error === "rate" && (
+          <p className="mt-6 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 font-semibold text-red-200">
+            Too many unsuccessful login attempts. Please wait 15 minutes before
+            trying again, or use the secure account-access link below.
+          </p>
+        )}
+
         <form
           action="/api/login"
           method="POST"
