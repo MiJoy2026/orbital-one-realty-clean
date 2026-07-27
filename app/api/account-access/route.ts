@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
 
+import { consumeAccountAccessLimit } from "../../../lib/account-access-throttle";
 import { prisma } from "../../../lib/prisma";
 import { sendCustomerAccessEmail } from "../../../lib/send-customer-access-email";
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const EMAIL_PATTERN = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;
 
 export async function POST(request: Request) {
   const redirectUrl = new URL("/account-access", request.url);
@@ -12,9 +13,20 @@ export async function POST(request: Request) {
     const formData = await request.formData();
     const email = String(formData.get("email") || "")
       .trim()
-      .toLowerCase();
+      .toLowerCase()
+      .slice(0, 254);
 
     if (!EMAIL_PATTERN.test(email)) {
+      redirectUrl.searchParams.set("sent", "1");
+      return NextResponse.redirect(redirectUrl, 303);
+    }
+
+    const requestAllowed = await consumeAccountAccessLimit(
+      request,
+      email
+    );
+
+    if (!requestAllowed) {
       redirectUrl.searchParams.set("sent", "1");
       return NextResponse.redirect(redirectUrl, 303);
     }
