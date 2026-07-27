@@ -1,4 +1,7 @@
-import { timingSafeEqual } from "node:crypto";
+import {
+  createHash,
+  timingSafeEqual,
+} from "node:crypto";
 
 import { NextResponse } from "next/server";
 
@@ -7,6 +10,11 @@ import {
   ADMIN_SESSION_MAX_AGE,
   createAdminSessionToken,
 } from "@/lib/admin-session";
+import {
+  adminLoginIsTemporarilyBlocked,
+  clearSuccessfulAdminLoginFailures,
+  recordFailedAdminLogin,
+} from "@/lib/admin-login-throttle";
 
 export const runtime = "nodejs";
 
@@ -14,12 +22,12 @@ function valuesMatch(
   suppliedValue: string,
   configuredValue: string
 ): boolean {
-  const supplied = Buffer.from(suppliedValue, "utf8");
-  const configured = Buffer.from(configuredValue, "utf8");
-
-  if (supplied.length !== configured.length) {
-    return false;
-  }
+  const supplied = createHash("sha256")
+    .update(suppliedValue, "utf8")
+    .digest();
+  const configured = createHash("sha256")
+    .update(configuredValue, "utf8")
+    .digest();
 
   return timingSafeEqual(supplied, configured);
 }
@@ -36,16 +44,38 @@ function safeDestination(value: string): string {
   return "/admin/dashboard";
 }
 
+function failedLoginUrl(
+  request: Request,
+  requestedDestination: string,
+  error: "1" | "rate"
+): URL {
+  const failedUrl = new URL("/admin/login", request.url);
+  failedUrl.searchParams.set("error", error);
+
+  if (requestedDestination) {
+    failedUrl.searchParams.set(
+      "next",
+      safeDestination(requestedDestination)
+    );
+  }
+
+  return failedUrl;
+}
+
 export async function POST(request: Request) {
   const formData = await request.formData();
 
-  const username = String(formData.get("username") || "").trim();
-  const password = String(formData.get("password") || "");
-  const requestedDestination = String(formData.get("next") || "");
+  const username = String(formData.get("username") || "")
+    .trim()
+    .slice(0, 120);
+  const password = String(formData.get("password") || "")
+    .slice(0, 256);
+  const requestedDestination = String(
+    formData.get("next") || ""
+  );
 
   const configuredUsername =
     process.env.ADMIN_BASIC_USER?.trim() || "admin";
-
   const configuredPassword =
     process.env.ADMIN_BASIC_PASSWORD?.trim() || "";
 
@@ -58,29 +88,36 @@ export async function POST(request: Request) {
     );
   }
 
+  if (await adminLoginIsTemporarilyBlocked(request)) {
+    return NextResponse.redirect(
+      failedLoginUrl(
+        request,
+        requestedDestination,
+        "rate"
+      ),
+      303
+    );
+  }
+
   const usernameMatches = valuesMatch(
     username,
     configuredUsername
   );
-
   const passwordMatches = valuesMatch(
     password,
     configuredPassword
   );
 
   if (!usernameMatches || !passwordMatches) {
-    const failedUrl = new URL("/admin/login", request.url);
-    failedUrl.searchParams.set("error", "1");
+    await recordFailedAdminLogin(request);
 
-    if (requestedDestination) {
-      failedUrl.searchParams.set(
-        "next",
-        safeDestination(requestedDestination)
-      );
-    }
-
-    return NextResponse.redirect(failedUrl, 303);
+    return NextResponse.redirect(
+      failedLoginUrl(request, requestedDestination, "1"),
+      303
+    );
   }
+
+  await clearSuccessfulAdminLoginFailures(request);
 
   const token = await createAdminSessionToken(username);
   const destination = safeDestination(requestedDestination);

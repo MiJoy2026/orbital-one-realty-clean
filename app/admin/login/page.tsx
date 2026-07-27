@@ -50,6 +50,13 @@ export default async function AdminLoginPage({
             </p>
           )}
 
+          {params.error === "rate" && (
+            <p className="mt-6 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 font-semibold text-red-200">
+              Too many unsuccessful administrator login attempts. Please wait
+              30 minutes before trying again.
+            </p>
+          )}
+
           {params.loggedOut === "1" && (
             <p className="mt-6 rounded-xl border border-green-400/30 bg-green-500/10 px-4 py-3 font-semibold text-green-200">
               You have been securely logged out of the Admin session.
