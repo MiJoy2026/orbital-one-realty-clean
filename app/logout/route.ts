@@ -1,16 +1,9 @@
 import { NextResponse } from "next/server";
 
+import { clearSession } from "../../lib/session";
+
 export async function GET(request: Request) {
-  const response = NextResponse.redirect(new URL("/", request.url));
+  await clearSession();
 
-  response.cookies.set("oor_session", "", {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
-    path: "/",
-    expires: new Date(0),
-    maxAge: 0,
-  });
-
-  return response;
+  return NextResponse.redirect(new URL("/", request.url));
 }
