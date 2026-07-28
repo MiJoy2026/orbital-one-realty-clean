@@ -35,6 +35,15 @@ const nextConfig: NextConfig = {
   allowedDevOrigins: ["10.0.0.89"],
   poweredByHeader: false,
 
+  outputFileTracingIncludes: {
+    "/api/property-image/*": [
+      "./public/atlas/lroc-preview.jpg",
+      "./public/atlas/moon-atlas-v2.jpg",
+      "./public/attractions/*.jpg",
+      "./public/lunascape/virtual-scenes/*",
+    ],
+  },
+
   async headers() {
     return [
       {
