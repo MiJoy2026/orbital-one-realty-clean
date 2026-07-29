@@ -39,7 +39,6 @@ const nextConfig: NextConfig = {
     "/api/property-image/*": [
       "./public/atlas/lroc-preview.jpg",
       "./public/atlas/moon-atlas-v2.jpg",
-      "./public/atlas/tiles/6/**/*",
       "./public/attractions/*.jpg",
       "./public/lunascape/virtual-scenes/*",
     ],
