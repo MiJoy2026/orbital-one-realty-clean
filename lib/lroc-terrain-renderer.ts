@@ -6,9 +6,10 @@ import sharp from "sharp";
 const MAP_MINIMUM = 0;
 const MAP_MAXIMUM = 1000;
 const TILE_SIZE = 256;
-const TILE_ZOOM = 7;
+const TILE_ZOOM = 6;
 const TILE_COUNT = 2 ** TILE_ZOOM;
 const TILE_ROOT_CANDIDATES = [
+  path.resolve(/* turbopackIgnore: true */ process.cwd(), "public", "atlas", "tiles"),
   path.resolve(/* turbopackIgnore: true */ process.cwd(), "public", "atlas", "lroc-tiles-v2"),
   path.resolve(/* turbopackIgnore: true */ process.cwd(), "public", "atlas", "lroc-tiles"),
 ] as const;
