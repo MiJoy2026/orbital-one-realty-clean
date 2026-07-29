@@ -10,12 +10,12 @@ const lunarBounds = [
 export default function LunarTileLayer() {
   return (
     <TileLayer
-      url="/atlas/lroc-tiles-v2/{z}/{x}/{y}.jpg?v=lroc-v2-restored-1"
+      url="/atlas/lroc-tiles/{z}/{x}/{y}.jpg?v=lroc-aligned-1"
       bounds={lunarBounds}
       minZoom={0}
       maxZoom={9}
       minNativeZoom={0}
-      maxNativeZoom={7}
+      maxNativeZoom={5}
       tileSize={256}
       noWrap={true}
       keepBuffer={2}
