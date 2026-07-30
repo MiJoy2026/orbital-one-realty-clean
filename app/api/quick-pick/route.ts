@@ -1,6 +1,7 @@
 import { randomInt } from "node:crypto";
+import { appendCartReservation } from "../../../lib/cart-reservations";
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import { getSelectableCityBlockByKey } from "@/lib/city-block-grid";
 import { getPublicGeographySnapshot } from "@/lib/lunasphere-geography-store";
@@ -175,7 +176,7 @@ async function reserveCandidate(candidate: QuickPickCandidate) {
   });
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
     const body = (await request.json()) as Record<string, unknown>;
     const propertyType = String(body.propertyType || "").trim();
@@ -304,22 +305,26 @@ export async function POST(request: Request) {
       try {
         const reservation = await reserveCandidate(candidate);
 
-        return NextResponse.json({
-          success: true,
-          reservationId: reservation.id,
-          expiresAt: reservation.expiresAt.toISOString(),
-          property: {
-            propertyId: candidate.propertyId,
-            propertyType: candidate.propertyType,
-            stateName: candidate.stateName,
-            cityName: candidate.cityName,
-            townName: candidate.townName,
-            size: candidate.size,
-            price: candidate.price,
-            mapX: candidate.centerX,
-            mapY: candidate.centerY,
-          },
-        });
+        const response = NextResponse.json({
+  success: true,
+  reservationId: reservation.id,
+  expiresAt: reservation.expiresAt.toISOString(),
+  property: {
+    propertyId: candidate.propertyId,
+    propertyType: candidate.propertyType,
+    stateName: candidate.stateName,
+    cityName: candidate.cityName,
+    townName: candidate.townName,
+    size: candidate.size,
+    price: candidate.price,
+    mapX: candidate.centerX,
+    mapY: candidate.centerY,
+  },
+});
+
+appendCartReservation(request, response, reservation.id);
+
+return response;
       } catch (error) {
         if (error instanceof CandidateUnavailableError) {
           continue;

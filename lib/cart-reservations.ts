@@ -58,7 +58,11 @@ export function appendCartReservation(
   reservationId: string
 ): void {
   const existing = getRequestCartReservationIds(request);
-  setCartReservationCookie(response, [...existing, reservationId]);
+
+  setCartReservationCookie(response, [
+    reservationId,
+    ...existing.filter((id) => id !== reservationId),
+  ]);
 }
 
 export function removeCartReservation(
