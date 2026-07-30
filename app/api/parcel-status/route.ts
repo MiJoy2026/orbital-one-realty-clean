@@ -156,11 +156,27 @@ async function queryPropertyStatuses(parcelKeys: string[]) {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as {
-      parcelKeys?: unknown;
-    };
+    const rawBody = await request.text();
 
-    const parcelKeys = Array.isArray(body.parcelKeys)
+if (!rawBody.trim()) {
+  return NextResponse.json({ statuses: {} });
+}
+
+let body: {
+  parcelKeys?: unknown;
+};
+
+try {
+  body = JSON.parse(rawBody) as {
+    parcelKeys?: unknown;
+  };
+} catch {
+  // Rapid map movement can cancel an older request before its
+  // JSON body finishes arriving. Treat that stale request as empty.
+  return NextResponse.json({ statuses: {} });
+}
+
+const parcelKeys = Array.isArray(body.parcelKeys)
       ? Array.from(
           new Set(
             body.parcelKeys

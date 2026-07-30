@@ -111,7 +111,7 @@ function MoonFallbackLayer({
 
   return (
     <ImageOverlay
-      url="/atlas/moon-atlas-mobile.jpg?v=mobile-pane-1"
+      url="/atlas/lroc-preview.jpg?v=clean-lroc-fallback-1"
       bounds={bounds}
       pane="moon-fallback-pane"
       opacity={1}
