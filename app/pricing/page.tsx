@@ -2,9 +2,13 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import PropertyConfigurator from "@/components/PropertyConfigurator/PropertyConfigurator";
 import { useCart, type CartItem } from "@/context/CartContext";
+import {
+  CART_RESERVATION_COOKIE,
+  parseReservationCookie,
+} from "@/lib/cart-reservations";
 import { sendAnalyticsEvent } from "@/lib/analytics";
 import {
   ADDITIONAL_DEED_NAME_PRICE,
@@ -165,9 +169,23 @@ const createCartId = () => {
 
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 };
+function getReservationCartCount(): number {
+  if (typeof document === "undefined") {
+    return 0;
+  }
+
+  const cookiePrefix = `${CART_RESERVATION_COOKIE}=`;
+  const cookieValue = document.cookie
+    .split("; ")
+    .find((cookie) => cookie.startsWith(cookiePrefix))
+    ?.slice(cookiePrefix.length);
+
+  return parseReservationCookie(cookieValue).length;
+}
 
 export default function PricingPage() {
-  const { addItem, itemCount, subtotal } = useCart();
+  const { addItem } = useCart();
+  const [reservationCount, setReservationCount] = useState(0);
 
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [form, setForm] = useState<ConfiguratorForm>(initialForm);
@@ -176,6 +194,26 @@ export default function PricingPage() {
   const [isAssigningProperty, setIsAssigningProperty] = useState(false);
   const [assignedProperty, setAssignedProperty] =
     useState<AssignedProperty | null>(null);
+  useEffect(() => {
+  const updateReservationCount = () => {
+    setReservationCount(getReservationCartCount());
+  };
+
+  updateReservationCount();
+
+  window.addEventListener("orbital-cart-updated", updateReservationCount);
+  window.addEventListener("focus", updateReservationCount);
+  window.addEventListener("pageshow", updateReservationCount);
+
+  return () => {
+    window.removeEventListener(
+      "orbital-cart-updated",
+      updateReservationCount
+    );
+    window.removeEventListener("focus", updateReservationCount);
+    window.removeEventListener("pageshow", updateReservationCount);
+  };
+}, []);
 
   const configuredTotal = useMemo(() => {
     if (!selectedProduct) {
@@ -312,6 +350,7 @@ export default function PricingPage() {
       };
 
       addItem(cartItem);
+      window.dispatchEvent(new Event("orbital-cart-updated"));
 
       sendAnalyticsEvent("add_to_cart", {
         currency: "USD",
@@ -455,13 +494,13 @@ export default function PricingPage() {
               ))}
             </div>
 
-            {itemCount > 0 && (
+            {reservationCount > 0 && (
               <Link
                 href="/cart"
                 className="mt-5 flex items-center justify-between rounded-2xl border border-yellow-300/30 bg-yellow-300/10 px-5 py-4 font-black text-yellow-100 transition hover:bg-yellow-300/15"
               >
-                <span>View your cart ({itemCount})</span>
-                <span>${subtotal.toFixed(2)}</span>
+                <span>View your cart ({reservationCount})</span>
+                <span>Open Cart</span>
               </Link>
             )}
           </aside>
