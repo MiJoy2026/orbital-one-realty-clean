@@ -48,3 +48,11 @@ next-env.d.ts
 # Generated high-resolution lunar tiles
 /public/atlas/lroc-tiles/
 /public/atlas/lroc-tiles-v2/
+
+# Locally generated LROC tile pyramids
+public/atlas/lroc-tiles-v3/
+public/atlas/lroc-tiles-v4/
+
+# Local tile-alignment test images
+lroc-v3-align-*.jpg
+lroc-v4-align-*.jpg

@@ -10,7 +10,7 @@ const lunarBounds = [
 export default function LunarTileLayer() {
   return (
     <TileLayer
-      url="https://orbital-one-lunasphere.b-cdn.net/lroc-v2/{z}/{x}/{y}.jpg?v=lunasphere-cdn-1"
+      url="https://orbital-one-lunasphere.b-cdn.net/lroc-v2/{z}/{y}/{x}.jpg?v=lunasphere-cdn-yx-2"
       bounds={lunarBounds}
       minZoom={0}
       maxZoom={9}
