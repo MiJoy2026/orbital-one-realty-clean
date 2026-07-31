@@ -343,7 +343,7 @@ export default function LunarLeafletMap({
      useState<AtlasSearchResult | null>(null);
   const [showStates, setShowStates] = useState(true);
   const [showCities, setShowCities] = useState(true);
-  const [showTowns, setShowTowns] = useState(false);
+  const [showTowns, setShowTowns] = useState(true);
   const [showProperties, setShowProperties] = useState(true);
   const [showAttractions, setShowAttractions] = useState(true);
   const [showProtectedAreas, setShowProtectedAreas] = useState(true);

@@ -74,7 +74,7 @@ const ownedProperties = (
           available property opportunities.
         </p>
 
-        <div className="mt-10 grid gap-6 md:grid-cols-4">
+        <div className="mt-10 hidden gap-6 md:grid md:grid-cols-4">
           <div className="rounded-2xl border border-yellow-400 bg-white/5 p-6 text-center">
             <p className="text-4xl font-black text-yellow-400">57</p>
             <p className="mt-2 text-sm uppercase text-gray-400">
