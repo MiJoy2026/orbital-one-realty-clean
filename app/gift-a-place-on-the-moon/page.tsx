@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
 
 import { PROPERTY_PRICES } from "@/lib/purchase-constants";
+import LunarGiftCampaignTracking, {
+  TrackedGiftLink,
+} from "@/components/LunarGiftCampaignTracking";
 
 export const metadata: Metadata = {
   title: "Gift a Place on the Moon | Orbital One Realty",
@@ -102,6 +104,7 @@ const occasions = [
 export default function LunarGiftLandingPage() {
   return (
     <main className="overflow-hidden bg-[#02040a] text-white">
+      <LunarGiftCampaignTracking />
       <section className="relative isolate min-h-[760px] overflow-hidden border-b border-white/10 px-6 py-20 sm:py-24 lg:flex lg:items-center">
         <Image
           src="/pricing/pricing-hero.png"
@@ -147,19 +150,21 @@ export default function LunarGiftLandingPage() {
             </div>
 
             <div className="mt-9 flex flex-col gap-4 sm:flex-row">
-              <Link
-                href="/pricing#property-collection"
+                <TrackedGiftLink
+              href="/pricing#property-collection"
+              trackingId="hero-create-gift"
                 className="rounded-xl bg-gradient-to-r from-yellow-300 to-amber-500 px-7 py-4 text-center text-lg font-black text-black shadow-xl shadow-yellow-400/10 transition hover:-translate-y-0.5 hover:from-yellow-200 hover:to-yellow-400"
               >
                 Create My Lunar Gift
-              </Link>
+              </TrackedGiftLink>
 
-              <Link
+              <TrackedGiftLink
                 href="/moon-map"
+                trackingId="hero-choose-exact-location"
                 className="rounded-xl border border-white/25 bg-black/35 px-7 py-4 text-center text-lg font-black text-white backdrop-blur transition hover:border-yellow-300/50 hover:bg-white/10"
               >
                 Choose an Exact Location
-              </Link>
+              </TrackedGiftLink>
             </div>
 
             <div className="mt-8 flex flex-wrap gap-3 text-sm font-bold text-slate-300">
@@ -269,12 +274,16 @@ export default function LunarGiftLandingPage() {
                       ${option.price.toFixed(2)}
                     </p>
 
-                    <Link
-                      href="/pricing#property-collection"
+                    <TrackedGiftLink
+                       href="/pricing#property-collection"
+                       trackingId={`gift-option-${option.name
+                       .toLowerCase()
+                       .replace(/[^a-z0-9]+/g, "-")
+                       .replace(/^-|-$/g, "")}`}
                       className="mt-5 block rounded-xl bg-yellow-400 px-5 py-3 text-center font-black text-black transition hover:bg-yellow-300"
                     >
                       Personalize This Gift
-                    </Link>
+                    </TrackedGiftLink>
                   </div>
                 </div>
               </article>
@@ -423,19 +432,21 @@ export default function LunarGiftLandingPage() {
           </p>
 
           <div className="mt-9 flex flex-col justify-center gap-4 sm:flex-row">
-            <Link
-              href="/pricing#property-collection"
-              className="rounded-xl bg-yellow-400 px-8 py-4 text-lg font-black text-black transition hover:bg-yellow-300"
+            <TrackedGiftLink
+               href="/pricing#property-collection"
+               trackingId="final-create-gift"
+               className="rounded-xl bg-yellow-400 px-8 py-4 text-lg font-black text-black transition hover:bg-yellow-300"
             >
               Create My Lunar Gift
-            </Link>
+            </TrackedGiftLink>
 
-            <Link
-              href="/moon-map"
-              className="rounded-xl border border-white/20 px-8 py-4 text-lg font-black text-white transition hover:bg-white/10"
+            <TrackedGiftLink
+               href="/moon-map"
+               trackingId="final-explore-lunasphere"
+               className="rounded-xl border border-white/20 px-8 py-4 text-lg font-black text-white transition hover:bg-white/10"
             >
               Explore LunaSphere
-            </Link>
+            </TrackedGiftLink>
           </div>
 
           <div className="mx-auto mt-10 max-w-3xl rounded-2xl border border-white/10 bg-black/25 p-5 text-sm leading-7 text-slate-400">
