@@ -5,7 +5,10 @@ import { useState } from "react";
 
 import { calculateCartItemTotal, type CartItem } from "@/context/CartContext";
 import { LEGAL_POLICY_VERSION } from "@/lib/legal-config";
-import { sendAnalyticsEvent } from "@/lib/analytics";
+import {
+  sendAnalyticsEvent,
+  sendMetaPixelEvent,
+} from "@/lib/analytics";
 
 export default function QuickPickCheckoutButton({
   item,
@@ -94,6 +97,15 @@ export default function QuickPickCheckoutButton({
             quantity: 1,
           },
         ],
+      });
+      sendMetaPixelEvent("InitiateCheckout", {
+        content_ids: [item.propertyId],
+        content_name: item.category || item.propertyType,
+        content_category: item.propertyType,
+        content_type: "product",
+        currency: "USD",
+        value: Number(checkoutTotal.toFixed(2)),
+        num_items: 1,
       });
 
       window.location.assign(data.url);
