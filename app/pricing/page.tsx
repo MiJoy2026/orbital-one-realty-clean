@@ -9,7 +9,10 @@ import {
   CART_RESERVATION_COOKIE,
   parseReservationCookie,
 } from "@/lib/cart-reservations";
-import { sendAnalyticsEvent } from "@/lib/analytics";
+import {
+  sendAnalyticsEvent,
+  sendMetaPixelEvent,
+} from "@/lib/analytics";
 import {
   ADDITIONAL_DEED_NAME_PRICE,
   ADDITIONAL_RURAL_ACRE_PRICE,
@@ -243,6 +246,14 @@ export default function PricingPage() {
         },
       ],
     });
+    sendMetaPixelEvent("ViewContent", {
+      content_ids: [product.sku],
+      content_name: product.name,
+      content_category: product.category,
+      content_type: "product",
+      currency: "USD",
+      value: Number(product.price.toFixed(2)),
+    });
 
     setSelectedProduct(product);
     setForm(initialForm);
@@ -364,6 +375,14 @@ export default function PricingPage() {
             quantity: 1,
           },
         ],
+      });
+      sendMetaPixelEvent("AddToCart", {
+        content_ids: [selectedProduct.sku],
+        content_name: selectedProduct.name,
+        content_category: selectedProduct.category,
+        content_type: "product",
+        currency: "USD",
+        value: Number(configuredTotal.toFixed(2)),
       });
 
       setAssignedProperty(property);

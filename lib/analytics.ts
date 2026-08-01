@@ -23,6 +23,16 @@ type AnalyticsWindow = Window & {
   gtag?: (...args: unknown[]) => void;
 };
 
+type MetaPixelWindow = Window & {
+  fbq?: (...args: unknown[]) => void;
+};
+
+export type MetaCommerceEventName =
+  | "ViewContent"
+  | "AddToCart"
+  | "InitiateCheckout"
+  | "Purchase";
+
 function readStoredPreferences(): StoredPreferenceRecord | null {
   if (typeof window === "undefined") {
     return null;
@@ -99,4 +109,26 @@ export function sendAnalyticsEvent(
   const analyticsWindow = window as AnalyticsWindow;
 
   analyticsWindow.gtag?.("event", eventName, parameters);
+}
+
+export function sendMetaPixelEvent(
+  eventName: MetaCommerceEventName,
+  parameters: Record<string, unknown> = {}
+): boolean {
+  if (
+    typeof window === "undefined" ||
+    !readAdvertisingConsent()
+  ) {
+    return false;
+  }
+
+  const metaWindow = window as MetaPixelWindow;
+
+  if (typeof metaWindow.fbq !== "function") {
+    return false;
+  }
+
+  metaWindow.fbq("track", eventName, parameters);
+
+  return true;
 }

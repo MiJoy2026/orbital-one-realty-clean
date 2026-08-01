@@ -3,8 +3,11 @@
 import { useEffect } from "react";
 
 import {
+  ADVERTISING_CONSENT_EVENT,
   ANALYTICS_CONSENT_EVENT,
+  readAdvertisingConsent,
   readAnalyticsConsent,
+  sendMetaPixelEvent,
 } from "@/lib/analytics";
 
 type PurchaseAnalyticsItem = {
@@ -19,6 +22,25 @@ type AnalyticsWindow = Window & {
   gtag?: (...args: unknown[]) => void;
 };
 
+function hasStoredEvent(storageKey: string): boolean {
+  try {
+    return Boolean(window.localStorage.getItem(storageKey));
+  } catch {
+    return false;
+  }
+}
+
+function storeEvent(storageKey: string): void {
+  try {
+    window.localStorage.setItem(
+      storageKey,
+      new Date().toISOString()
+    );
+  } catch {
+    // Browser storage may be restricted.
+  }
+}
+
 export default function PurchaseAnalytics({
   transactionId,
   value,
@@ -31,20 +53,18 @@ export default function PurchaseAnalytics({
   useEffect(() => {
     let attempts = 0;
 
-    const storageKey =
+    const googleStorageKey =
       "orbital-one-ga4-purchase-" + transactionId;
 
-    const attemptSend = () => {
-      if (!readAnalyticsConsent()) {
-        return;
-      }
+    const metaStorageKey =
+      "orbital-one-meta-purchase-" + transactionId;
 
-      try {
-        if (window.localStorage.getItem(storageKey)) {
-          return;
-        }
-      } catch {
-        // Analytics may still work when storage is restricted.
+    const sendGooglePurchase = () => {
+      if (
+        !readAnalyticsConsent() ||
+        hasStoredEvent(googleStorageKey)
+      ) {
+        return;
       }
 
       const analyticsWindow = window as AnalyticsWindow;
@@ -57,18 +77,48 @@ export default function PurchaseAnalytics({
         transaction_id: transactionId,
         affiliation: "Orbital One Realty",
         currency: "USD",
-        value,
+        value: Number(value.toFixed(2)),
         items,
       });
 
-      try {
-        window.localStorage.setItem(
-          storageKey,
-          new Date().toISOString()
-        );
-      } catch {
-        // Google Analytics also deduplicates purchase transaction IDs.
+      storeEvent(googleStorageKey);
+    };
+
+    const sendMetaPurchase = () => {
+      if (
+        !readAdvertisingConsent() ||
+        hasStoredEvent(metaStorageKey)
+      ) {
+        return;
       }
+
+      const wasSent = sendMetaPixelEvent("Purchase", {
+        content_ids: items.map((item) => item.item_id),
+        contents: items.map((item) => ({
+          id: item.item_id,
+          quantity: item.quantity,
+          item_price: Number(item.price.toFixed(2)),
+        })),
+        content_name: "Orbital One Realty Purchase",
+        content_category: "Novelty lunar property",
+        content_type: "product",
+        currency: "USD",
+        value: Number(value.toFixed(2)),
+        num_items: items.reduce(
+          (total, item) => total + item.quantity,
+          0
+        ),
+        transaction_id: transactionId,
+      });
+
+      if (wasSent) {
+        storeEvent(metaStorageKey);
+      }
+    };
+
+    const attemptSend = () => {
+      sendGooglePurchase();
+      sendMetaPurchase();
     };
 
     attemptSend();
@@ -87,11 +137,21 @@ export default function PurchaseAnalytics({
       attemptSend
     );
 
+    window.addEventListener(
+      ADVERTISING_CONSENT_EVENT,
+      attemptSend
+    );
+
     return () => {
       window.clearInterval(intervalId);
 
       window.removeEventListener(
         ANALYTICS_CONSENT_EVENT,
+        attemptSend
+      );
+
+      window.removeEventListener(
+        ADVERTISING_CONSENT_EVENT,
         attemptSend
       );
     };

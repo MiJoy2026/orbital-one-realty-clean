@@ -4,7 +4,10 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 
 import { LEGAL_POLICY_VERSION } from "@/lib/legal-config";
-import { sendAnalyticsEvent } from "@/lib/analytics";
+import {
+  sendAnalyticsEvent,
+  sendMetaPixelEvent,
+} from "@/lib/analytics";
 import {
   ADDITIONAL_DEED_NAME_PRICE_CENTS,
   formatUsdFromCents,
@@ -176,6 +179,15 @@ export default function StripeCheckoutButton({
         currency: "USD",
         value: Number((checkoutTotalCents / 100).toFixed(2)),
         items: analyticsItems,
+      });
+      sendMetaPixelEvent("InitiateCheckout", {
+        content_ids: propertyIds,
+        content_name: "Novelty Lunar Property",
+        content_category: "Novelty lunar property",
+        content_type: "product",
+        currency: "USD",
+        value: Number((checkoutTotalCents / 100).toFixed(2)),
+        num_items: propertyCount,
       });
 
       window.location.assign(data.url);
