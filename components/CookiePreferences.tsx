@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import {
+  ADVERTISING_CONSENT_EVENT,
   ANALYTICS_CONSENT_EVENT,
   COOKIE_PREFERENCES_STORAGE_KEY,
+  announceAdvertisingConsent,
   announceAnalyticsConsent,
 } from "@/lib/analytics";
 import { LEGAL_POLICY_VERSION } from "@/lib/legal-config";
@@ -14,7 +16,7 @@ type PreferenceRecord = {
   version: string;
   necessary: true;
   analyticsEnabled: boolean;
-  advertisingEnabled: false;
+  advertisingEnabled: boolean;
   optionalTrackingEnabled: boolean;
   updatedAt: string;
 };
@@ -36,14 +38,16 @@ function readStoredPreference(): PreferenceRecord | null {
 }
 
 function persistPreference(
-  analyticsEnabled: boolean
+  analyticsEnabled: boolean,
+  advertisingEnabled: boolean
 ): void {
   const record: PreferenceRecord = {
     version: LEGAL_POLICY_VERSION,
     necessary: true,
     analyticsEnabled,
-    advertisingEnabled: false,
-    optionalTrackingEnabled: analyticsEnabled,
+    advertisingEnabled,
+    optionalTrackingEnabled:
+      analyticsEnabled || advertisingEnabled,
     updatedAt: new Date().toISOString(),
   };
 
@@ -53,79 +57,131 @@ function persistPreference(
   );
 
   announceAnalyticsConsent(analyticsEnabled);
+  announceAdvertisingConsent(advertisingEnabled);
 }
 
 export default function CookiePreferences() {
   const [isReady, setIsReady] = useState(false);
   const [showNotice, setShowNotice] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+
   const [analyticsEnabled, setAnalyticsEnabled] =
     useState(false);
+
+  const [advertisingEnabled, setAdvertisingEnabled] =
+    useState(false);
+
   const [storageError, setStorageError] = useState("");
+
+  function synchronizePreference(): void {
+    const existing = readStoredPreference();
+
+    const hasCurrentVersion =
+      existing?.version === LEGAL_POLICY_VERSION;
+
+    setAnalyticsEnabled(
+      hasCurrentVersion &&
+        existing?.analyticsEnabled === true
+    );
+
+    setAdvertisingEnabled(
+      hasCurrentVersion &&
+        existing?.advertisingEnabled === true
+    );
+  }
 
   useEffect(() => {
     const existing = readStoredPreference();
 
+    const hasCurrentVersion =
+      existing?.version === LEGAL_POLICY_VERSION;
+
     setAnalyticsEnabled(
-      existing?.version === LEGAL_POLICY_VERSION &&
-        existing.analyticsEnabled === true
+      hasCurrentVersion &&
+        existing?.analyticsEnabled === true
     );
 
-    setShowNotice(
-      !existing ||
-        existing.version !== LEGAL_POLICY_VERSION
+    setAdvertisingEnabled(
+      hasCurrentVersion &&
+        existing?.advertisingEnabled === true
     );
 
+    setShowNotice(!hasCurrentVersion);
     setIsReady(true);
   }, []);
 
   useEffect(() => {
-    const synchronizeFromStorage = () => {
-      const existing = readStoredPreference();
+    const handleConsentChange = () => {
+      synchronizePreference();
+    };
 
-      setAnalyticsEnabled(
-        existing?.version === LEGAL_POLICY_VERSION &&
-          existing.analyticsEnabled === true
-      );
+    const handleStorage = (event: StorageEvent) => {
+      if (
+        !event.key ||
+        event.key === COOKIE_PREFERENCES_STORAGE_KEY
+      ) {
+        synchronizePreference();
+      }
     };
 
     window.addEventListener(
       ANALYTICS_CONSENT_EVENT,
-      synchronizeFromStorage
+      handleConsentChange
     );
+
+    window.addEventListener(
+      ADVERTISING_CONSENT_EVENT,
+      handleConsentChange
+    );
+
+    window.addEventListener("storage", handleStorage);
 
     return () => {
       window.removeEventListener(
         ANALYTICS_CONSENT_EVENT,
-        synchronizeFromStorage
+        handleConsentChange
       );
+
+      window.removeEventListener(
+        ADVERTISING_CONSENT_EVENT,
+        handleConsentChange
+      );
+
+      window.removeEventListener("storage", handleStorage);
     };
   }, []);
 
-  function saveSelection(enabled: boolean) {
+  function saveSelection(
+    allowAnalytics: boolean,
+    allowAdvertising: boolean
+  ): void {
     try {
-      persistPreference(enabled);
-      setAnalyticsEnabled(enabled);
+      persistPreference(
+        allowAnalytics,
+        allowAdvertising
+      );
+
+      setAnalyticsEnabled(allowAnalytics);
+      setAdvertisingEnabled(allowAdvertising);
       setStorageError("");
       setShowNotice(false);
       setShowSettings(false);
     } catch {
       setAnalyticsEnabled(false);
-      announceAnalyticsConsent(false);
+      setAdvertisingEnabled(false);
       setStorageError(
-        "Your browser could not save this preference. Analytics remains disabled."
+        "Your browser could not save this preference. Optional cookies remain disabled."
       );
+      setShowNotice(true);
+      setShowSettings(false);
+
+      announceAnalyticsConsent(false);
+      announceAdvertisingConsent(false);
     }
   }
 
-  function openSettings() {
-    const existing = readStoredPreference();
-
-    setAnalyticsEnabled(
-      existing?.version === LEGAL_POLICY_VERSION &&
-        existing.analyticsEnabled === true
-    );
-
+  function openSettings(): void {
+    synchronizePreference();
     setStorageError("");
     setShowSettings(true);
   }
@@ -141,44 +197,56 @@ export default function CookiePreferences() {
       </button>
 
       {isReady && showNotice && (
-        <div className="fixed inset-x-4 bottom-4 z-[100] mx-auto max-w-4xl rounded-2xl border border-yellow-300/30 bg-slate-950/95 p-5 text-white shadow-2xl backdrop-blur sm:p-6">
-          <div className="grid gap-5 md:grid-cols-[1fr_auto] md:items-center">
-            <div>
+        <div className="fixed inset-x-4 bottom-4 z-[100] mx-auto max-w-5xl rounded-2xl border border-yellow-300/30 bg-slate-950/95 p-4 text-white shadow-2xl backdrop-blur sm:p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl">
               <p className="font-black text-yellow-300">
-                Your privacy choices
+                Cookies and privacy
               </p>
 
-              <p className="mt-2 text-sm leading-6 text-slate-300">
-                Necessary technologies support secure accounts,
-                carts, reservations, checkout, and privacy
-                preferences. Google Analytics stays completely
-                off unless you choose Accept Analytics.
+              <p className="mt-1 text-sm leading-6 text-slate-300">
+                We use necessary technologies to operate the
+                website. With your permission, we also use
+                Google Analytics and Meta Pixel to understand
+                website activity and advertising performance.
+                You can continue using the website while this
+                notice is displayed.
               </p>
+
+              {storageError && (
+                <p className="mt-2 text-sm font-bold text-red-200">
+                  {storageError}
+                </p>
+              )}
             </div>
 
-            <div className="flex flex-wrap gap-3 md:justify-end">
+            <div className="flex flex-wrap gap-2 lg:justify-end">
+              <button
+                type="button"
+                onClick={() =>
+                  saveSelection(false, false)
+                }
+                className="rounded-xl border border-white/25 px-4 py-2.5 text-sm font-black text-white transition hover:border-yellow-300"
+              >
+                Reject Optional
+              </button>
+
               <button
                 type="button"
                 onClick={openSettings}
-                className="rounded-xl border border-white/20 px-4 py-3 text-sm font-black text-white"
+                className="rounded-xl border border-yellow-400 px-4 py-2.5 text-sm font-black text-yellow-300 transition hover:bg-yellow-400/10"
               >
-                Review Settings
+                Settings
               </button>
 
               <button
                 type="button"
-                onClick={() => saveSelection(false)}
-                className="rounded-xl border border-yellow-400 px-4 py-3 text-sm font-black text-yellow-300"
+                onClick={() =>
+                  saveSelection(true, true)
+                }
+                className="rounded-xl bg-yellow-400 px-4 py-2.5 text-sm font-black text-black transition hover:bg-yellow-300"
               >
-                Necessary Only
-              </button>
-
-              <button
-                type="button"
-                onClick={() => saveSelection(true)}
-                className="rounded-xl bg-yellow-400 px-4 py-3 text-sm font-black text-black"
-              >
-                Accept Analytics
+                Accept All
               </button>
             </div>
           </div>
@@ -230,9 +298,9 @@ export default function CookiePreferences() {
                 </div>
 
                 <p className="mt-3 text-sm leading-6 text-slate-300">
-                  Required for account sessions, carts, property
-                  reservations, checkout, security, and remembering
-                  your privacy choices.
+                  Required for account sessions, carts,
+                  reservations, checkout, security, and
+                  remembering your privacy choices.
                 </p>
               </section>
 
@@ -244,11 +312,10 @@ export default function CookiePreferences() {
                     </h3>
 
                     <p className="mt-3 text-sm leading-6 text-slate-300">
-                      Allows privacy-conscious Google Analytics
-                      measurement of public page visits and shopping
-                      activity. Names, emails, deed information,
-                      gift messages, account pages, and private
-                      document pages are not sent.
+                      Allows Google Analytics to measure visits
+                      to public pages and shopping activity.
+                      Advertising personalization and Google
+                      Signals remain disabled.
                     </p>
                   </div>
 
@@ -261,7 +328,9 @@ export default function CookiePreferences() {
                       type="checkbox"
                       checked={analyticsEnabled}
                       onChange={(event) =>
-                        setAnalyticsEnabled(event.target.checked)
+                        setAnalyticsEnabled(
+                          event.target.checked
+                        )
                       }
                       className="h-5 w-5 accent-yellow-400"
                       aria-label="Allow analytics and performance cookies"
@@ -270,30 +339,48 @@ export default function CookiePreferences() {
                 </div>
               </section>
 
-              {["Functional", "Advertising and Targeting"].map(
-                (category) => (
-                  <section
-                    key={category}
-                    className="rounded-2xl border border-white/10 bg-white/[0.03] p-5"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <h3 className="font-black text-slate-200">
-                        {category}
-                      </h3>
+              <section className="rounded-2xl border border-blue-300/25 bg-blue-300/[0.04] p-5">
+                <div className="flex items-start justify-between gap-5">
+                  <div>
+                    <h3 className="font-black text-blue-200">
+                      Advertising and Targeting
+                    </h3>
 
-                      <span className="rounded-full border border-white/15 px-3 py-1 text-xs font-black text-slate-400">
-                        Not in use
-                      </span>
-                    </div>
-
-                    <p className="mt-3 text-sm leading-6 text-slate-400">
-                      Orbital One Realty does not currently activate
-                      this category on the customer-facing website.
+                    <p className="mt-3 text-sm leading-6 text-slate-300">
+                      Allows Meta Pixel to measure visits to
+                      public pages and shopping actions,
+                      evaluate Orbital One advertising, and
+                      create advertising audiences.
                     </p>
-                  </section>
-                )
-              )}
+                  </div>
+
+                  <label className="flex shrink-0 items-center gap-3">
+                    <span className="text-xs font-black uppercase text-slate-300">
+                      {advertisingEnabled ? "On" : "Off"}
+                    </span>
+
+                    <input
+                      type="checkbox"
+                      checked={advertisingEnabled}
+                      onChange={(event) =>
+                        setAdvertisingEnabled(
+                          event.target.checked
+                        )
+                      }
+                      className="h-5 w-5 accent-blue-400"
+                      aria-label="Allow advertising and targeting cookies"
+                    />
+                  </label>
+                </div>
+              </section>
             </div>
+
+            <p className="mt-5 text-sm leading-6 text-slate-400">
+              Orbital One does not intentionally include names,
+              email addresses, deed names, gift messages,
+              login credentials, account pages, or private
+              documents in optional tracking events.
+            </p>
 
             {storageError && (
               <p className="mt-5 rounded-xl border border-red-400/30 bg-red-500/10 p-4 text-sm font-bold text-red-200">
@@ -312,16 +399,21 @@ export default function CookiePreferences() {
               <div className="flex flex-wrap gap-3">
                 <button
                   type="button"
-                  onClick={() => saveSelection(false)}
-                  className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-300"
+                  onClick={() =>
+                    saveSelection(false, false)
+                  }
+                  className="rounded-xl border border-white/25 px-5 py-3 font-black text-white"
                 >
-                  Necessary Only
+                  Reject Optional
                 </button>
 
                 <button
                   type="button"
                   onClick={() =>
-                    saveSelection(analyticsEnabled)
+                    saveSelection(
+                      analyticsEnabled,
+                      advertisingEnabled
+                    )
                   }
                   className="rounded-xl bg-yellow-400 px-5 py-3 font-black text-black"
                 >
