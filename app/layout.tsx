@@ -133,7 +133,9 @@ export default async function RootLayout({
                 <Link href="/hoa" className="transition hover:text-yellow-400">
                   HOA
                 </Link>
-                <Link href="/contact" className="transition hover:text-yellow-400">
+                <Link href="/creators" className="transition hover:text-yellow-400">
+                  Creators
+                </Link><Link href="/contact" className="transition hover:text-yellow-400">
                   Contact
                 </Link>
               </div>

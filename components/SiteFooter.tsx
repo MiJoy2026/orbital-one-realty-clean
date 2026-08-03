@@ -11,6 +11,7 @@ const exploreLinks = [
   { href: "/faq", label: "Moon Property FAQ" },
   { href: "/hoa", label: "Charter HOA" },
   { href: "/passports", label: "Lunar Passports" },
+  { href: "/creators", label: "Creator Partners" },
   { href: "/verify", label: "Verify Certificate" },
 ];
 
