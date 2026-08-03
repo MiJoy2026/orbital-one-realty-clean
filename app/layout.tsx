@@ -31,11 +31,14 @@ export const metadata: Metadata = {
     telephone: false,
   },
   verification: {
-    google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
-    other: process.env.BING_SITE_VERIFICATION
+  google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
+  other: {
+    ...(process.env.BING_SITE_VERIFICATION
       ? { "msvalidate.01": process.env.BING_SITE_VERIFICATION }
-      : undefined,
+      : {}),
+    "p:domain_verify": "476de25907dcce72cd8707ac789cf900",
   },
+},
   robots: {
     index: true,
     follow: true,
