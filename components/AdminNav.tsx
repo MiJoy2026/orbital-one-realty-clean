@@ -16,6 +16,12 @@ export default function AdminNav() {
           Orders
         </a>
         <a
+          href="/admin/creators"
+          className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
+        >
+          Creators
+        </a>
+        <a
           href="/admin/inventory"
           className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
         >
