@@ -2,12 +2,13 @@ import { createHash } from "node:crypto";
 
 import { Prisma } from "@prisma/client";
 import Stripe from "stripe";
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 
 import {
   CHECKOUT_ACCESS_COOKIE,
   createCheckoutAccessToken,
 } from "../../../lib/checkout-access-token";
+import { resolveCreatorReferralAttribution } from "../../../lib/creator-referral-attribution";
 
 import {
   MAX_CART_PROPERTIES,
@@ -118,7 +119,7 @@ async function createCheckoutAccessResponse(
   return response;
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
   if (!stripeSecretKey) {
@@ -132,6 +133,8 @@ export async function POST(request: Request) {
 
   try {
     const body = (await request.json()) as Record<string, unknown>;
+    const creatorAttribution =
+      await resolveCreatorReferralAttribution(request);
     const reservationIds = normalizeReservationIds(
       Array.isArray(body.reservationIds)
         ? body.reservationIds
@@ -349,6 +352,9 @@ export async function POST(request: Request) {
     const fullDeedName = [primaryDeedName, ...additionalDeedNames].join(", ");
     const idempotencyPayload = {
       reservationIds,
+      creatorReferralId: creatorAttribution?.referralId || "",
+      creatorPartnerId: creatorAttribution?.creatorPartnerId || "",
+      creatorTrackingCode: creatorAttribution?.trackingCode || "",
       fullDeedName,
       passportSelected,
       isGift,
@@ -506,6 +512,9 @@ export async function POST(request: Request) {
         metadata: {
           propertyIds: JSON.stringify(propertyIds),
           reservationIds: JSON.stringify(reservationIds),
+          creatorReferralId: creatorAttribution?.referralId || "",
+          creatorPartnerId: creatorAttribution?.creatorPartnerId || "",
+          creatorTrackingCode: creatorAttribution?.trackingCode || "",
           itemCount: String(verifiedProperties.length),
           deedName: fullDeedName,
           additionalDeedNameCount: String(additionalDeedNames.length),

@@ -14,6 +14,7 @@ import {
   PASSPORT_PRICE_CENTS,
   PRICING_VERSION,
 } from "./purchase-constants";
+import { normalizeCreatorTrackingCode } from "./creator-referral";
 import { LEGAL_POLICY_VERSION } from "./legal-config";
 import { ensureOwnedPropertySnapshotsForOrderIds } from "./owned-property-snapshot";
 import { prisma } from "./prisma";
@@ -53,7 +54,12 @@ function parseMetadataIds(value: string | null | undefined): string[] {
 
     if (Array.isArray(parsed)) {
       return Array.from(
-        new Set(parsed.map(String).map((item) => item.trim()).filter(Boolean))
+        new Set(
+          parsed
+            .map(String)
+            .map((item) => item.trim())
+            .filter(Boolean)
+        )
       );
     }
   } catch {
@@ -64,6 +70,59 @@ function parseMetadataIds(value: string | null | undefined): string[] {
   return [];
 }
 
+type CreatorCheckoutAttribution = {
+  referralId: string;
+  creatorPartnerId: string;
+  trackingCode: string;
+};
+
+function parseCreatorCheckoutAttribution(
+  session: Stripe.Checkout.Session
+): CreatorCheckoutAttribution | null {
+  const referralId =
+    session.metadata?.creatorReferralId?.trim() || "";
+  const creatorPartnerId =
+    session.metadata?.creatorPartnerId?.trim() || "";
+  const trackingCode = normalizeCreatorTrackingCode(
+    session.metadata?.creatorTrackingCode || ""
+  );
+
+  const hasAnyCreatorMetadata = Boolean(
+    referralId || creatorPartnerId || trackingCode
+  );
+
+  if (!hasAnyCreatorMetadata) {
+    return null;
+  }
+
+  if (!referralId || !creatorPartnerId || !trackingCode) {
+    console.warn(
+      `[Orbital One] Stripe session ${session.id} has incomplete Creator Partner metadata.`
+    );
+
+    return null;
+  }
+
+  return {
+    referralId,
+    creatorPartnerId,
+    trackingCode,
+  };
+}
+const CREATOR_COMMISSION_VALIDATION_DAYS = 30;
+
+function createCreatorCommissionMonthKey(value: Date): string {
+  const year = value.getUTCFullYear();
+  const month = String(value.getUTCMonth() + 1).padStart(2, "0");
+
+  return `${year}-${month}`;
+}
+
+function addUtcDays(value: Date, days: number): Date {
+  return new Date(
+    value.getTime() + days * 24 * 60 * 60 * 1000
+  );
+}
 async function acquirePropertyLock(
   transaction: Prisma.TransactionClient,
   propertyId: string
@@ -131,7 +190,8 @@ export async function fulfillStripeCheckoutSession(
   const metadataReservationIds = parseMetadataIds(
     session.metadata?.reservationIds || session.metadata?.reservationId
   );
-
+  const creatorAttribution =
+    parseCreatorCheckoutAttribution(session);
   if (
     metadataPropertyIds.length === 0 ||
     metadataPropertyIds.length !== metadataReservationIds.length
@@ -397,6 +457,69 @@ export async function fulfillStripeCheckoutSession(
             );
           }
 
+                    const fulfillmentTimestamp = new Date();
+          const creatorCommissionMonthKey =
+            createCreatorCommissionMonthKey(fulfillmentTimestamp);
+          const creatorCommissionValidationEligibleAt = addUtcDays(
+            fulfillmentTimestamp,
+            CREATOR_COMMISSION_VALIDATION_DAYS
+          );
+
+          const creatorReferral = creatorAttribution
+            ? await transaction.creatorReferral.findUnique({
+                where: {
+                  id: creatorAttribution.referralId,
+                },
+                include: {
+                  creatorPartner: true,
+                },
+              })
+            : null;
+
+          const checkoutCreatedAtMilliseconds =
+            session.created * 1000;
+
+          const creatorReferralWasValidAtCheckout = Boolean(
+            creatorAttribution &&
+              creatorReferral &&
+              creatorReferral.creatorPartnerId ===
+                creatorAttribution.creatorPartnerId &&
+              creatorReferral.trackingCode ===
+                creatorAttribution.trackingCode &&
+              creatorReferral.creatorPartner.id ===
+                creatorAttribution.creatorPartnerId &&
+              creatorReferral.creatorPartner.trackingCode ===
+                creatorAttribution.trackingCode &&
+              creatorReferral.createdAt.getTime() <=
+                checkoutCreatedAtMilliseconds &&
+              creatorReferral.expiresAt.getTime() >
+                checkoutCreatedAtMilliseconds
+          );
+
+          if (
+            creatorAttribution &&
+            !creatorReferralWasValidAtCheckout
+          ) {
+            console.warn(
+              `[Orbital One] Stripe session ${session.id} contains Creator Partner attribution that could not be verified.`
+            );
+          }
+
+          if (
+            creatorReferralWasValidAtCheckout &&
+            creatorReferral
+          ) {
+            await transaction.creatorReferral.updateMany({
+              where: {
+                id: creatorReferral.id,
+                convertedAt: null,
+              },
+              data: {
+                convertedAt: fulfillmentTimestamp,
+              },
+            });
+          }
+
           const memberUser = await transaction.user.findUnique({
             where: { email: memberEmail },
             select: {
@@ -635,6 +758,26 @@ export async function fulfillStripeCheckoutSession(
                   startingAcre,
                   endingAcre: startingAcre,
                   acresAssigned: acreagePurchased,
+                },
+              });
+            }
+                        if (
+              creatorReferralWasValidAtCheckout &&
+              creatorReferral
+            ) {
+              await transaction.creatorCommission.create({
+                data: {
+                  creatorPartnerId:
+                    creatorReferral.creatorPartnerId,
+                  referralId: creatorReferral.id,
+                  orderId: order.id,
+                  stripeSessionId: session.id,
+                  monthKey: creatorCommissionMonthKey,
+                  grossRevenueCents: itemAmountCents,
+                  netRevenueCents: itemAmountCents,
+                  status: "Pending",
+                  validationEligibleAt:
+                    creatorCommissionValidationEligibleAt,
                 },
               });
             }
