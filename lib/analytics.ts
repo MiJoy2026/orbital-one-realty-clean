@@ -16,6 +16,7 @@ type StoredPreferenceRecord = {
   version?: string;
   analyticsEnabled?: boolean;
   advertisingEnabled?: boolean;
+  optionalTrackingEnabled?: boolean;
 };
 
 type AnalyticsWindow = Window & {
@@ -68,6 +69,17 @@ export function readAdvertisingConsent(): boolean {
   return (
     preferences?.version === LEGAL_POLICY_VERSION &&
     preferences.advertisingEnabled === true
+  );
+}
+
+export function readOptionalTrackingConsent(): boolean {
+  const preferences = readStoredPreferences();
+
+  return (
+    preferences?.version === LEGAL_POLICY_VERSION &&
+    (preferences.optionalTrackingEnabled === true ||
+      preferences.analyticsEnabled === true ||
+      preferences.advertisingEnabled === true)
   );
 }
 
