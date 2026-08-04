@@ -1,4 +1,5 @@
 import AdminNav from "@/components/AdminNav";
+import CreatorCommissionReviewButton from "@/components/CreatorCommissionReviewButton";
 import { prisma } from "@/lib/prisma";
 
 function formatMoney(cents: number): string {
@@ -24,9 +25,22 @@ function statusClasses(status: string): string {
   return "bg-yellow-400 text-black";
 }
 
+function getCommissionMonthEnd(monthKey: string): Date {
+  const [yearText, monthText] = monthKey.split("-");
+  const year = Number.parseInt(yearText, 10);
+  const monthIndex = Number.parseInt(monthText, 10) - 1;
+
+  return new Date(Date.UTC(year, monthIndex + 1, 1));
+}
+
 export default async function AdminCreatorCommissionsPage() {
-  const [partners, referralCount, commissions, payouts] =
-    await Promise.all([
+    const [
+    partners,
+    referralCount,
+    commissions,
+    payouts,
+    pendingReviewCommissions,
+  ] = await Promise.all([
       prisma.creatorPartner.findMany({
         include: {
           _count: {
@@ -73,7 +87,7 @@ export default async function AdminCreatorCommissionsPage() {
         take: 200,
       }),
 
-      prisma.creatorPayout.findMany({
+            prisma.creatorPayout.findMany({
         include: {
           creatorPartner: {
             select: {
@@ -91,6 +105,23 @@ export default async function AdminCreatorCommissionsPage() {
           createdAt: "desc",
         },
         take: 100,
+      }),
+
+      prisma.creatorCommission.findMany({
+        where: {
+          status: "Pending",
+        },
+        include: {
+          creatorPartner: {
+            select: {
+              fullName: true,
+              trackingCode: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "asc",
+        },
       }),
     ]);
 
@@ -135,6 +166,76 @@ export default async function AdminCreatorCommissionsPage() {
     (total, payout) => total + payout.amountCents,
     0
   );
+
+    type ReviewGroup = {
+    creatorPartnerId: string;
+    creatorName: string;
+    trackingCode: string;
+    monthKey: string;
+    recordCount: number;
+    stripeSessionIds: Set<string>;
+    netRevenueCents: number;
+    nextEligibleAt: Date;
+  };
+
+  const groupedReviews = pendingReviewCommissions.reduce(
+    (groups, commission) => {
+      const key =
+        `${commission.creatorPartnerId}:${commission.monthKey}`;
+      const existing = groups.get(key);
+
+      if (existing) {
+        existing.recordCount += 1;
+        existing.stripeSessionIds.add(
+          commission.stripeSessionId
+        );
+        existing.netRevenueCents +=
+          commission.netRevenueCents;
+
+        if (
+          commission.validationEligibleAt >
+          existing.nextEligibleAt
+        ) {
+          existing.nextEligibleAt =
+            commission.validationEligibleAt;
+        }
+
+        return groups;
+      }
+
+      groups.set(key, {
+        creatorPartnerId: commission.creatorPartnerId,
+        creatorName:
+          commission.creatorPartner.fullName,
+        trackingCode:
+          commission.creatorPartner.trackingCode,
+        monthKey: commission.monthKey,
+        recordCount: 1,
+        stripeSessionIds: new Set([
+          commission.stripeSessionId,
+        ]),
+        netRevenueCents: commission.netRevenueCents,
+        nextEligibleAt:
+          commission.validationEligibleAt,
+      });
+
+      return groups;
+    },
+    new Map<string, ReviewGroup>()
+  );
+
+  const reviewGroups = Array.from(
+    groupedReviews.values()
+  ).map((group) => ({
+    ...group,
+    qualifyingSaleCount:
+      group.stripeSessionIds.size,
+    monthEnd: getCommissionMonthEnd(
+      group.monthKey
+    ),
+  }));
+
+  const now = new Date();
 
   return (
     <main className="min-h-screen bg-black px-6 py-20 text-white">
@@ -318,7 +419,112 @@ export default async function AdminCreatorCommissionsPage() {
             )}
           </div>
         </section>
+                <section className="mt-12">
+          <h2 className="text-3xl font-black text-yellow-400">
+            Monthly Review Queue
+          </h2>
 
+          <p className="mt-2 text-gray-400">
+            Review completed commission months after every attributed
+            transaction has finished its validation period.
+          </p>
+
+          <div className="mt-6 space-y-5">
+            {reviewGroups.map((group) => {
+              const monthHasEnded =
+                group.monthEnd <= now;
+              const validationComplete =
+                group.nextEligibleAt <= now;
+
+              return (
+                <article
+                  key={`${group.creatorPartnerId}:${group.monthKey}`}
+                  className="rounded-2xl border border-white/20 bg-white/5 p-6"
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-5">
+                    <div>
+                      <h3 className="text-xl font-black text-yellow-300">
+                        {group.creatorName}
+                      </h3>
+
+                      <p className="mt-1 font-mono text-xs text-gray-400">
+                        {group.trackingCode}
+                      </p>
+                    </div>
+
+                    <span className="rounded-full bg-yellow-400 px-4 py-2 text-sm font-black text-black">
+                      {group.monthKey}
+                    </span>
+                  </div>
+
+                  <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div>
+                      <p className="text-xs font-black uppercase text-gray-400">
+                        Qualifying Sales
+                      </p>
+                      <p className="mt-1 text-2xl font-black">
+                        {group.qualifyingSaleCount}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-black uppercase text-gray-400">
+                        Commission Records
+                      </p>
+                      <p className="mt-1 text-2xl font-black">
+                        {group.recordCount}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-black uppercase text-gray-400">
+                        Net Revenue
+                      </p>
+                      <p className="mt-1 text-2xl font-black">
+                        {formatMoney(group.netRevenueCents)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p className="text-xs font-black uppercase text-gray-400">
+                        Validation Complete
+                      </p>
+                      <p className="mt-1 font-bold">
+                        {group.nextEligibleAt.toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-6 border-t border-white/10 pt-5">
+                    {!monthHasEnded ? (
+                      <p className="font-semibold text-yellow-300">
+                        This calendar month has not ended yet.
+                      </p>
+                    ) : !validationComplete ? (
+                      <p className="font-semibold text-yellow-300">
+                        Validation remains pending until{" "}
+                        {group.nextEligibleAt.toLocaleDateString()}.
+                      </p>
+                    ) : (
+                      <CreatorCommissionReviewButton
+                        creatorPartnerId={
+                          group.creatorPartnerId
+                        }
+                        monthKey={group.monthKey}
+                      />
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+
+            {reviewGroups.length === 0 && (
+              <div className="rounded-2xl border border-white/20 bg-white/5 p-8 text-center text-gray-400">
+                No commission months are currently awaiting review.
+              </div>
+            )}
+          </div>
+        </section>
         <section className="mt-12">
           <h2 className="text-3xl font-black text-yellow-400">
             Recent Commission Records
