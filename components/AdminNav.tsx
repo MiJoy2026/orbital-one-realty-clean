@@ -22,6 +22,12 @@ export default function AdminNav() {
           Creators
         </a>
         <a
+          href="/admin/creator-commissions"
+          className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
+        >
+          Commissions
+        </a>
+        <a
           href="/admin/inventory"
           className="rounded-xl border border-yellow-400 px-5 py-3 font-black text-yellow-400"
         >
