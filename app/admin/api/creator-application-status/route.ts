@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 
 import { prisma } from "@/lib/prisma";
+import { sendCreatorDecisionEmail } from "@/lib/send-creator-decision-email";
 
 const ALLOWED_ACTIONS = new Set(["approve", "reject"]);
 
@@ -197,11 +198,41 @@ export async function POST(request: NextRequest) {
       { status: 409 }
     );
   }
+    let decisionEmailSent = false;
 
-  return NextResponse.json({
+  try {
+    const emailId =
+      result.kind === "approved"
+        ? await sendCreatorDecisionEmail({
+            kind: "approved",
+            to: result.application.email,
+            fullName: result.application.fullName,
+            trackingCode: result.partner.trackingCode,
+          })
+        : await sendCreatorDecisionEmail({
+            kind: "rejected",
+            to: result.application.email,
+            fullName: result.application.fullName,
+          });
+
+    decisionEmailSent = true;
+
+    console.log(
+      `Creator ${result.kind} email sent:`,
+      emailId || "accepted by Resend"
+    );
+  } catch (error) {
+    console.error(
+      `Creator application ${result.application.id} was updated, but the decision email failed:`,
+      error
+    );
+  }
+
+    return NextResponse.json({
     success: true,
     action: result.kind,
     application: result.application,
     partner: result.kind === "approved" ? result.partner : null,
+    decisionEmailSent,
   });
 }
