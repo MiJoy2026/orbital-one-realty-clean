@@ -7,87 +7,88 @@ datasource db {
 }
 
 model Order {
-  id                String   @id @default(cuid())
-  createdAt         DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
-  stripeSessionId   String
-  propertyId        String
-  propertyType      String
-  acreagePurchased  Float?
-  lunarState        String
+  stripeSessionId  String
+  propertyId       String
+  propertyType     String
+  acreagePurchased Float?
+  lunarState       String
 
-  deedName          String
+  deedName String
 
-  certificateNumber String   @unique
+  certificateNumber String @unique
 
-  amountPaid        Float
+  amountPaid Float
 
-  paymentStatus     String
+  paymentStatus String
 
-  email             String?
+  email  String?
   userId String?
-  user   User? @relation(fields: [userId], references: [id])
+  user   User?   @relation(fields: [userId], references: [id])
 
-  premiumGoldSeal   Boolean  @default(false)
+  premiumGoldSeal Boolean @default(false)
 
-  passportPurchased Boolean  @default(false)
-  isGift            Boolean  @default(false)
-  recipientEmail String?
-  giftMessage    String?
-  hoaClaimed     Boolean @default(false)
+  passportPurchased Boolean @default(false)
+  isGift            Boolean @default(false)
+  recipientEmail    String?
+  giftMessage       String?
+  hoaClaimed        Boolean @default(false)
 
-  legalPolicyVersion            String?
-  legalAcceptedAt                DateTime?
-  termsAccepted                 Boolean  @default(false)
-  noveltyAcknowledged           Boolean  @default(false)
-  immediateFulfillmentAccepted  Boolean  @default(false)
-  electronicDeliveryAccepted    Boolean  @default(false)
-  withdrawalAcknowledged        Boolean  @default(false)
+  legalPolicyVersion           String?
+  legalAcceptedAt              DateTime?
+  termsAccepted                Boolean   @default(false)
+  noveltyAcknowledged          Boolean   @default(false)
+  immediateFulfillmentAccepted Boolean   @default(false)
+  electronicDeliveryAccepted   Boolean   @default(false)
+  withdrawalAcknowledged       Boolean   @default(false)
 
-  propertySnapshot OwnedPropertySnapshot?
+  propertySnapshot  OwnedPropertySnapshot?
+  creatorCommission CreatorCommission?
 
   @@unique([stripeSessionId, propertyId], map: "Order_stripe_session_property_key")
   @@index([stripeSessionId], map: "Order_stripe_session_idx")
 }
 
 model OwnedPropertySnapshot {
-  id                          String   @id @default(cuid())
-  createdAt                   DateTime @default(now())
-  updatedAt                   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  orderId                     String   @unique
-  propertyId                  String   @unique
-  certificateNumber           String   @unique
-  propertyType                String
+  orderId           String @unique
+  propertyId        String @unique
+  certificateNumber String @unique
+  propertyType      String
 
-  stateName                   String
-  cityName                    String?
-  townName                    String?
-  locationLabel               String
+  stateName     String
+  cityName      String?
+  townName      String?
+  locationLabel String
 
-  geographySource             String
-  geographyReleaseNumber      Int?
-  geographyLabel              String?
-  geographyFrozenAt           DateTime?
-  inventoryGridVersion        Int
-  inventorySubdivisionFactor  Int
-  imageRendererVersion        Int      @default(1)
-  terrainImageSource          String   @default("/atlas/moon-atlas-v2.jpg")
+  geographySource            String
+  geographyReleaseNumber     Int?
+  geographyLabel             String?
+  geographyFrozenAt          DateTime?
+  inventoryGridVersion       Int
+  inventorySubdivisionFactor Int
+  imageRendererVersion       Int       @default(1)
+  terrainImageSource         String    @default("/atlas/moon-atlas-v2.jpg")
 
-  centerX                     Float
-  centerY                     Float
-  minimumX                    Float
-  minimumY                    Float
-  maximumX                    Float
-  maximumY                    Float
-  propertyWidth               Float
-  propertyHeight              Float
+  centerX        Float
+  centerY        Float
+  minimumX       Float
+  minimumY       Float
+  maximumX       Float
+  maximumY       Float
+  propertyWidth  Float
+  propertyHeight Float
 
-  polygon                     Json
-  contextBoundary             Json
-  gridCoordinates             Json
+  polygon         Json
+  contextBoundary Json
+  gridCoordinates Json
 
-  order                       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([stateName, propertyType], map: "OwnedPropertySnapshot_state_type_idx")
   @@index([geographyReleaseNumber], map: "OwnedPropertySnapshot_release_idx")
@@ -95,39 +96,39 @@ model OwnedPropertySnapshot {
 }
 
 model PropertyReservation {
-  id                      String   @id @default(cuid())
-  createdAt               DateTime @default(now())
-  expiresAt               DateTime
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  expiresAt DateTime
 
-  stateName               String
-  cityName                String?
-  townName                String?
+  stateName String
+  cityName  String?
+  townName  String?
 
-  parcelKey               String
-  propertyType            String
-  acreage                  Float?
+  parcelKey    String
+  propertyType String
+  acreage      Float?
 
-  mapX                     Float?
-  mapY                     Float?
+  mapX Float?
+  mapY Float?
 
-  status                   String   @default("Reserved")
-  stripeCheckoutSessionId  String?
+  status                  String  @default("Reserved")
+  stripeCheckoutSessionId String?
 
   @@index([parcelKey, status, expiresAt], map: "PropertyReservation_parcel_status_expires_idx")
   @@index([stripeCheckoutSessionId], map: "PropertyReservation_checkout_session_idx")
 }
 
 model LunarState {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  name        String   @unique
+  name        String  @unique
   theme       String?
   description String?
 
-  cities      LunarCity[]
-  towns       LunarTown[]
+  cities LunarCity[]
+  towns  LunarTown[]
 }
 
 model LunarCity {
@@ -137,7 +138,7 @@ model LunarCity {
   name      String
   stateName String
 
-  state     LunarState @relation(fields: [stateName], references: [name])
+  state LunarState @relation(fields: [stateName], references: [name])
 
   @@unique([name, stateName])
 }
@@ -149,67 +150,69 @@ model LunarTown {
   name      String
   stateName String
 
-  state     LunarState @relation(fields: [stateName], references: [name])
+  state LunarState @relation(fields: [stateName], references: [name])
 
   @@unique([name, stateName])
 }
 
 model Property {
-  id          String   @id
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  state       String
-  city   String?
-  town   String?
+  state String
+  city  String?
+  town  String?
 
-  type        String
-  size        String
-  price       Float
-  status      String   @default("Available")
+  type   String
+  size   String
+  price  Float
+  status String @default("Available")
 
-  mapX   Float?
-  mapY   Float?
+  mapX Float?
+  mapY Float?
 }
 
 model StateInventory {
-  id          String   @id @default(cuid())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  stateName   String   @unique
-  totalAcres  Float    @default(50000)
-  soldAcres   Float    @default(0)
+  stateName  String @unique
+  totalAcres Float  @default(50000)
+  soldAcres  Float  @default(0)
 }
+
 model AcreageAllocation {
-  id                String   @id @default(cuid())
-  createdAt         DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
   orderId           String
   certificateNumber String
 
-  stateName         String
-  propertyId        String
+  stateName  String
+  propertyId String
 
-  startingAcre      Int
-  endingAcre        Int
-  acresAssigned     Float
+  startingAcre  Int
+  endingAcre    Int
+  acresAssigned Float
 }
+
 model User {
-  id           String   @id @default(cuid())
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   email           String    @unique
   passwordHash    String
   emailVerifiedAt DateTime?
 
-  name            String?
+  name String?
 
-  orders       Order[]
+  orders  Order[]
   members Member[]
-
 }
+
 model LoginThrottle {
   key             String    @id
   scope           String
@@ -223,25 +226,26 @@ model LoginThrottle {
 }
 
 model Member {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  name          String
-  email         String   @unique
+  name  String
+  email String @unique
 
-  hoaNumber     String   @unique
-  charterMember Boolean  @default(true)
+  hoaNumber     String  @unique
+  charterMember Boolean @default(true)
 
-  activatedAt   DateTime?
+  activatedAt DateTime?
 
-  userId        String?
-  user          User?    @relation(fields: [userId], references: [id])
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
 }
+
 model LunaSphereGeographyDraft {
-  id               String   @id @default(cuid())
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   worldId          String
   worldVersion     String
@@ -253,9 +257,9 @@ model LunaSphereGeographyDraft {
 }
 
 model LunaSphereGeographyRelease {
-  id               String   @id @default(cuid())
-  createdAt        DateTime @default(now())
-  publishedAt      DateTime @default(now())
+  id          String   @id @default(cuid())
+  createdAt   DateTime @default(now())
+  publishedAt DateTime @default(now())
 
   worldId          String
   worldVersion     String
@@ -264,64 +268,205 @@ model LunaSphereGeographyRelease {
   topologyHash     String
   topology         Json
 
-  activations      LunaSphereGeographyActivation[]
-  freezes          LunaSphereGeographyFreeze[]
+  activations LunaSphereGeographyActivation[]
+  freezes     LunaSphereGeographyFreeze[]
 
   @@unique([worldId, worldVersion, releaseNumber], map: "LunaSphereGeoRelease_world_version_number_key")
   @@index([worldId, worldVersion, publishedAt], map: "LunaSphereGeoRelease_world_version_published_idx")
 }
 
 model LunaSphereGeographyActivation {
-  id            String   @id @default(cuid())
-  createdAt     DateTime @default(now())
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
 
   worldId       String
   worldVersion  String
   releaseNumber Int
   releaseId     String
 
-  release       LunaSphereGeographyRelease @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  release LunaSphereGeographyRelease @relation(fields: [releaseId], references: [id], onDelete: Restrict)
 
   @@index([worldId, worldVersion, createdAt], map: "LunaSphereGeoActivation_world_version_created_idx")
   @@index([releaseId])
 }
 
 model LunaSphereGeographyFreeze {
-  id                          String   @id @default(cuid())
-  createdAt                   DateTime @default(now())
-  frozenAt                    DateTime @default(now())
-  unfrozenAt                  DateTime?
+  id         String    @id @default(cuid())
+  createdAt  DateTime  @default(now())
+  frozenAt   DateTime  @default(now())
+  unfrozenAt DateTime?
 
-  worldId                     String
-  worldVersion                String
-  label                       String   @default("Geography 1.0")
-  releaseNumber               Int
-  releaseId                   String
-  topologyHash                String
+  worldId       String
+  worldVersion  String
+  label         String @default("Geography 1.0")
+  releaseNumber Int
+  releaseId     String
+  topologyHash  String
 
-  inventoryGridVersion        Int
-  inventorySubdivisionFactor  Int
-  topologyRevision            Int
-  territoryRevision           Int
-  protectedAreaRevision       Int
+  inventoryGridVersion       Int
+  inventorySubdivisionFactor Int
+  topologyRevision           Int
+  territoryRevision          Int
+  protectedAreaRevision      Int
 
-  readinessStatus             String
-  readyStateCount             Int
-  reviewStateCount            Int
-  blockedStateCount           Int
-  totalRuralParcels           Int
-  totalCityBlocks             Int
-  totalTownBlocks             Int
-  totalSaleableProperties     Int
-  totalProtectedAreas         Int
-  auditReport                 Json
+  readinessStatus         String
+  readyStateCount         Int
+  reviewStateCount        Int
+  blockedStateCount       Int
+  totalRuralParcels       Int
+  totalCityBlocks         Int
+  totalTownBlocks         Int
+  totalSaleableProperties Int
+  totalProtectedAreas     Int
+  auditReport             Json
 
-  freezeNote                  String?
-  unfreezeNote                String?
+  freezeNote   String?
+  unfreezeNote String?
 
-  release                     LunaSphereGeographyRelease @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  release LunaSphereGeographyRelease @relation(fields: [releaseId], references: [id], onDelete: Restrict)
 
   @@index([worldId, worldVersion, frozenAt], map: "LunaSphereGeoFreeze_world_version_frozen_idx")
   @@index([worldId, worldVersion, unfrozenAt], map: "LunaSphereGeoFreeze_world_version_unfrozen_idx")
   @@index([releaseId])
+}
+
+model CreatorApplication {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  fullName        String
+  email           String
+  country         String
+  primaryPlatform String
+  handle          String
+  audienceSize    String
+  profileUrl      String
+  contentFocus    String
+  whyFit          String
+  campaignIdea    String?
+
+  ageConfirmed        Boolean
+  disclosureConfirmed Boolean
+  termsAccepted       Boolean
+  termsVersion        String
+
+  status      String    @default("Pending")
+  reviewNotes String?
+  reviewedBy  String?
+  reviewedAt  DateTime?
+  approvedAt  DateTime?
+  rejectedAt  DateTime?
+
+  partner CreatorPartner?
+
+  @@index([status, createdAt], map: "CreatorApplication_status_created_idx")
+  @@index([email, createdAt], map: "CreatorApplication_email_created_idx")
+}
+
+model CreatorPartner {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applicationId String @unique
+  fullName      String
+  email         String @unique
+  trackingCode  String @unique
+  status        String @default("Active")
+
+  referralWindowDays      Int  @default(30)
+  payoutThresholdCents    Int  @default(2500)
+  customCommissionRateBps Int?
+
+  approvedAt   DateTime  @default(now())
+  suspendedAt  DateTime?
+  terminatedAt DateTime?
+
+  application CreatorApplication  @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+  referrals   CreatorReferral[]
+  commissions CreatorCommission[]
+  payouts     CreatorPayout[]
+
+  @@index([status], map: "CreatorPartner_status_idx")
+}
+
+model CreatorReferral {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  creatorPartnerId String
+  trackingCode     String
+  source           String    @default("Link")
+  landingPath      String?
+  convertedAt      DateTime?
+
+  creatorPartner CreatorPartner      @relation(fields: [creatorPartnerId], references: [id], onDelete: Restrict)
+  commissions    CreatorCommission[]
+
+  @@index([creatorPartnerId, createdAt], map: "CreatorReferral_partner_created_idx")
+  @@index([expiresAt], map: "CreatorReferral_expires_idx")
+}
+
+model CreatorCommission {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creatorPartnerId String
+  referralId       String?
+  orderId          String  @unique
+  stripeSessionId  String
+  monthKey         String
+
+  grossRevenueCents Int
+  refundAmountCents Int @default(0)
+  netRevenueCents   Int
+
+  status                String   @default("Pending")
+  commissionRateBps     Int?
+  commissionAmountCents Int?
+  adjustmentCents       Int      @default(0)
+  validationEligibleAt  DateTime
+
+  approvedAt   DateTime?
+  deniedAt     DateTime?
+  paidAt       DateTime?
+  denialReason String?
+
+  payoutId String?
+
+  creatorPartner CreatorPartner   @relation(fields: [creatorPartnerId], references: [id], onDelete: Restrict)
+  referral       CreatorReferral? @relation(fields: [referralId], references: [id], onDelete: SetNull)
+  order          Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  payout         CreatorPayout?   @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  @@index([creatorPartnerId, monthKey, status], map: "CreatorCommission_partner_month_status_idx")
+  @@index([stripeSessionId], map: "CreatorCommission_stripe_session_idx")
+  @@index([referralId], map: "CreatorCommission_referral_idx")
+  @@index([payoutId], map: "CreatorCommission_payout_idx")
+}
+
+model CreatorPayout {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creatorPartnerId String
+  periodStart      DateTime
+  periodEnd        DateTime
+  amountCents      Int
+  status           String   @default("Pending")
+
+  method    String?
+  reference String?
+  notes     String?
+  paidAt    DateTime?
+
+  creatorPartner CreatorPartner      @relation(fields: [creatorPartnerId], references: [id], onDelete: Restrict)
+  commissions    CreatorCommission[]
+
+  @@index([creatorPartnerId, status], map: "CreatorPayout_partner_status_idx")
+  @@index([periodStart, periodEnd], map: "CreatorPayout_period_idx")
 }
