@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
+import { prisma } from "@/lib/prisma";
+
+const CREATOR_TERMS_VERSION = "2026-08-03";
 
 function readField(
   formData: FormData,
@@ -78,12 +81,32 @@ export async function POST(request: Request) {
       return redirectTo(request, "/creators?error=1#apply");
     }
 
+        const application = await prisma.creatorApplication.create({
+      data: {
+        fullName,
+        email,
+        country,
+        primaryPlatform,
+        handle,
+        audienceSize,
+        profileUrl: parsedProfileUrl.toString(),
+        contentFocus,
+        whyFit,
+        campaignIdea: campaignIdea || null,
+        ageConfirmed,
+        disclosureConfirmed,
+        termsAccepted,
+        termsVersion: CREATOR_TERMS_VERSION,
+      },
+    });
+
     const resendApiKey = process.env.RESEND_API_KEY;
-    if (!resendApiKey) {
+        if (!resendApiKey) {
       console.error(
-        "Creator application could not be sent: RESEND_API_KEY is missing."
+        `Creator application ${application.id} was saved, but RESEND_API_KEY is missing.`
       );
-      return redirectTo(request, "/creators?error=1#apply");
+
+      return redirectTo(request, "/creators?submitted=1#apply");
     }
 
     const resend = new Resend(resendApiKey);
@@ -100,7 +123,8 @@ export async function POST(request: Request) {
       campaignIdea: escapeHtml(campaignIdea).replaceAll("\n", "<br />"),
     };
 
-    const applicationSubject = `Creator application: ${fullName} — ${primaryPlatform}`;
+        const applicationSubject =
+      `Creator application ${application.id}: ${fullName} - ${primaryPlatform}`;
 
     const { data: applicationData, error: applicationError } =
       await resend.emails.send({
@@ -161,15 +185,17 @@ export async function POST(request: Request) {
         ].join("\n"),
       });
 
-    if (applicationError) {
-      console.error("Creator application email failed:", applicationError);
-      return redirectTo(request, "/creators?error=1#apply");
+        if (applicationError) {
+      console.error(
+        `Creator application ${application.id} was saved, but the notification email failed:`,
+        applicationError
+      );
+    } else {
+      console.log(
+        "Creator application email sent:",
+        applicationData?.id || "accepted by Resend"
+      );
     }
-
-    console.log(
-      "Creator application email sent:",
-      applicationData?.id || "accepted by Resend"
-    );
 
     const { data: confirmationData, error: confirmationError } =
       await resend.emails.send({
