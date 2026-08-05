@@ -1,6 +1,7 @@
 import AdminNav from "@/components/AdminNav";
 import CreatorCommissionReviewButton from "@/components/CreatorCommissionReviewButton";
 import CreatorCommissionStatusControls from "@/components/CreatorCommissionStatusControls";
+import CreatorCommissionAdjustmentControls from "@/components/CreatorCommissionAdjustmentControls";
 import CreatorPayoutCreateButton from "@/components/CreatorPayoutCreateButton";
 import CreatorPayoutCompleteButton from "@/components/CreatorPayoutCompleteButton";
 import CreatorPayoutCancelButton from "@/components/CreatorPayoutCancelButton";
@@ -714,11 +715,27 @@ export default async function AdminCreatorCommissionsPage() {
                           {commission.status}
                         </span>
                           <div className="mt-3">
-                            <CreatorCommissionStatusControls
-                              commissionId={commission.id}
-                              status={commission.status}
-                              denialReason={commission.denialReason}
-                            />
+                            {commission.status === "Approved" &&
+                            commission.payoutId === null &&
+                            commission.commissionAmountCents !== null && (
+                            <div className="mt-3">
+                              <CreatorCommissionAdjustmentControls
+                                commissionId={commission.id}
+                                baseCommissionCents={
+                                 commission.commissionAmountCents
+                                }
+                                currentAdjustmentCents={
+                                 commission.adjustmentCents
+                                }
+                                currentAdjustmentReason={
+                                 commission.adjustmentReason
+                                }
+                                adjustedAt={
+                                 commission.adjustedAt?.toISOString() || null
+                                }
+                              />
+                            </div>
+                            )}
                           </div>
                       </td>
 

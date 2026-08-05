@@ -427,8 +427,11 @@ model CreatorCommission {
   status                String   @default("Pending")
   commissionRateBps     Int?
   commissionAmountCents Int?
-  adjustmentCents       Int      @default(0)
-  validationEligibleAt  DateTime
+  adjustmentCents  Int @default(0)
+  adjustmentReason String?
+  adjustedAt       DateTime?
+
+  validationEligibleAt DateTime
 
   approvedAt   DateTime?
   deniedAt     DateTime?
