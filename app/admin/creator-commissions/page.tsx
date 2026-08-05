@@ -1,5 +1,6 @@
 import AdminNav from "@/components/AdminNav";
 import CreatorCommissionReviewButton from "@/components/CreatorCommissionReviewButton";
+import CreatorCommissionStatusControls from "@/components/CreatorCommissionStatusControls";
 import { prisma } from "@/lib/prisma";
 
 function formatMoney(cents: number): string {
@@ -614,6 +615,13 @@ export default async function AdminCreatorCommissionsPage() {
                         >
                           {commission.status}
                         </span>
+                          <div className="mt-3">
+                            <CreatorCommissionStatusControls
+                              commissionId={commission.id}
+                              status={commission.status}
+                              denialReason={commission.denialReason}
+                            />
+                          </div>
                       </td>
 
                       <td className="p-4 text-sm">
