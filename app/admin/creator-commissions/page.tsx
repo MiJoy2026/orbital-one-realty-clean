@@ -1,6 +1,7 @@
 import AdminNav from "@/components/AdminNav";
 import CreatorCommissionReviewButton from "@/components/CreatorCommissionReviewButton";
 import CreatorCommissionStatusControls from "@/components/CreatorCommissionStatusControls";
+import CreatorPayoutCreateButton from "@/components/CreatorPayoutCreateButton";
 import { prisma } from "@/lib/prisma";
 
 function formatMoney(cents: number): string {
@@ -36,12 +37,13 @@ function getCommissionMonthEnd(monthKey: string): Date {
 
 export default async function AdminCreatorCommissionsPage() {
     const [
-    partners,
-    referralCount,
-    commissions,
-    payouts,
-    pendingReviewCommissions,
-  ] = await Promise.all([
+      partners,
+      referralCount,
+      commissions,
+      payouts,
+      pendingReviewCommissions,
+      approvedUnpaidCommissions,
+    ] = await Promise.all([
       prisma.creatorPartner.findMany({
         include: {
           _count: {
@@ -123,6 +125,32 @@ export default async function AdminCreatorCommissionsPage() {
         orderBy: {
           createdAt: "asc",
         },
+      }),
+            prisma.creatorCommission.findMany({
+        where: {
+          status: "Approved",
+          payoutId: null,
+        },
+        include: {
+          creatorPartner: {
+            select: {
+              fullName: true,
+              trackingCode: true,
+              payoutThresholdCents: true,
+            },
+          },
+        },
+        orderBy: [
+          {
+            creatorPartnerId: "asc",
+          },
+          {
+            monthKey: "asc",
+          },
+          {
+            createdAt: "asc",
+          },
+        ],
       }),
     ]);
 
@@ -234,6 +262,74 @@ export default async function AdminCreatorCommissionsPage() {
     monthEnd: getCommissionMonthEnd(
       group.monthKey
     ),
+  }));
+
+    type PayoutEligibilityGroup = {
+    creatorPartnerId: string;
+    creatorName: string;
+    trackingCode: string;
+    payoutThresholdCents: number;
+    commissionCount: number;
+    availableBalanceCents: number;
+    incompleteRecordCount: number;
+    monthKeys: Set<string>;
+  };
+
+  const groupedPayoutEligibility =
+    approvedUnpaidCommissions.reduce(
+      (groups, commission) => {
+        const existing = groups.get(
+          commission.creatorPartnerId
+        );
+
+        const commissionValue =
+          (commission.commissionAmountCents || 0) +
+          commission.adjustmentCents;
+
+        if (existing) {
+          existing.commissionCount += 1;
+          existing.availableBalanceCents +=
+            commissionValue;
+          existing.monthKeys.add(commission.monthKey);
+
+          if (
+            commission.commissionAmountCents === null
+          ) {
+            existing.incompleteRecordCount += 1;
+          }
+
+          return groups;
+        }
+
+        groups.set(commission.creatorPartnerId, {
+          creatorPartnerId:
+            commission.creatorPartnerId,
+          creatorName:
+            commission.creatorPartner.fullName,
+          trackingCode:
+            commission.creatorPartner.trackingCode,
+          payoutThresholdCents:
+            commission.creatorPartner
+              .payoutThresholdCents,
+          commissionCount: 1,
+          availableBalanceCents: commissionValue,
+          incompleteRecordCount:
+            commission.commissionAmountCents === null
+              ? 1
+              : 0,
+          monthKeys: new Set([commission.monthKey]),
+        });
+
+        return groups;
+      },
+      new Map<string, PayoutEligibilityGroup>()
+    );
+
+  const payoutEligibilityGroups = Array.from(
+    groupedPayoutEligibility.values()
+  ).map((group) => ({
+    ...group,
+    monthCount: group.monthKeys.size,
   }));
 
   const now = new Date();
@@ -637,6 +733,122 @@ export default async function AdminCreatorCommissionsPage() {
               <p className="p-8 text-center text-gray-400">
                 No attributed commission records have been created yet.
               </p>
+            )}
+          </div>
+        </section>
+
+                <section className="mt-12">
+          <h2 className="text-3xl font-black text-yellow-400">
+            Payout Eligibility
+          </h2>
+
+          <p className="mt-2 text-gray-400">
+            Approved unpaid balances carry forward until the
+            Creator Partner reaches their payout threshold.
+          </p>
+
+          <div className="mt-6 space-y-5">
+            {payoutEligibilityGroups.map((group) => (
+              <article
+                key={group.creatorPartnerId}
+                className="rounded-2xl border border-white/20 bg-white/5 p-6"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-5">
+                  <div>
+                    <h3 className="text-xl font-black text-yellow-300">
+                      {group.creatorName}
+                    </h3>
+
+                    <p className="mt-1 font-mono text-xs text-gray-400">
+                      {group.trackingCode}
+                    </p>
+                  </div>
+
+                  <span className="rounded-full bg-green-500 px-4 py-2 text-sm font-black text-black">
+                    {formatMoney(
+                      group.availableBalanceCents
+                    )}
+                  </span>
+                </div>
+
+                <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  <div>
+                    <p className="text-xs font-black uppercase text-gray-400">
+                      Approved Records
+                    </p>
+                    <p className="mt-1 text-2xl font-black">
+                      {group.commissionCount}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-black uppercase text-gray-400">
+                      Commission Months
+                    </p>
+                    <p className="mt-1 text-2xl font-black">
+                      {group.monthCount}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-black uppercase text-gray-400">
+                      Available Balance
+                    </p>
+                    <p className="mt-1 text-2xl font-black">
+                      {formatMoney(
+                        group.availableBalanceCents
+                      )}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-black uppercase text-gray-400">
+                      Payout Threshold
+                    </p>
+                    <p className="mt-1 text-2xl font-black">
+                      {formatMoney(
+                        group.payoutThresholdCents
+                      )}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-6 border-t border-white/10 pt-5">
+                  {group.incompleteRecordCount > 0 ? (
+                    <p className="font-semibold text-red-300">
+                      This balance contains{" "}
+                      {group.incompleteRecordCount} approved{" "}
+                      {group.incompleteRecordCount === 1
+                        ? "record"
+                        : "records"}{" "}
+                      without a calculated commission amount.
+                    </p>
+                  ) : (
+                    <CreatorPayoutCreateButton
+                      creatorPartnerId={
+                        group.creatorPartnerId
+                      }
+                      creatorName={group.creatorName}
+                      availableBalanceCents={
+                        group.availableBalanceCents
+                      }
+                      payoutThresholdCents={
+                        group.payoutThresholdCents
+                      }
+                      commissionCount={
+                        group.commissionCount
+                      }
+                    />
+                  )}
+                </div>
+              </article>
+            ))}
+
+            {payoutEligibilityGroups.length === 0 && (
+              <div className="rounded-2xl border border-white/20 bg-white/5 p-8 text-center text-gray-400">
+                No approved unpaid Creator Partner
+                commissions are currently available for payout.
+              </div>
             )}
           </div>
         </section>
