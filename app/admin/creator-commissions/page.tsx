@@ -2,6 +2,7 @@ import AdminNav from "@/components/AdminNav";
 import CreatorCommissionReviewButton from "@/components/CreatorCommissionReviewButton";
 import CreatorCommissionStatusControls from "@/components/CreatorCommissionStatusControls";
 import CreatorPayoutCreateButton from "@/components/CreatorPayoutCreateButton";
+import CreatorPayoutCompleteButton from "@/components/CreatorPayoutCompleteButton";
 import { prisma } from "@/lib/prisma";
 
 function formatMoney(cents: number): string {
@@ -910,7 +911,24 @@ export default async function AdminCreatorCommissionsPage() {
                     </td>
 
                     <td className="p-4">
-                      {payout.status}
+                     <span
+                        className={`rounded-full px-3 py-1 text-xs font-black ${statusClasses(
+                        payout.status
+                      )}`}
+                     >
+                       {payout.status}
+                     </span>
+
+                       {payout.status === "Pending" && (
+                        <div className="mt-3">
+                          <CreatorPayoutCompleteButton
+                            payoutId={payout.id}
+                            creatorName={payout.creatorPartner.fullName}
+                            amountCents={payout.amountCents}
+                            commissionCount={payout._count.commissions}
+                          />
+                        </div>
+                       )}
                     </td>
 
                     <td className="p-4 text-sm">
