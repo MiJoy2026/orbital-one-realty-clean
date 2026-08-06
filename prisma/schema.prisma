@@ -10,8 +10,11 @@ model Order {
   id        String   @id @default(cuid())
   createdAt DateTime @default(now())
 
-  stripeSessionId  String
-  propertyId       String
+  stripeSessionId       String
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+
+  propertyId String
   propertyType     String
   acreagePurchased Float?
   lunarState       String
@@ -49,6 +52,8 @@ model Order {
 
   @@unique([stripeSessionId, propertyId], map: "Order_stripe_session_property_key")
   @@index([stripeSessionId], map: "Order_stripe_session_idx")
+  @@index([stripePaymentIntentId], map: "Order_stripe_payment_intent_idx")
+  @@index([stripeChargeId], map: "Order_stripe_charge_idx")
 }
 
 model OwnedPropertySnapshot {
@@ -435,9 +440,14 @@ model CreatorCommission {
   stripeSessionId  String
   monthKey         String
 
-  grossRevenueCents Int
-  refundAmountCents Int @default(0)
-  netRevenueCents   Int
+  grossRevenueCents  Int
+  refundAmountCents  Int @default(0)
+  disputeAmountCents Int @default(0)
+  netRevenueCents    Int
+
+  financialStatus    String @default("Clear")
+  financialNote      String?
+  financialUpdatedAt DateTime?
 
   status                String   @default("Pending")
   commissionRateBps     Int?
@@ -464,6 +474,29 @@ model CreatorCommission {
   @@index([stripeSessionId], map: "CreatorCommission_stripe_session_idx")
   @@index([referralId], map: "CreatorCommission_referral_idx")
   @@index([payoutId], map: "CreatorCommission_payout_idx")
+}
+
+model StripeFinancialEvent {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  stripeEventId String @unique
+  eventType     String
+  stripeObjectId String
+
+  stripePaymentIntentId String?
+  stripeChargeId        String?
+  stripeSessionId       String?
+
+  amountCents Int?
+  currency    String?
+  eventCreatedAt DateTime
+  processedAt    DateTime @default(now())
+
+  @@index([eventType, createdAt], map: "StripeFinancialEvent_type_created_idx")
+  @@index([stripePaymentIntentId], map: "StripeFinancialEvent_payment_intent_idx")
+  @@index([stripeChargeId], map: "StripeFinancialEvent_charge_idx")
+  @@index([stripeSessionId], map: "StripeFinancialEvent_session_idx")
 }
 
 model CreatorPayout {

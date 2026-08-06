@@ -109,6 +109,58 @@ function parseCreatorCheckoutAttribution(
     trackingCode,
   };
 }
+
+function getStripeExpandableId(
+  value:
+    | string
+    | {
+        id: string;
+      }
+    | null
+    | undefined
+): string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (
+    value &&
+    typeof value === "object" &&
+    typeof value.id === "string"
+  ) {
+    return value.id;
+  }
+
+  return null;
+}
+
+function getCheckoutPaymentReferences(
+  session: Stripe.Checkout.Session
+): {
+  paymentIntentId: string | null;
+  chargeId: string | null;
+} {
+  const paymentIntentId = getStripeExpandableId(
+    session.payment_intent
+  );
+
+  const expandedPaymentIntent =
+    session.payment_intent &&
+    typeof session.payment_intent === "object"
+      ? session.payment_intent
+      : null;
+
+  const chargeId = expandedPaymentIntent
+    ? getStripeExpandableId(
+        expandedPaymentIntent.latest_charge
+      )
+    : null;
+
+  return {
+    paymentIntentId,
+    chargeId,
+  };
+}
 const CREATOR_COMMISSION_VALIDATION_DAYS = 30;
 
 function createCreatorCommissionMonthKey(value: Date): string {
@@ -219,6 +271,10 @@ export async function fulfillStripeCheckoutSession(
       "Missing or mismatched property and reservation IDs in Stripe metadata."
     );
   }
+  const {
+   paymentIntentId: stripePaymentIntentId,
+   chargeId: stripeChargeId,
+  } = getCheckoutPaymentReferences(session);
 
   const purchaserEmail = session.customer_details?.email?.trim().toLowerCase();
   const deedName = session.metadata?.deedName?.trim() || "Deed Recipient";
@@ -283,6 +339,25 @@ export async function fulfillStripeCheckoutSession(
       alreadyFulfilledOrders.some((order) => order.propertyId === propertyId)
     )
   ) {
+    if (stripePaymentIntentId || stripeChargeId) {
+     await prisma.order.updateMany({
+       where: {
+         stripeSessionId: session.id,
+       },
+       data: {
+         ...(stripePaymentIntentId
+           ? {
+               stripePaymentIntentId,
+             }
+           : {}),
+         ...(stripeChargeId
+           ? {
+               stripeChargeId,
+             }
+           : {}),
+       },
+     });
+   }
     try {
       await ensureOwnedPropertySnapshotsForOrderIds(
         alreadyFulfilledOrders.map((order) => order.id)
@@ -686,6 +761,8 @@ export async function fulfillStripeCheckoutSession(
             const order = await transaction.order.create({
               data: {
                 stripeSessionId: session.id,
+                stripePaymentIntentId,
+                stripeChargeId,
                 propertyId: property.id,
                 propertyType: property.type,
                 acreagePurchased,
