@@ -136,6 +136,25 @@ async function acquirePropertyLock(
   `;
 }
 
+async function acquireCreatorPartnerStatusLock(
+  transaction: Prisma.TransactionClient,
+  creatorPartnerId: string
+): Promise<void> {
+  await transaction.$queryRaw<
+    Array<{ lockAcquired: number }>
+  >`
+    WITH creator_partner_status_lock AS (
+      SELECT pg_advisory_xact_lock(
+        hashtext(
+          ${`creator-partner-status:${creatorPartnerId}`}
+        )
+      )
+    )
+    SELECT 1 AS "lockAcquired"
+    FROM creator_partner_status_lock
+  `;
+}
+
 async function expireCompetingCheckoutSessions(
   sessionIds: string[]
 ): Promise<void> {
@@ -345,6 +364,12 @@ export async function fulfillStripeCheckoutSession(
           for (const propertyId of [...metadataPropertyIds].sort()) {
             await acquirePropertyLock(transaction, propertyId);
           }
+          if (creatorAttribution) {
+            await acquireCreatorPartnerStatusLock(
+             transaction,
+              creatorAttribution.creatorPartnerId
+            );
+          }
 
           const [existingOrders, properties, reservations] = await Promise.all([
             transaction.order.findMany({
@@ -490,6 +515,7 @@ export async function fulfillStripeCheckoutSession(
                 creatorAttribution.creatorPartnerId &&
               creatorReferral.creatorPartner.trackingCode ===
                 creatorAttribution.trackingCode &&
+              creatorReferral.creatorPartner.status === "Active" &&
               creatorReferral.createdAt.getTime() <=
                 checkoutCreatedAtMilliseconds &&
               creatorReferral.expiresAt.getTime() >
