@@ -1,5 +1,6 @@
 import AdminNav from "@/components/AdminNav";
 import CreatorApplicationActions from "@/components/CreatorApplicationActions";
+import CreatorPartnerStatusControls from "@/components/CreatorPartnerStatusControls";
 import { prisma } from "@/lib/prisma";
 
 function statusClasses(status: string): string {
@@ -14,10 +15,34 @@ function statusClasses(status: string): string {
   return "bg-yellow-400 text-black";
 }
 
+function partnerStatusClasses(status: string): string {
+  if (status === "Active") {
+    return "bg-green-500 text-black";
+  }
+
+  if (status === "Suspended") {
+    return "bg-yellow-400 text-black";
+  }
+
+  if (status === "Terminated") {
+    return "bg-red-600 text-white";
+  }
+
+  return "bg-gray-600 text-white";
+}
+
 export default async function AdminCreatorsPage() {
-  const applications = await prisma.creatorApplication.findMany({
+    const applications = await prisma.creatorApplication.findMany({
     include: {
-      partner: true,
+      partner: {
+        include: {
+          statusEvents: {
+            orderBy: {
+              createdAt: "desc",
+            },
+          },
+        },
+      },
     },
     orderBy: {
       createdAt: "desc",
@@ -160,28 +185,101 @@ export default async function AdminCreatorsPage() {
                   </p>
 
                   {application.partner && (
-                    <div className="rounded-xl border border-green-500/50 bg-green-950/30 p-4">
-                      <p className="font-black text-green-300">
-                        Active Creator Partner
+  <div className="rounded-xl border border-white/20 bg-black/30 p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <p className="font-black text-yellow-300">
+        Creator Partner Account
+      </p>
+
+      <span
+        className={`rounded-full px-3 py-1 text-xs font-black ${partnerStatusClasses(
+          application.partner.status
+        )}`}
+      >
+        {application.partner.status}
+      </span>
+    </div>
+
+    <p className="mt-4">
+      <span className="font-black text-gray-400">
+        Tracking code:
+      </span>{" "}
+      <span className="font-mono text-yellow-300">
+        {application.partner.trackingCode}
+      </span>
+    </p>
+
+    <p className="mt-2">
+      <span className="font-black text-gray-400">
+        Approved:
+      </span>{" "}
+      {application.partner.approvedAt.toLocaleString()}
+    </p>
+
+    {application.partner.suspendedAt && (
+      <p className="mt-2">
+        <span className="font-black text-gray-400">
+          Suspended:
+        </span>{" "}
+        {application.partner.suspendedAt.toLocaleString()}
+      </p>
+    )}
+
+    {application.partner.terminatedAt && (
+      <p className="mt-2">
+        <span className="font-black text-gray-400">
+          Terminated:
+        </span>{" "}
+        {application.partner.terminatedAt.toLocaleString()}
+      </p>
+    )}
+
+    <div className="mt-5 border-t border-white/10 pt-5">
+      <CreatorPartnerStatusControls
+        creatorPartnerId={application.partner.id}
+        creatorName={application.partner.fullName}
+        status={application.partner.status}
+      />
+    </div>
+
+    <div className="mt-5 border-t border-white/10 pt-5">
+      <h4 className="font-black text-yellow-300">
+        Status History
+      </h4>
+
+      <div className="mt-3 space-y-3">
+             {application.partner.statusEvents.map(
+               (event) => (
+                 <div
+                   key={event.id}
+                   className="rounded-lg border border-white/10 bg-white/5 p-3"
+                 >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-sm font-black">
+                       {event.previousStatus} → {event.newStatus}
                       </p>
 
-                      <p className="mt-2">
-                        <span className="font-black text-gray-400">
-                          Tracking code:
-                        </span>{" "}
-                        <span className="font-mono text-yellow-300">
-                          {application.partner.trackingCode}
-                        </span>
-                      </p>
-
-                      <p className="mt-1">
-                        <span className="font-black text-gray-400">
-                          Partner status:
-                        </span>{" "}
-                        {application.partner.status}
+                      <p className="text-xs text-gray-500">
+                        {event.createdAt.toLocaleString()}
                       </p>
                     </div>
-                  )}
+
+                      <p className="mt-2 whitespace-pre-wrap text-sm text-gray-300">
+                        {event.reason}
+                      </p>
+                 </div>
+               )
+             )}
+
+              {application.partner.statusEvents.length === 0 && (
+                <p className="text-sm text-gray-400">
+                  No account-status changes have been recorded.
+                </p>
+              )}
+      </div>
+    </div>
+  </div>
+)}
                 </div>
 
                 <div className="space-y-5">

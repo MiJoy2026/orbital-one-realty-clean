@@ -387,8 +387,23 @@ model CreatorPartner {
   referrals   CreatorReferral[]
   commissions CreatorCommission[]
   payouts     CreatorPayout[]
+  statusEvents CreatorPartnerStatusEvent[]
 
   @@index([status], map: "CreatorPartner_status_idx")
+}
+
+model CreatorPartnerStatusEvent {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+
+  creatorPartnerId String
+  previousStatus   String
+  newStatus        String
+  reason           String
+
+  creatorPartner CreatorPartner @relation(fields: [creatorPartnerId], references: [id], onDelete: Restrict)
+
+  @@index([creatorPartnerId, createdAt], map: "CreatorPartnerStatusEvent_partner_created_idx")
 }
 
 model CreatorReferral {
