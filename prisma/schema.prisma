@@ -392,6 +392,7 @@ model CreatorPartner {
   referrals   CreatorReferral[]
   commissions CreatorCommission[]
   payouts     CreatorPayout[]
+  balanceAdjustments CreatorBalanceAdjustment[]
   statusEvents CreatorPartnerStatusEvent[]
 
   @@index([status], map: "CreatorPartner_status_idx")
@@ -469,6 +470,7 @@ model CreatorCommission {
   referral       CreatorReferral? @relation(fields: [referralId], references: [id], onDelete: SetNull)
   order          Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
   payout         CreatorPayout?   @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+  balanceAdjustments CreatorBalanceAdjustment[]
 
   @@index([creatorPartnerId, monthKey, status], map: "CreatorCommission_partner_month_status_idx")
   @@index([stripeSessionId], map: "CreatorCommission_stripe_session_idx")
@@ -517,7 +519,33 @@ model CreatorPayout {
 
   creatorPartner CreatorPartner      @relation(fields: [creatorPartnerId], references: [id], onDelete: Restrict)
   commissions    CreatorCommission[]
+  balanceAdjustments CreatorBalanceAdjustment[]
 
   @@index([creatorPartnerId, status], map: "CreatorPayout_partner_status_idx")
   @@index([periodStart, periodEnd], map: "CreatorPayout_period_idx")
+}
+
+model CreatorBalanceAdjustment {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  creatorPartnerId    String
+  creatorCommissionId String
+  stripeEventId       String
+
+  amountCents Int
+  reason      String
+
+  payoutId String?
+  paidAt   DateTime?
+
+  creatorPartner    CreatorPartner    @relation(fields: [creatorPartnerId], references: [id], onDelete: Restrict)
+  creatorCommission CreatorCommission @relation(fields: [creatorCommissionId], references: [id], onDelete: Restrict)
+  payout            CreatorPayout?    @relation(fields: [payoutId], references: [id], onDelete: SetNull)
+
+  @@unique([creatorCommissionId, stripeEventId], map: "CreatorBalanceAdjustment_commission_event_key")
+  @@index([creatorPartnerId, payoutId, paidAt], map: "CreatorBalanceAdjustment_partner_payout_paid_idx")
+  @@index([creatorCommissionId], map: "CreatorBalanceAdjustment_commission_idx")
+  @@index([payoutId], map: "CreatorBalanceAdjustment_payout_idx")
 }

@@ -9,6 +9,7 @@ type CreatorPayoutCreateButtonProps = {
   availableBalanceCents: number;
   payoutThresholdCents: number;
   commissionCount: number;
+  balanceAdjustmentCount?: number;
 };
 
 type PayoutResponse = {
@@ -38,6 +39,7 @@ export default function CreatorPayoutCreateButton({
   availableBalanceCents,
   payoutThresholdCents,
   commissionCount,
+  balanceAdjustmentCount = 0,
 }: CreatorPayoutCreateButtonProps) {
   const router = useRouter();
 
@@ -141,10 +143,18 @@ export default function CreatorPayoutCreateButton({
         </p>
 
         <p className="mt-2 text-sm text-gray-400">
-          Current approved unpaid balance:{" "}
+          Current net unpaid balance:{" "}
           {formatMoney(availableBalanceCents)} from{" "}
           {commissionCount} commission{" "}
-          {commissionCount === 1 ? "record" : "records"}.
+          {commissionCount === 1 ? "record" : "records"}
+          {balanceAdjustmentCount > 0
+            ? ` and ${balanceAdjustmentCount} balance ${
+                balanceAdjustmentCount === 1
+                  ? "adjustment"
+                  : "adjustments"
+              }`
+            : ""}
+          .
         </p>
       </div>
     );
@@ -170,7 +180,15 @@ export default function CreatorPayoutCreateButton({
             Create a payout for{" "}
             {formatMoney(availableBalanceCents)} from{" "}
             {commissionCount} commission{" "}
-            {commissionCount === 1 ? "record" : "records"}.
+            {commissionCount === 1 ? "record" : "records"}
+            {balanceAdjustmentCount > 0
+              ? ` and ${balanceAdjustmentCount} balance ${
+                  balanceAdjustmentCount === 1
+                    ? "adjustment"
+                    : "adjustments"
+                }`
+              : ""}
+            .
           </p>
 
           <label className="block text-xs font-black uppercase text-gray-300">

@@ -97,6 +97,13 @@ export async function POST(request: NextRequest) {
                   paidAt: true,
                 },
               },
+                            balanceAdjustments: {
+                select: {
+                  id: true,
+                  payoutId: true,
+                  paidAt: true,
+                },
+              },
             },
           });
 
@@ -127,7 +134,10 @@ export async function POST(request: NextRequest) {
           };
         }
 
-        if (payout.commissions.length === 0) {
+        if (
+          payout.commissions.length === 0 &&
+          payout.balanceAdjustments.length === 0
+        ) {
           return {
             kind: "no-commissions" as const,
           };
@@ -144,6 +154,19 @@ export async function POST(request: NextRequest) {
         if (invalidCommission) {
           return {
             kind: "invalid-commission" as const,
+          };
+        }
+
+                const invalidBalanceAdjustment =
+          payout.balanceAdjustments.find(
+            (adjustment) =>
+              adjustment.payoutId !== payout.id ||
+              adjustment.paidAt !== null
+          );
+
+        if (invalidBalanceAdjustment) {
+          return {
+            kind: "invalid-balance-adjustment" as const,
           };
         }
 
@@ -171,6 +194,34 @@ export async function POST(request: NextRequest) {
           payout.commissions.length
         ) {
           throw new PayoutCancellationConflictError();
+        }
+
+                const balanceAdjustmentIds =
+          payout.balanceAdjustments.map(
+            (adjustment) => adjustment.id
+          );
+
+        if (balanceAdjustmentIds.length > 0) {
+          const balanceAdjustmentUpdate =
+            await transaction.creatorBalanceAdjustment.updateMany({
+              where: {
+                id: {
+                  in: balanceAdjustmentIds,
+                },
+                payoutId: payout.id,
+                paidAt: null,
+              },
+              data: {
+                payoutId: null,
+              },
+            });
+
+          if (
+            balanceAdjustmentUpdate.count !==
+            payout.balanceAdjustments.length
+          ) {
+            throw new PayoutCancellationConflictError();
+          }
         }
 
         const cancelledAt = new Date();
@@ -213,6 +264,8 @@ export async function POST(request: NextRequest) {
           creatorPartner: payout.creatorPartner,
           amountCents: payout.amountCents,
           commissionCount: payout.commissions.length,
+          balanceAdjustmentCount:
+            payout.balanceAdjustments.length,
           cancelledAt,
         };
       }
@@ -266,6 +319,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
+        if (
+      result.kind ===
+      "invalid-balance-adjustment"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "One or more balance adjustments in this payout cannot be released safely.",
+        },
+        { status: 409 }
+      );
+    }
+
     if (result.kind === "already-cancelled") {
       return NextResponse.json({
         success: true,
@@ -282,6 +348,8 @@ export async function POST(request: NextRequest) {
       creatorPartner: result.creatorPartner,
       amountCents: result.amountCents,
       commissionCount: result.commissionCount,
+      balanceAdjustmentCount:
+        result.balanceAdjustmentCount,
       cancelledAt: result.cancelledAt.toISOString(),
     });
   } catch (error) {

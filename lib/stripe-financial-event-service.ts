@@ -504,43 +504,308 @@ export async function processStripeFinancialEvent(
           };
         }
 
-        const orders =
-          await transaction.order.findMany({
-            where: {
-              stripeSessionId,
-            },
-            include: {
-              creatorCommission: true,
-            },
-            orderBy: {
-              createdAt: "asc",
-            },
-          });
+const commissionPartnerRows =
+  await transaction.creatorCommission.findMany({
+    where: {
+      stripeSessionId,
+    },
+    select: {
+      creatorPartnerId: true,
+    },
+  });
 
-        if (orders.length === 0) {
-          throw new Error(
-            `No Orbital One orders were found for Checkout Session ${stripeSessionId}.`
-          );
-        }
+const creatorPartnerIds = Array.from(
+  new Set(
+    commissionPartnerRows.map(
+      (commission) =>
+        commission.creatorPartnerId
+    )
+  )
+).sort();
 
-        await transaction.order.updateMany({
-          where: {
-            stripeSessionId,
+for (const creatorPartnerId of creatorPartnerIds) {
+  await transaction.$queryRaw<
+    Array<{ lockAcquired: number }>
+  >`
+    WITH creator_payout_creation_lock AS (
+      SELECT pg_advisory_xact_lock(
+        hashtext(
+          ${`creator-payout:${creatorPartnerId}`}
+        )
+      )
+    )
+    SELECT 1 AS "lockAcquired"
+    FROM creator_payout_creation_lock
+  `;
+}
+
+const [
+  commissionPayoutRows,
+  balanceAdjustmentPayoutRows,
+] = await Promise.all([
+  transaction.creatorCommission.findMany({
+    where: {
+      stripeSessionId,
+      payoutId: {
+        not: null,
+      },
+    },
+    select: {
+      payoutId: true,
+    },
+  }),
+
+  transaction.creatorBalanceAdjustment.findMany({
+    where: {
+      creatorCommission: {
+        stripeSessionId,
+      },
+      payoutId: {
+        not: null,
+      },
+      paidAt: null,
+    },
+    select: {
+      payoutId: true,
+    },
+  }),
+]);
+
+const payoutIds = Array.from(
+  new Set([
+    ...commissionPayoutRows.flatMap(
+      (commission) =>
+        commission.payoutId
+          ? [commission.payoutId]
+          : []
+    ),
+    ...balanceAdjustmentPayoutRows.flatMap(
+      (adjustment) =>
+        adjustment.payoutId
+          ? [adjustment.payoutId]
+          : []
+    ),
+  ])
+).sort();
+
+for (const payoutId of payoutIds) {
+  await transaction.$queryRaw<
+    Array<{ lockAcquired: number }>
+  >`
+    WITH creator_payout_completion_lock AS (
+      SELECT pg_advisory_xact_lock(
+        hashtext(
+          ${`creator-payout-complete:${payoutId}`}
+        )
+      )
+    )
+    SELECT 1 AS "lockAcquired"
+    FROM creator_payout_completion_lock
+  `;
+
+  await transaction.$queryRaw<
+    Array<{ lockAcquired: number }>
+  >`
+    WITH creator_payout_cancellation_lock AS (
+      SELECT pg_advisory_xact_lock(
+        hashtext(
+          ${`creator-payout-cancel:${payoutId}`}
+        )
+      )
+    )
+    SELECT 1 AS "lockAcquired"
+    FROM creator_payout_cancellation_lock
+  `;
+}
+
+const orders =
+  await transaction.order.findMany({
+    where: {
+      stripeSessionId,
+    },
+    include: {
+      creatorCommission: true,
+    },
+    orderBy: {
+      createdAt: "asc",
+    },
+  });
+
+if (orders.length === 0) {
+  throw new Error(
+    `No Orbital One orders were found for Checkout Session ${stripeSessionId}.`
+  );
+}
+
+await transaction.order.updateMany({
+  where: {
+    stripeSessionId,
+  },
+  data: {
+    stripePaymentIntentId:
+      paymentIntentId,
+    stripeChargeId: chargeId,
+  },
+});
+
+const commissions = orders.flatMap(
+  (order) =>
+    order.creatorCommission
+      ? [order.creatorCommission]
+      : []
+);
+
+const affectedPendingPayoutIds = payoutIds;
+
+for (const payoutId of affectedPendingPayoutIds) {
+    const payout =
+    await transaction.creatorPayout.findUnique({
+      where: {
+        id: payoutId,
+      },
+      include: {
+        commissions: {
+          select: {
+            id: true,
+            status: true,
+            payoutId: true,
+            paidAt: true,
           },
-          data: {
-            stripePaymentIntentId:
-              paymentIntentId,
-            stripeChargeId: chargeId,
+        },
+        balanceAdjustments: {
+          select: {
+            id: true,
+            payoutId: true,
+            paidAt: true,
           },
-        });
+        },
+      },
+    });
 
-        const commissions = orders.flatMap(
-          (order) =>
-            order.creatorCommission
-              ? [order.creatorCommission]
-              : []
-        );
+  if (!payout || payout.status !== "Pending") {
+    continue;
+  }
 
+  const invalidCommission =
+    payout.commissions.find(
+      (commission) =>
+        commission.payoutId !== payout.id ||
+        commission.status !== "Approved" ||
+        commission.paidAt !== null
+    );
+
+  if (invalidCommission) {
+    throw new Error(
+      `Pending Creator payout ${payout.id} contains a commission that cannot be released safely.`
+    );
+  }
+
+    const invalidBalanceAdjustment =
+    payout.balanceAdjustments.find(
+      (adjustment) =>
+        adjustment.payoutId !== payout.id ||
+        adjustment.paidAt !== null
+    );
+
+  if (invalidBalanceAdjustment) {
+    throw new Error(
+      `Pending Creator payout ${payout.id} contains a balance adjustment that cannot be released safely.`
+    );
+  }
+
+  const commissionIds =
+    payout.commissions.map(
+      (commission) => commission.id
+    );
+
+  const releaseResult =
+    await transaction.creatorCommission.updateMany({
+      where: {
+        id: {
+          in: commissionIds,
+        },
+        payoutId: payout.id,
+        status: "Approved",
+        paidAt: null,
+      },
+      data: {
+        payoutId: null,
+      },
+    });
+
+  if (
+    releaseResult.count !==
+    payout.commissions.length
+  ) {
+    throw new Error(
+      `Pending Creator payout ${payout.id} changed while its commissions were being released.`
+    );
+  }  const balanceAdjustmentIds =
+    payout.balanceAdjustments.map(
+      (adjustment) => adjustment.id
+    );
+
+  if (balanceAdjustmentIds.length > 0) {
+    const balanceAdjustmentRelease =
+      await transaction.creatorBalanceAdjustment.updateMany({
+        where: {
+          id: {
+            in: balanceAdjustmentIds,
+          },
+          payoutId: payout.id,
+          paidAt: null,
+        },
+        data: {
+          payoutId: null,
+        },
+      });
+
+    if (
+      balanceAdjustmentRelease.count !==
+      payout.balanceAdjustments.length
+    ) {
+      throw new Error(
+        `Pending Creator payout ${payout.id} changed while its balance adjustments were being released.`
+      );
+    }
+  }
+
+  const cancellationNote = [
+    `Automatically cancelled during Stripe financial reconciliation.`,
+    `Stripe event: ${event.id}.`,
+    `Event type: ${event.type}.`,
+    `Cancelled at: ${reconciliationTime.toISOString()}.`,
+  ].join(" ");
+
+  const combinedNotes = [
+    payout.notes?.trim(),
+    cancellationNote,
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+
+  const payoutUpdate =
+    await transaction.creatorPayout.updateMany({
+      where: {
+        id: payout.id,
+        status: "Pending",
+        paidAt: null,
+      },
+      data: {
+        status: "Cancelled",
+        method: null,
+        reference: null,
+        notes: combinedNotes,
+        paidAt: null,
+      },
+    });
+
+  if (payoutUpdate.count !== 1) {
+    throw new Error(
+      `Pending Creator payout ${payout.id} changed while it was being cancelled.`
+    );
+  }
+}
         const totalGrossRevenueCents =
           commissions.reduce(
             (total, commission) =>
@@ -631,19 +896,18 @@ export async function processStripeFinancialEvent(
               disputeAmountCents,
             });
 
-          const shouldRecalculateCommission =
-            commission.status === "Approved" &&
-            commission.paidAt === null &&
-            commission.commissionRateBps !==
-              null;
-
-          const recalculatedCommissionCents =
-            shouldRecalculateCommission
+            const recalculatedCommissionCents =
+            commission.commissionRateBps !== null
               ? calculateCommissionAmountCents(
                   netRevenueCents,
-                  commission.commissionRateBps!
+                  commission.commissionRateBps
                 )
               : null;
+
+          const shouldUpdateApprovedCommission =
+            commission.status === "Approved" &&
+            commission.paidAt === null &&
+            recalculatedCommissionCents !== null;
 
           await transaction.creatorCommission.update({
             where: {
@@ -657,8 +921,7 @@ export async function processStripeFinancialEvent(
               financialNote,
               financialUpdatedAt:
                 reconciliationTime,
-              ...(recalculatedCommissionCents !==
-              null
+              ...(shouldUpdateApprovedCommission
                 ? {
                     commissionAmountCents:
                       recalculatedCommissionCents,
@@ -666,6 +929,67 @@ export async function processStripeFinancialEvent(
                 : {}),
             },
           });
+
+          const paidCommissionAmountCents =
+            commission.commissionAmountCents;
+
+          if (
+            commission.status === "Paid" &&
+            commission.paidAt !== null &&
+            paidCommissionAmountCents !== null &&
+            recalculatedCommissionCents !== null
+          ) {
+            const existingAdjustmentTotal =
+              await transaction.creatorBalanceAdjustment.aggregate({
+                where: {
+                  creatorCommissionId:
+                    commission.id,
+                },
+                _sum: {
+                  amountCents: true,
+                },
+              });
+
+            const recordedAdjustmentCents =
+              existingAdjustmentTotal._sum.amountCents || 0;
+
+            const desiredCumulativeAdjustmentCents =
+              recalculatedCommissionCents -
+              paidCommissionAmountCents;
+
+            const adjustmentDeltaCents =
+              desiredCumulativeAdjustmentCents -
+              recordedAdjustmentCents;
+
+            if (adjustmentDeltaCents !== 0) {
+              const adjustmentDirection =
+                adjustmentDeltaCents < 0
+                  ? "Recovery"
+                  : "Recovery reversal";
+
+              await transaction.creatorBalanceAdjustment.create({
+                data: {
+                  creatorPartnerId:
+                    commission.creatorPartnerId,
+                  creatorCommissionId:
+                    commission.id,
+                  stripeEventId: event.id,
+                  amountCents:
+                    adjustmentDeltaCents,
+                  reason: [
+                    `${adjustmentDirection} created during Stripe financial reconciliation.`,
+                    `Stripe event: ${event.id}.`,
+                    `Event type: ${event.type}.`,
+                    `Previously paid base commission: ${paidCommissionAmountCents} cents.`,
+                    `Currently earned base commission: ${recalculatedCommissionCents} cents.`,
+                    `Cumulative recovery target: ${desiredCumulativeAdjustmentCents} cents.`,
+                    `Ledger change: ${adjustmentDeltaCents} cents.`,
+                    `Recorded at: ${reconciliationTime.toISOString()}.`,
+                  ].join(" "),
+                },
+              });
+            }
+          }
         }
 
         await transaction.stripeFinancialEvent.create({

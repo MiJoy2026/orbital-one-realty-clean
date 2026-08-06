@@ -130,8 +130,11 @@ export async function POST(request: NextRequest) {
           };
         }
 
-        const availableCommissions =
-          await transaction.creatorCommission.findMany({
+                const [
+          availableCommissions,
+          availableBalanceAdjustments,
+        ] = await Promise.all([
+          transaction.creatorCommission.findMany({
             where: {
               creatorPartnerId,
               status: "Approved",
@@ -151,9 +154,33 @@ export async function POST(request: NextRequest) {
                 createdAt: "asc",
               },
             ],
-          });
+          }),
 
-        if (availableCommissions.length === 0) {
+          transaction.creatorBalanceAdjustment.findMany({
+            where: {
+              creatorPartnerId,
+              payoutId: null,
+              paidAt: null,
+            },
+            select: {
+              id: true,
+              amountCents: true,
+              creatorCommission: {
+                select: {
+                  monthKey: true,
+                },
+              },
+            },
+            orderBy: {
+              createdAt: "asc",
+            },
+          }),
+        ]);
+
+                if (
+          availableCommissions.length === 0 &&
+          availableBalanceAdjustments.length === 0
+        ) {
           return {
             kind: "no-commissions" as const,
             creatorPartner,
@@ -172,11 +199,15 @@ export async function POST(request: NextRequest) {
           };
         }
 
-        const payoutPeriod = getPayoutPeriod(
-          availableCommissions.map(
+        const payoutPeriod = getPayoutPeriod([
+          ...availableCommissions.map(
             (commission) => commission.monthKey
-          )
-        );
+          ),
+          ...availableBalanceAdjustments.map(
+            (adjustment) =>
+              adjustment.creatorCommission.monthKey
+          ),
+        ]);
 
         if (!payoutPeriod) {
           return {
@@ -184,7 +215,7 @@ export async function POST(request: NextRequest) {
           };
         }
 
-        const amountCents =
+          const commissionBalanceCents =
           availableCommissions.reduce(
             (total, commission) =>
               total +
@@ -192,6 +223,17 @@ export async function POST(request: NextRequest) {
               commission.adjustmentCents,
             0
           );
+
+        const balanceAdjustmentCents =
+          availableBalanceAdjustments.reduce(
+            (total, adjustment) =>
+              total + adjustment.amountCents,
+            0
+          );
+
+        const amountCents =
+          commissionBalanceCents +
+          balanceAdjustmentCents;
 
         if (
           amountCents <
@@ -245,11 +287,40 @@ export async function POST(request: NextRequest) {
             },
           });
 
-        if (
+                if (
           updateResult.count !==
           availableCommissions.length
         ) {
           throw new PayoutCreationConflictError();
+        }
+
+        const balanceAdjustmentIds =
+          availableBalanceAdjustments.map(
+            (adjustment) => adjustment.id
+          );
+
+        if (balanceAdjustmentIds.length > 0) {
+          const balanceAdjustmentUpdate =
+            await transaction.creatorBalanceAdjustment.updateMany({
+              where: {
+                id: {
+                  in: balanceAdjustmentIds,
+                },
+                creatorPartnerId,
+                payoutId: null,
+                paidAt: null,
+              },
+              data: {
+                payoutId: payout.id,
+              },
+            });
+
+          if (
+            balanceAdjustmentUpdate.count !==
+            availableBalanceAdjustments.length
+          ) {
+            throw new PayoutCreationConflictError();
+          }
         }
 
         return {
@@ -258,6 +329,8 @@ export async function POST(request: NextRequest) {
           payout,
           commissionCount:
             availableCommissions.length,
+          balanceAdjustmentCount:
+            availableBalanceAdjustments.length,
         };
       }
     );
@@ -324,6 +397,8 @@ export async function POST(request: NextRequest) {
         result.creatorPartner.trackingCode,
       payout: result.payout,
       commissionCount: result.commissionCount,
+      balanceAdjustmentCount:
+        result.balanceAdjustmentCount,
     });
   } catch (error) {
     if (error instanceof PayoutCreationConflictError) {

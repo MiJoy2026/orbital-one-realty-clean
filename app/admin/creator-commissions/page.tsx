@@ -46,6 +46,7 @@ export default async function AdminCreatorCommissionsPage() {
       payouts,
       pendingReviewCommissions,
       approvedUnpaidCommissions,
+      unpaidBalanceAdjustments,
     ] = await Promise.all([
       prisma.creatorPartner.findMany({
         include: {
@@ -129,7 +130,7 @@ export default async function AdminCreatorCommissionsPage() {
           createdAt: "asc",
         },
       }),
-            prisma.creatorCommission.findMany({
+      prisma.creatorCommission.findMany({
         where: {
           status: "Approved",
           payoutId: null,
@@ -149,6 +150,34 @@ export default async function AdminCreatorCommissionsPage() {
           },
           {
             monthKey: "asc",
+          },
+          {
+            createdAt: "asc",
+          },
+        ],
+      }),
+            prisma.creatorBalanceAdjustment.findMany({
+        where: {
+          payoutId: null,
+          paidAt: null,
+        },
+        include: {
+          creatorPartner: {
+            select: {
+              fullName: true,
+              trackingCode: true,
+              payoutThresholdCents: true,
+            },
+          },
+          creatorCommission: {
+            select: {
+              monthKey: true,
+            },
+          },
+        },
+        orderBy: [
+          {
+            creatorPartnerId: "asc",
           },
           {
             createdAt: "asc",
@@ -267,12 +296,15 @@ export default async function AdminCreatorCommissionsPage() {
     ),
   }));
 
-    type PayoutEligibilityGroup = {
+     type PayoutEligibilityGroup = {
     creatorPartnerId: string;
     creatorName: string;
     trackingCode: string;
     payoutThresholdCents: number;
     commissionCount: number;
+    balanceAdjustmentCount: number;
+    commissionBalanceCents: number;
+    balanceAdjustmentCents: number;
     availableBalanceCents: number;
     incompleteRecordCount: number;
     monthKeys: Set<string>;
@@ -291,6 +323,8 @@ export default async function AdminCreatorCommissionsPage() {
 
         if (existing) {
           existing.commissionCount += 1;
+          existing.commissionBalanceCents +=
+            commissionValue;
           existing.availableBalanceCents +=
             commissionValue;
           existing.monthKeys.add(commission.monthKey);
@@ -315,18 +349,73 @@ export default async function AdminCreatorCommissionsPage() {
             commission.creatorPartner
               .payoutThresholdCents,
           commissionCount: 1,
-          availableBalanceCents: commissionValue,
+          balanceAdjustmentCount: 0,
+          commissionBalanceCents:
+            commissionValue,
+          balanceAdjustmentCents: 0,
+          availableBalanceCents:
+            commissionValue,
           incompleteRecordCount:
             commission.commissionAmountCents === null
               ? 1
               : 0,
-          monthKeys: new Set([commission.monthKey]),
+          monthKeys: new Set([
+            commission.monthKey,
+          ]),
         });
 
         return groups;
       },
       new Map<string, PayoutEligibilityGroup>()
     );
+
+  for (
+    const adjustment of unpaidBalanceAdjustments
+  ) {
+    const existing =
+      groupedPayoutEligibility.get(
+        adjustment.creatorPartnerId
+      );
+
+    if (existing) {
+      existing.balanceAdjustmentCount += 1;
+      existing.balanceAdjustmentCents +=
+        adjustment.amountCents;
+      existing.availableBalanceCents +=
+        adjustment.amountCents;
+      existing.monthKeys.add(
+        adjustment.creatorCommission.monthKey
+      );
+
+      continue;
+    }
+
+    groupedPayoutEligibility.set(
+      adjustment.creatorPartnerId,
+      {
+        creatorPartnerId:
+          adjustment.creatorPartnerId,
+        creatorName:
+          adjustment.creatorPartner.fullName,
+        trackingCode:
+          adjustment.creatorPartner.trackingCode,
+        payoutThresholdCents:
+          adjustment.creatorPartner
+            .payoutThresholdCents,
+        commissionCount: 0,
+        balanceAdjustmentCount: 1,
+        commissionBalanceCents: 0,
+        balanceAdjustmentCents:
+          adjustment.amountCents,
+        availableBalanceCents:
+          adjustment.amountCents,
+        incompleteRecordCount: 0,
+        monthKeys: new Set([
+          adjustment.creatorCommission.monthKey,
+        ]),
+      }
+    );
+  }
 
   const payoutEligibilityGroups = Array.from(
     groupedPayoutEligibility.values()
@@ -856,6 +945,9 @@ export default async function AdminCreatorCommissionsPage() {
                       }
                       commissionCount={
                         group.commissionCount
+                      }
+                                            balanceAdjustmentCount={
+                        group.balanceAdjustmentCount
                       }
                     />
                   )}
