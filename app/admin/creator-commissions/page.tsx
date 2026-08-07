@@ -27,6 +27,30 @@ function statusClasses(status: string): string {
     return "bg-red-600 text-white";
   }
 
+  if (status === "Cancelled") {
+    return "bg-gray-600 text-white";
+  }
+
+  return "bg-yellow-400 text-black";
+}
+
+function financialStatusClasses(status: string): string {
+  if (status === "Clear") {
+    return "bg-green-500 text-black";
+  }
+
+  if (status === "Disputed") {
+    return "bg-orange-500 text-black";
+  }
+
+  if (status === "DisputeLost") {
+    return "bg-red-700 text-white";
+  }
+
+  if (status === "Refunded") {
+    return "bg-red-600 text-white";
+  }
+
   return "bg-yellow-400 text-black";
 }
 
@@ -47,6 +71,12 @@ export default async function AdminCreatorCommissionsPage() {
       pendingReviewCommissions,
       approvedUnpaidCommissions,
       unpaidBalanceAdjustments,
+      financialIssueCommissions,
+      balanceAdjustments,
+      stripeFinancialEvents,
+      stripeFinancialEventCount,
+      paidCommissionTotals,
+      paidPayoutTotals,
     ] = await Promise.all([
       prisma.creatorPartner.findMany({
         include: {
@@ -105,6 +135,7 @@ export default async function AdminCreatorCommissionsPage() {
           _count: {
             select: {
               commissions: true,
+              balanceAdjustments: true,
             },
           },
         },
@@ -184,49 +215,149 @@ export default async function AdminCreatorCommissionsPage() {
           },
         ],
       }),
+
+      prisma.creatorCommission.findMany({
+        where: {
+          financialStatus: {
+            not: "Clear",
+          },
+        },
+        select: {
+          refundAmountCents: true,
+          disputeAmountCents: true,
+          financialStatus: true,
+        },
+      }),
+
+      prisma.creatorBalanceAdjustment.findMany({
+        include: {
+          creatorPartner: {
+            select: {
+              fullName: true,
+              trackingCode: true,
+            },
+          },
+          creatorCommission: {
+            select: {
+              monthKey: true,
+              financialStatus: true,
+              order: {
+                select: {
+                  certificateNumber: true,
+                  propertyId: true,
+                },
+              },
+            },
+          },
+          payout: {
+            select: {
+              id: true,
+              status: true,
+              reference: true,
+            },
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 200,
+      }),
+
+      prisma.stripeFinancialEvent.findMany({
+        orderBy: {
+          processedAt: "desc",
+        },
+        take: 100,
+      }),
+
+      prisma.stripeFinancialEvent.count(),
+
+      prisma.creatorCommission.aggregate({
+        where: {
+          status: "Paid",
+        },
+        _sum: {
+          commissionAmountCents: true,
+          adjustmentCents: true,
+        },
+      }),
+
+      prisma.creatorPayout.aggregate({
+        where: {
+          status: "Paid",
+        },
+        _sum: {
+          amountCents: true,
+        },
+      }),
     ]);
 
   const activePartnerCount = partners.filter(
     (partner) => partner.status === "Active"
   ).length;
 
-  const pendingCommissions = commissions.filter(
-    (commission) => commission.status === "Pending"
-  );
-
-  const approvedCommissions = commissions.filter(
-    (commission) => commission.status === "Approved"
-  );
-
-  const paidCommissions = commissions.filter(
-    (commission) => commission.status === "Paid"
-  );
-
-  const pendingAttributedRevenueCents = pendingCommissions.reduce(
-    (total, commission) => total + commission.netRevenueCents,
+  const creatorCommissionCount = partners.reduce(
+    (total, partner) =>
+      total + partner._count.commissions,
     0
   );
 
-  const approvedCommissionCents = approvedCommissions.reduce(
-    (total, commission) =>
-      total +
-      (commission.commissionAmountCents || 0) +
-      commission.adjustmentCents,
+  const creatorPayoutCount = partners.reduce(
+    (total, partner) =>
+      total + partner._count.payouts,
     0
   );
 
-  const paidCommissionCents = paidCommissions.reduce(
-    (total, commission) =>
-      total +
-      (commission.commissionAmountCents || 0) +
-      commission.adjustmentCents,
-    0
-  );
+  const pendingAttributedRevenueCents =
+    pendingReviewCommissions.reduce(
+      (total, commission) =>
+        total + commission.netRevenueCents,
+      0
+    );
 
-  const recordedPayoutCents = payouts.reduce(
-    (total, payout) => total + payout.amountCents,
-    0
-  );
+  const approvedCommissionCents =
+    approvedUnpaidCommissions.reduce(
+      (total, commission) =>
+        total +
+        (commission.commissionAmountCents || 0) +
+        commission.adjustmentCents,
+      0
+    );
+
+  const paidCommissionCents =
+    (paidCommissionTotals._sum
+      .commissionAmountCents || 0) +
+    (paidCommissionTotals._sum.adjustmentCents || 0);
+
+  const paidPayoutCents =
+    paidPayoutTotals._sum.amountCents || 0;
+
+  const totalRefundedRevenueCents =
+    financialIssueCommissions.reduce(
+      (total, commission) =>
+        total + commission.refundAmountCents,
+      0
+    );
+
+  const totalDisputedRevenueCents =
+    financialIssueCommissions.reduce(
+      (total, commission) =>
+        total + commission.disputeAmountCents,
+      0
+    );
+
+  const openDisputeCount =
+    financialIssueCommissions.filter(
+      (commission) =>
+        commission.financialStatus === "Disputed"
+    ).length;
+
+  const unpaidRecoveryBalanceCents =
+    unpaidBalanceAdjustments.reduce(
+      (total, adjustment) =>
+        total + adjustment.amountCents,
+      0
+    );
 
     type ReviewGroup = {
     creatorPartnerId: string;
@@ -467,7 +598,7 @@ export default async function AdminCreatorCommissionsPage() {
               {formatMoney(pendingAttributedRevenueCents)}
             </p>
             <p className="mt-2 text-xs text-gray-400">
-              {pendingCommissions.length} pending commission records
+              {pendingReviewCommissions.length} pending commission records
             </p>
           </div>
 
@@ -494,7 +625,7 @@ export default async function AdminCreatorCommissionsPage() {
               Commission Records
             </p>
             <p className="mt-2 text-4xl font-black">
-              {commissions.length}
+              {creatorCommissionCount}
             </p>
           </div>
 
@@ -503,16 +634,75 @@ export default async function AdminCreatorCommissionsPage() {
               Payout Records
             </p>
             <p className="mt-2 text-4xl font-black">
-              {payouts.length}
+              {creatorPayoutCount}
             </p>
           </div>
 
           <div className="rounded-2xl border border-white/20 bg-white/5 p-6">
             <p className="text-sm uppercase text-gray-400">
-              Recorded Payout Value
+              Paid Payout Value
             </p>
             <p className="mt-2 text-4xl font-black">
-              {formatMoney(recordedPayoutCents)}
+              {formatMoney(paidPayoutCents)}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-red-500 bg-red-950/30 p-6">
+            <p className="text-sm uppercase text-gray-400">
+              Refunded Revenue
+            </p>
+            <p className="mt-2 text-4xl font-black text-red-300">
+              {formatMoney(totalRefundedRevenueCents)}
+            </p>
+            <p className="mt-2 text-xs text-gray-400">
+              Across {financialIssueCommissions.length} financially affected
+              commission records
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-orange-500 bg-orange-950/30 p-6">
+            <p className="text-sm uppercase text-gray-400">
+              Disputed Revenue
+            </p>
+            <p className="mt-2 text-4xl font-black text-orange-300">
+              {formatMoney(totalDisputedRevenueCents)}
+            </p>
+            <p className="mt-2 text-xs text-gray-400">
+              {openDisputeCount} open dispute{" "}
+              {openDisputeCount === 1 ? "record" : "records"}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-purple-500 bg-purple-950/30 p-6">
+            <p className="text-sm uppercase text-gray-400">
+              Unpaid Recovery Balance
+            </p>
+            <p
+              className={`mt-2 text-4xl font-black ${
+                unpaidRecoveryBalanceCents < 0
+                  ? "text-red-300"
+                  : "text-green-300"
+              }`}
+            >
+              {formatMoney(unpaidRecoveryBalanceCents)}
+            </p>
+            <p className="mt-2 text-xs text-gray-400">
+              {unpaidBalanceAdjustments.length} unpaid ledger{" "}
+              {unpaidBalanceAdjustments.length === 1
+                ? "entry"
+                : "entries"}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-cyan-500 bg-cyan-950/30 p-6">
+            <p className="text-sm uppercase text-gray-400">
+              Stripe Financial Events
+            </p>
+            <p className="mt-2 text-4xl font-black text-cyan-300">
+              {stripeFinancialEventCount}
+            </p>
+            <p className="mt-2 text-xs text-gray-400">
+              Refund and dispute events recorded
             </p>
           </div>
         </div>
@@ -720,8 +910,8 @@ export default async function AdminCreatorCommissionsPage() {
           </h2>
 
           <p className="mt-2 text-gray-400">
-            Pending records remain unpriced until monthly validation assigns
-            the appropriate commission tier.
+            Financial status, refunds, disputes, commission review, and payout
+            state for the 200 most recent attributed commission records.
           </p>
 
           <div className="mt-6 overflow-x-auto rounded-2xl border border-white/20">
@@ -732,10 +922,14 @@ export default async function AdminCreatorCommissionsPage() {
                   <th className="p-4">Creator</th>
                   <th className="p-4">Order</th>
                   <th className="p-4">Month</th>
+                  <th className="p-4">Gross</th>
+                  <th className="p-4">Refunded</th>
+                  <th className="p-4">Disputed</th>
                   <th className="p-4">Net Revenue</th>
+                  <th className="p-4">Financial State</th>
                   <th className="p-4">Rate</th>
                   <th className="p-4">Commission</th>
-                  <th className="p-4">Status</th>
+                  <th className="p-4">Commission Status</th>
                   <th className="p-4">Review Eligible</th>
                 </tr>
               </thead>
@@ -749,7 +943,7 @@ export default async function AdminCreatorCommissionsPage() {
                   return (
                     <tr
                       key={commission.id}
-                      className="border-t border-white/10"
+                      className="border-t border-white/10 align-top"
                     >
                       <td className="p-4 text-sm">
                         {commission.createdAt.toLocaleString()}
@@ -778,7 +972,64 @@ export default async function AdminCreatorCommissionsPage() {
                       </td>
 
                       <td className="p-4">
+                        {formatMoney(
+                          commission.grossRevenueCents
+                        )}
+                      </td>
+
+                      <td className="p-4">
+                        <span
+                          className={
+                            commission.refundAmountCents > 0
+                              ? "font-black text-red-300"
+                              : "text-gray-500"
+                          }
+                        >
+                          {formatMoney(
+                            commission.refundAmountCents
+                          )}
+                        </span>
+                      </td>
+
+                      <td className="p-4">
+                        <span
+                          className={
+                            commission.disputeAmountCents > 0
+                              ? "font-black text-orange-300"
+                              : "text-gray-500"
+                          }
+                        >
+                          {formatMoney(
+                            commission.disputeAmountCents
+                          )}
+                        </span>
+                      </td>
+
+                      <td className="p-4 font-black">
                         {formatMoney(commission.netRevenueCents)}
+                      </td>
+
+                      <td className="min-w-64 p-4">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-black ${financialStatusClasses(
+                            commission.financialStatus
+                          )}`}
+                        >
+                          {commission.financialStatus}
+                        </span>
+
+                        {commission.financialUpdatedAt && (
+                          <p className="mt-2 text-xs text-gray-400">
+                            Updated{" "}
+                            {commission.financialUpdatedAt.toLocaleString()}
+                          </p>
+                        )}
+
+                        {commission.financialNote && (
+                          <p className="mt-2 max-w-sm text-xs leading-5 text-gray-500">
+                            {commission.financialNote}
+                          </p>
+                        )}
                       </td>
 
                       <td className="p-4">
@@ -793,9 +1044,18 @@ export default async function AdminCreatorCommissionsPage() {
                         {commission.commissionAmountCents === null
                           ? "Pending"
                           : formatMoney(commissionTotalCents)}
+
+                        {commission.adjustmentCents !== 0 && (
+                          <p className="mt-2 text-xs text-gray-400">
+                            Manual adjustment:{" "}
+                            {formatMoney(
+                              commission.adjustmentCents
+                            )}
+                          </p>
+                        )}
                       </td>
 
-                      <td className="p-4">
+                      <td className="min-w-56 p-4">
                         <span
                           className={`rounded-full px-3 py-1 text-sm font-black ${statusClasses(
                             commission.status
@@ -803,29 +1063,38 @@ export default async function AdminCreatorCommissionsPage() {
                         >
                           {commission.status}
                         </span>
-                          <div className="mt-3">
-                            {commission.status === "Approved" &&
-                            commission.payoutId === null &&
-                            commission.commissionAmountCents !== null && (
+
+                        {commission.payout && (
+                          <p className="mt-2 text-xs text-gray-400">
+                            Payout: {commission.payout.status}
+                            {commission.payout.reference
+                              ? ` (${commission.payout.reference})`
+                              : ""}
+                          </p>
+                        )}
+
+                        {commission.status === "Approved" &&
+                          commission.payoutId === null &&
+                          commission.commissionAmountCents !== null && (
                             <div className="mt-3">
                               <CreatorCommissionAdjustmentControls
                                 commissionId={commission.id}
                                 baseCommissionCents={
-                                 commission.commissionAmountCents
+                                  commission.commissionAmountCents
                                 }
                                 currentAdjustmentCents={
-                                 commission.adjustmentCents
+                                  commission.adjustmentCents
                                 }
                                 currentAdjustmentReason={
-                                 commission.adjustmentReason
+                                  commission.adjustmentReason
                                 }
                                 adjustedAt={
-                                 commission.adjustedAt?.toISOString() || null
+                                  commission.adjustedAt?.toISOString() ||
+                                  null
                                 }
                               />
                             </div>
-                            )}
-                          </div>
+                          )}
                       </td>
 
                       <td className="p-4 text-sm">
@@ -845,14 +1114,15 @@ export default async function AdminCreatorCommissionsPage() {
           </div>
         </section>
 
-                <section className="mt-12">
+        <section className="mt-12">
           <h2 className="text-3xl font-black text-yellow-400">
             Payout Eligibility
           </h2>
 
           <p className="mt-2 text-gray-400">
-            Approved unpaid balances carry forward until the
-            Creator Partner reaches their payout threshold.
+            Approved commissions and unpaid refund or dispute recovery entries
+            carry forward together until the Creator Partner reaches the payout
+            threshold.
           </p>
 
           <div className="mt-6 space-y-5">
@@ -872,14 +1142,20 @@ export default async function AdminCreatorCommissionsPage() {
                     </p>
                   </div>
 
-                  <span className="rounded-full bg-green-500 px-4 py-2 text-sm font-black text-black">
+                  <span
+                    className={`rounded-full px-4 py-2 text-sm font-black ${
+                      group.availableBalanceCents < 0
+                        ? "bg-red-600 text-white"
+                        : "bg-green-500 text-black"
+                    }`}
+                  >
                     {formatMoney(
                       group.availableBalanceCents
                     )}
                   </span>
                 </div>
 
-                <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
                   <div>
                     <p className="text-xs font-black uppercase text-gray-400">
                       Approved Records
@@ -891,16 +1167,46 @@ export default async function AdminCreatorCommissionsPage() {
 
                   <div>
                     <p className="text-xs font-black uppercase text-gray-400">
-                      Commission Months
+                      Balance Adjustments
                     </p>
                     <p className="mt-1 text-2xl font-black">
-                      {group.monthCount}
+                      {group.balanceAdjustmentCount}
                     </p>
                   </div>
 
                   <div>
                     <p className="text-xs font-black uppercase text-gray-400">
-                      Available Balance
+                      Commission Balance
+                    </p>
+                    <p className="mt-1 text-2xl font-black">
+                      {formatMoney(
+                        group.commissionBalanceCents
+                      )}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-black uppercase text-gray-400">
+                      Recovery Adjustments
+                    </p>
+                    <p
+                      className={`mt-1 text-2xl font-black ${
+                        group.balanceAdjustmentCents < 0
+                          ? "text-red-300"
+                          : group.balanceAdjustmentCents > 0
+                            ? "text-green-300"
+                            : ""
+                      }`}
+                    >
+                      {formatMoney(
+                        group.balanceAdjustmentCents
+                      )}
+                    </p>
+                  </div>
+
+                  <div>
+                    <p className="text-xs font-black uppercase text-gray-400">
+                      Net Available
                     </p>
                     <p className="mt-1 text-2xl font-black">
                       {formatMoney(
@@ -920,6 +1226,13 @@ export default async function AdminCreatorCommissionsPage() {
                     </p>
                   </div>
                 </div>
+
+                <p className="mt-4 text-sm text-gray-400">
+                  {group.monthCount} commission{" "}
+                  {group.monthCount === 1 ? "month" : "months"} represented.
+                  Negative recovery entries reduce the next payout without
+                  rewriting previously completed payout history.
+                </p>
 
                 <div className="mt-6 border-t border-white/10 pt-5">
                   {group.incompleteRecordCount > 0 ? (
@@ -946,7 +1259,7 @@ export default async function AdminCreatorCommissionsPage() {
                       commissionCount={
                         group.commissionCount
                       }
-                                            balanceAdjustmentCount={
+                      balanceAdjustmentCount={
                         group.balanceAdjustmentCount
                       }
                     />
@@ -957,9 +1270,250 @@ export default async function AdminCreatorCommissionsPage() {
 
             {payoutEligibilityGroups.length === 0 && (
               <div className="rounded-2xl border border-white/20 bg-white/5 p-8 text-center text-gray-400">
-                No approved unpaid Creator Partner
-                commissions are currently available for payout.
+                No approved unpaid commissions or recovery adjustments are
+                currently available for payout.
               </div>
+            )}
+          </div>
+        </section>
+
+        <section className="mt-12">
+          <div className="flex flex-wrap items-end justify-between gap-4">
+            <div>
+              <h2 className="text-3xl font-black text-yellow-400">
+                Recovery Adjustment Ledger
+              </h2>
+
+              <p className="mt-2 max-w-4xl text-gray-400">
+                Permanent carry-forward entries created when a refund or
+                dispute changes commission that was already paid. Negative
+                entries recover overpayment; positive entries reverse an
+                earlier recovery.
+              </p>
+            </div>
+
+            <p
+              className={`rounded-full px-4 py-2 text-sm font-black ${
+                unpaidRecoveryBalanceCents < 0
+                  ? "bg-red-600 text-white"
+                  : "bg-green-500 text-black"
+              }`}
+            >
+              Unpaid balance:{" "}
+              {formatMoney(unpaidRecoveryBalanceCents)}
+            </p>
+          </div>
+
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-white/20">
+            <table className="w-full border-collapse text-left">
+              <thead className="bg-white/10">
+                <tr>
+                  <th className="p-4">Created</th>
+                  <th className="p-4">Creator</th>
+                  <th className="p-4">Order</th>
+                  <th className="p-4">Commission Month</th>
+                  <th className="p-4">Stripe Event</th>
+                  <th className="p-4">Amount</th>
+                  <th className="p-4">Ledger State</th>
+                  <th className="p-4">Reason</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {balanceAdjustments.map((adjustment) => {
+                  const ledgerState = adjustment.paidAt
+                    ? "Paid"
+                    : adjustment.payoutId
+                      ? "Pending Payout"
+                      : "Available";
+
+                  return (
+                    <tr
+                      key={adjustment.id}
+                      className="border-t border-white/10 align-top"
+                    >
+                      <td className="p-4 text-sm">
+                        {adjustment.createdAt.toLocaleString()}
+                      </td>
+
+                      <td className="p-4">
+                        <p className="font-black text-yellow-300">
+                          {adjustment.creatorPartner.fullName}
+                        </p>
+                        <p className="mt-1 font-mono text-xs text-gray-400">
+                          {adjustment.creatorPartner.trackingCode}
+                        </p>
+                      </td>
+
+                      <td className="p-4">
+                        <p className="font-bold">
+                          {
+                            adjustment.creatorCommission.order
+                              .certificateNumber
+                          }
+                        </p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {
+                            adjustment.creatorCommission.order
+                              .propertyId
+                          }
+                        </p>
+                      </td>
+
+                      <td className="p-4">
+                        {adjustment.creatorCommission.monthKey}
+                      </td>
+
+                      <td className="p-4">
+                        <p className="font-mono text-xs">
+                          {adjustment.stripeEventId}
+                        </p>
+                        <p className="mt-1 text-xs text-gray-400">
+                          {
+                            adjustment.creatorCommission
+                              .financialStatus
+                          }
+                        </p>
+                      </td>
+
+                      <td
+                        className={`p-4 text-lg font-black ${
+                          adjustment.amountCents < 0
+                            ? "text-red-300"
+                            : "text-green-300"
+                        }`}
+                      >
+                        {formatMoney(adjustment.amountCents)}
+                      </td>
+
+                      <td className="p-4">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-black ${
+                            ledgerState === "Paid"
+                              ? "bg-blue-500 text-white"
+                              : ledgerState === "Pending Payout"
+                                ? "bg-yellow-400 text-black"
+                                : "bg-green-500 text-black"
+                          }`}
+                        >
+                          {ledgerState}
+                        </span>
+
+                        {adjustment.payout && (
+                          <p className="mt-2 text-xs text-gray-400">
+                            Payout {adjustment.payout.status}
+                            {adjustment.payout.reference
+                              ? ` (${adjustment.payout.reference})`
+                              : ""}
+                          </p>
+                        )}
+                      </td>
+
+                      <td className="min-w-96 p-4 text-xs leading-5 text-gray-400">
+                        {adjustment.reason}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+
+            {balanceAdjustments.length === 0 && (
+              <p className="p-8 text-center text-gray-400">
+                No commission recovery adjustments have been recorded.
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section className="mt-12">
+          <h2 className="text-3xl font-black text-yellow-400">
+            Stripe Financial Event Log
+          </h2>
+
+          <p className="mt-2 text-gray-400">
+            The 100 most recently processed Stripe refund and dispute events.
+            Stripe event IDs are unique, preventing duplicate processing.
+          </p>
+
+          <div className="mt-6 overflow-x-auto rounded-2xl border border-white/20">
+            <table className="w-full border-collapse text-left">
+              <thead className="bg-white/10">
+                <tr>
+                  <th className="p-4">Processed</th>
+                  <th className="p-4">Event Type</th>
+                  <th className="p-4">Stripe Event</th>
+                  <th className="p-4">Stripe Object</th>
+                  <th className="p-4">Checkout Session</th>
+                  <th className="p-4">Amount</th>
+                  <th className="p-4">Payment References</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {stripeFinancialEvents.map((event) => (
+                  <tr
+                    key={event.id}
+                    className="border-t border-white/10 align-top"
+                  >
+                    <td className="p-4 text-sm">
+                      {event.processedAt.toLocaleString()}
+                    </td>
+
+                    <td className="p-4">
+                      <span className="rounded-full bg-cyan-500 px-3 py-1 text-xs font-black text-black">
+                        {event.eventType}
+                      </span>
+                      <p className="mt-2 text-xs text-gray-400">
+                        Stripe created{" "}
+                        {event.eventCreatedAt.toLocaleString()}
+                      </p>
+                    </td>
+
+                    <td className="p-4 font-mono text-xs">
+                      {event.stripeEventId}
+                    </td>
+
+                    <td className="p-4 font-mono text-xs">
+                      {event.stripeObjectId}
+                    </td>
+
+                    <td className="p-4 font-mono text-xs">
+                      {event.stripeSessionId || "Not resolved"}
+                    </td>
+
+                    <td className="p-4">
+                      {event.amountCents === null
+                        ? "Not supplied"
+                        : formatMoney(event.amountCents)}
+                      {event.currency && (
+                        <p className="mt-1 text-xs uppercase text-gray-400">
+                          {event.currency}
+                        </p>
+                      )}
+                    </td>
+
+                    <td className="min-w-72 p-4 font-mono text-xs">
+                      <p>
+                        PI:{" "}
+                        {event.stripePaymentIntentId ||
+                          "Not supplied"}
+                      </p>
+                      <p className="mt-2">
+                        Charge:{" "}
+                        {event.stripeChargeId ||
+                          "Not supplied"}
+                      </p>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {stripeFinancialEvents.length === 0 && (
+              <p className="p-8 text-center text-gray-400">
+                No refund or dispute events have been processed yet.
+              </p>
             )}
           </div>
         </section>
@@ -969,6 +1523,11 @@ export default async function AdminCreatorCommissionsPage() {
             Payout Records
           </h2>
 
+          <p className="mt-2 text-gray-400">
+            Pending, paid, and cancelled payout records. Included records show
+            both commissions and recovery adjustments.
+          </p>
+
           <div className="mt-6 overflow-x-auto rounded-2xl border border-white/20">
             <table className="w-full border-collapse text-left">
               <thead className="bg-white/10">
@@ -976,11 +1535,12 @@ export default async function AdminCreatorCommissionsPage() {
                   <th className="p-4">Creator</th>
                   <th className="p-4">Period</th>
                   <th className="p-4">Amount</th>
-                  <th className="p-4">Commissions</th>
+                  <th className="p-4">Included Records</th>
                   <th className="p-4">Method</th>
                   <th className="p-4">Reference</th>
-                  <th className="p-4">Status</th>
+                  <th className="p-4">Status / Actions</th>
                   <th className="p-4">Paid</th>
+                  <th className="p-4">Notes</th>
                 </tr>
               </thead>
 
@@ -988,7 +1548,7 @@ export default async function AdminCreatorCommissionsPage() {
                 {payouts.map((payout) => (
                   <tr
                     key={payout.id}
-                    className="border-t border-white/10"
+                    className="border-t border-white/10 align-top"
                   >
                     <td className="p-4">
                       <p className="font-black text-yellow-300">
@@ -1001,15 +1561,28 @@ export default async function AdminCreatorCommissionsPage() {
 
                     <td className="p-4 text-sm">
                       {payout.periodStart.toLocaleDateString()} through{" "}
-                      {payout.periodEnd.toLocaleDateString()}
+                      {new Date(
+                        payout.periodEnd.getTime() - 1
+                      ).toLocaleDateString()}
                     </td>
 
-                    <td className="p-4">
+                    <td className="p-4 font-black">
                       {formatMoney(payout.amountCents)}
                     </td>
 
-                    <td className="p-4">
-                      {payout._count.commissions}
+                    <td className="p-4 text-sm">
+                      <p>
+                        {payout._count.commissions} commission{" "}
+                        {payout._count.commissions === 1
+                          ? "record"
+                          : "records"}
+                      </p>
+                      <p className="mt-1 text-gray-400">
+                        {payout._count.balanceAdjustments} balance{" "}
+                        {payout._count.balanceAdjustments === 1
+                          ? "adjustment"
+                          : "adjustments"}
+                      </p>
                     </td>
 
                     <td className="p-4">
@@ -1020,38 +1593,50 @@ export default async function AdminCreatorCommissionsPage() {
                       {payout.reference || "—"}
                     </td>
 
-                    <td className="p-4">
-                     <span
+                    <td className="min-w-64 p-4">
+                      <span
                         className={`rounded-full px-3 py-1 text-xs font-black ${statusClasses(
-                        payout.status
-                      )}`}
-                     >
-                       {payout.status}
-                     </span>
+                          payout.status
+                        )}`}
+                      >
+                        {payout.status}
+                      </span>
 
-                       {payout.status === "Pending" && (
+                      {payout.status === "Pending" && (
                         <div className="mt-3 space-y-3">
                           <CreatorPayoutCompleteButton
                             payoutId={payout.id}
-                            creatorName={payout.creatorPartner.fullName}
+                            creatorName={
+                              payout.creatorPartner.fullName
+                            }
                             amountCents={payout.amountCents}
-                            commissionCount={payout._count.commissions}
+                            commissionCount={
+                              payout._count.commissions
+                            }
                           />
 
                           <CreatorPayoutCancelButton
                             payoutId={payout.id}
-                            creatorName={payout.creatorPartner.fullName}
+                            creatorName={
+                              payout.creatorPartner.fullName
+                            }
                             amountCents={payout.amountCents}
-                            commissionCount={payout._count.commissions}
+                            commissionCount={
+                              payout._count.commissions
+                            }
                           />
                         </div>
-                        )}
+                      )}
                     </td>
 
                     <td className="p-4 text-sm">
                       {payout.paidAt
-                        ? payout.paidAt.toLocaleDateString()
+                        ? payout.paidAt.toLocaleString()
                         : "Not paid"}
+                    </td>
+
+                    <td className="min-w-96 p-4 whitespace-pre-wrap text-xs leading-5 text-gray-400">
+                      {payout.notes || "No internal notes"}
                     </td>
                   </tr>
                 ))}
