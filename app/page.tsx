@@ -66,9 +66,13 @@ const homeStructuredData = [
 const propertyTypes = [
   {
     title: "Rural Acres",
-    price: "From $24.95",
+    price: "From $16.95",
     image: "/property-images/rural-acre.jpg",
-    details: ["1 Acre — $24.95", "Exact selectable parcel on the Moon Map"],
+    details: [
+      "1/2 Acre — $16.95",
+      "1 Acre — $24.95",
+      "Exact selectable parcel on the Moon Map",
+    ],
   },
   {
     title: "Town Blocks",
